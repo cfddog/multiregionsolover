@@ -71,47 +71,151 @@
 
 
 
-! 采用 LU_SGS方法进行时间推进一个时间步 （第nMesh重网格 的单重网格）
-  subroutine NS_Time_advance_LU_SGS(nMesh)
+!======================================================================================
+!  以下为"按块"的时间推进原语 (重构：将块循环提到最外层所引入)
+!  主程序 (单重网格) 直接遍历块调用这些原语，便于在块级添加新的计算功能；
+!  多重网格路径仍通过 NS_Time_advance_* (网格级) 调用。
+!======================================================================================
+
+!  一个块的数据更新（时间推进）: 根据 Time_Method 由 Res/Un/DU 更新 U
+!  LU_SGS:      U = Un + DU
+!  Dual_LU_SGS: U = U  + DU
+!  1阶Euler:    U = Un + dt*Res/Vol
+!  3阶RK:       U = Ralfa*Un + Rgamma*U + dt*Rbeta*Res/Vol   (第KRK子步)
+  subroutine Uupdate_one_block(nMesh,mBlock)
    use Global_var
    implicit none
    integer::nMesh,mBlock,NVAR1,i,j,k,m,nx,ny,nz
    Type (Block_TYPE),pointer:: B
    real(PRE_EC):: du
-   call Set_Un(nMesh)
-   call Comput_Residual_one_mesh(nMesh)              ! 单重网格上计算残差 (以及Du)
-   if(nMesh .ne. 1) call Add_force_function(nMesh)   !  添加强迫函数（多重网格的粗网格使用）
-  
-   NVAR1=Mesh(nMesh)%NVAR
-   do mBlock=1,Mesh(nMesh)%Num_Block
-     B => Mesh(nMesh)%Block(mBlock)
-     nx=B%nx; ny=B%ny; nz=B%nz
-!--------------------------------------------------------------------------------------
-!   时间推进 
 
+   NVAR1=Mesh(nMesh)%NVAR
+   B => Mesh(nMesh)%Block(mBlock)
+   nx=B%nx; ny=B%ny; nz=B%nz
+
+   if(Time_Method .eq. Time_LU_SGS) then
 !$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(nx,ny,nz,NVAR1,B)
      do k=1,nz-1
        do j=1,ny-1
          do i=1,nx-1
            do m=1,NVAR1
              B%U(m,i,j,k)=B%Un(m,i,j,k)+B%dU(m,i,j,k)           ! LU_SGS方法
-            enddo
+           enddo
          enddo
        enddo
 	 enddo
-!$OMP END PARALLEL DO       
-  
-  enddo
+!$OMP END PARALLEL DO
+   else if(Time_Method .eq. Time_Dual_LU_SGS) then
+!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(nx,ny,nz,NVAR1,B)
+     do k=1,nz-1
+       do j=1,ny-1
+         do i=1,nx-1
+           do m=1,NVAR1
+             B%U(m,i,j,k)=B%U(m,i,j,k)+B%dU(m,i,j,k)           ! LU_SGS方法
+           enddo
+         enddo
+       enddo
+	 enddo
+!$OMP END PARALLEL DO
+   else if(Time_Method .eq. Time_Euler1) then
+!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(nx,ny,nz,NVAR1,B)
+     do k=1,nz-1
+       do j=1,ny-1
+         do i=1,nx-1
+           do m=1,NVAR1
+             du=B%Res(m,i,j,k)/B%vol(i,j,k)
+             B%U(m,i,j,k)=B%Un(m,i,j,k)+B%dt(i,j,k)*du
+           enddo
+         enddo
+       enddo
+	 enddo
+!$OMP END PARALLEL DO
+   else if(Time_Method .eq. Time_RK3) then
+!$OMP PARALLEL DO PRIVATE(i,j,k,m,du) SHARED(NVAR1,nx,ny,nz,Ralfa,Rbeta,Rgamma,B,KRK)
+     do k=1,nz-1
+       do j=1,ny-1
+         do i=1,nx-1
+           do m=1,NVAR1
+             du=B%Res(m,i,j,k)/B%Vol(i,j,k)
+             B%U(m,i,j,k)=Ralfa(KRK)*B%Un(m,i,j,k)+Rgamma(KRK)*B%U(m,i,j,k)+B%dt(i,j,k)*Rbeta(KRK)*du        ! 3阶RK
+           enddo
+         enddo
+       enddo
+	 enddo
+!$OMP END PARALLEL DO
+   endif
 
-!----------------------------------------------------------------   
+  end subroutine Uupdate_one_block
+
+!-----------------------------------------------------------------------
+!  设定 Un=U (一个块, 含 -1..nx+1 范围, 与 Set_Un 一致)
+  subroutine Set_Un_oneblock(nMesh,mBlock)
+   use Global_var
+   implicit none
+   integer::nMesh,mBlock,NVAR1,i,j,k,m
+   Type (Block_TYPE),pointer:: B
+   NVAR1=Mesh(nMesh)%NVAR
+   B => Mesh(nMesh)%Block(mBlock)
+!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(B,NVAR1)
+	 do k=-1,B%nz+1
+       do j=-1,B%ny+1
+	     do i=-1,B%nx+1
+	       do m=1,NVAR1
+	         B%Un(m,i,j,k)=B%U(m,i,j,k)
+           enddo
+	     enddo
+       enddo
+	 enddo
+!$OMP END PARALLEL DO
+  end subroutine Set_Un_oneblock
+
+!-----------------------------------------------------------------------
+!  设定 Un1=Un; Un=U (一个块, 双时间步长法每个物理步结束时使用)
+  subroutine Set_Un1_Un_oneblock(nMesh,mBlock)
+   use Global_var
+   implicit none
+   integer::nMesh,mBlock,NVAR1,i,j,k,m
+   Type (Block_TYPE),pointer:: B
+   NVAR1=Mesh(nMesh)%NVAR
+   B => Mesh(nMesh)%Block(mBlock)
+!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(B,NVAR1)
+     do k=1,B%nz-1
+       do j=1,B%ny-1
+         do i=1,B%nx-1
+           do m=1,NVAR1
+			 B%Un1(m,i,j,k)=B%Un(m,i,j,k)
+             B%Un(m,i,j,k)=B%U(m,i,j,k)
+           enddo
+         enddo
+       enddo
+	 enddo
+!$OMP END PARALLEL DO
+  end subroutine Set_Un1_Un_oneblock
+
+! 采用 LU_SGS方法进行时间推进一个时间步 （第nMesh重网格 的单重网格）
+!  (多重网格路径使用; 单重网格时主程序已将块循环提到最外层,
+!   直接调用 Residual_one_block + Uupdate_one_block 完成同样的功能)
+  subroutine NS_Time_advance_LU_SGS(nMesh)
+   use Global_var
+   implicit none
+   integer::nMesh,mBlock
+   call Set_Un(nMesh)
+   call Comput_Residual_one_mesh(nMesh)              ! 单重网格上计算残差 (以及Du)
+   if(nMesh .ne. 1) call Add_force_function(nMesh)   !  添加强迫函数（多重网格的粗网格使用）
+
+   do mBlock=1,Mesh(nMesh)%Num_Block
+     call Uupdate_one_block(nMesh,mBlock)            ! U = Un + DU
+   enddo
+
+!----------------------------------------------------------------
     if( IFLAG_LIMIT_Flow == 1) then                      ! 对压力、密度进行限制
 	  call limit_flow(nMesh)
-	endif 
+	endif
 
-!---------------------------------------------------------------------------------------  
+!---------------------------------------------------------------------------------------
    call Boundary_condition_onemesh(nMesh)             ! 边界条件 （设定Ghost Cell的值）
    call update_buffer_onemesh(nMesh)                  ! 同步各块的交界区
-   
+
    Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global            ! 时间 （使用全局时间步长法时有意义）
    Mesh(nMesh)%Kstep=Mesh(nMesh)%Kstep+1              ! 计算步数
 
@@ -120,43 +224,29 @@
 
 
 
-!  采用双时间步长法 LU_SGS方法进行时间推进一个时间步 
+!  采用双时间步长法 LU_SGS方法进行时间推进一个时间步
 !  目前Dual LU_SGS 方法尚不支持多重网格,因而nMesh只能为1
-
+!  (单重网格时主程序已将块循环提到最外层；本子程序保留为网格级接口)
   subroutine NS_Time_Dual_LU_SGS(nMesh)
     use Global_var
     implicit none
-    integer::nMesh,mBlock,NVAR1,i,j,k,m,nx,ny,nz,Kt_in
-    Type (Block_TYPE),pointer:: B
+    integer::nMesh,mBlock,NVAR1,m,kt_in
     Type (Mesh_TYPE),pointer:: MP
     real(PRE_EC):: max_res
-    
+
 	MP=>Mesh(nMesh)
     NVAR1=MP%NVAR
  do kt_in=1, step_inner_Limit                      ! 内循环迭代
 
    call Comput_Residual_one_mesh(nMesh)              ! 单重网格上计算残差及Du
    do mBlock=1,Mesh(nMesh)%Num_Block
-     B => Mesh(nMesh)%Block(mBlock)
-     nx=B%nx; ny=B%ny; nz=B%nz
-!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(nx,ny,nz,NVAR1,B)
-     do k=1,nz-1
-       do j=1,ny-1
-         do i=1,nx-1
-           do m=1,NVAR1
-             B%U(m,i,j,k)=B%U(m,i,j,k)+B%dU(m,i,j,k)           ! LU_SGS方法
-            enddo
-         enddo
-       enddo
-	 enddo
-!$OMP END PARALLEL DO       
+     call Uupdate_one_block(nMesh,mBlock)            ! U = U + DU
    enddo
 
-!----------------------------------------------------------------   
+!----------------------------------------------------------------
     if( IFLAG_LIMIT_FLOW == 1) then                      ! 对压力、密度进行限制
 	  call limit_flow(nMesh)
-	endif 
-
+	endif
 
   call Boundary_condition_onemesh(nMesh)             ! 边界条件 （设定Ghost Cell的值）
   call update_buffer_onemesh(nMesh)                  ! 同步各块的交界区
@@ -168,33 +258,13 @@
 	 enddo
      if( max_res .le. Res_Inner_Limit) exit   ! 达到残差标准，跳出内迭代
  enddo
-   
-   if(my_id .eq. 0) then 	
+
+   if(my_id .eq. 0) then
 	 print*, "Inner step ... ", kt_in
 	 print*, "rms residual eq =", MP%Res_rms(1:NVAR1)
    endif
 
-    
- 
-   do mBlock=1,Mesh(nMesh)%Num_Block
-     B => Mesh(nMesh)%Block(mBlock)
-     nx=B%nx; ny=B%ny; nz=B%nz
-
-!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(nx,ny,nz,NVAR1,B)
-     do k=1,nz-1
-       do j=1,ny-1
-         do i=1,nx-1
-           do m=1,NVAR1
-			 B%Un1(m,i,j,k)=B%Un(m,i,j,k)        
-             B%Un(m,i,j,k)=B%U(m,i,j,k)  
-            enddo
-         enddo
-       enddo
-	 enddo
-!$OMP END PARALLEL DO       
-   
-  enddo
-
+   call Set_Un1_Un(nMesh)                            ! Un1=Un; Un=U
 
    Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global            ! 时间 （使用全局时间步长法时有意义）
    Mesh(nMesh)%Kstep=Mesh(nMesh)%Kstep+1              ! 计算步数
@@ -214,44 +284,25 @@
 
 
 ! 采用1阶Euler法进行时间推进一个时间步 （第nMesh重网格 的单重网格）
+!  (多重网格路径使用; 单重网格时主程序已将块循环提到最外层)
   subroutine NS_Time_advance_1Euler(nMesh)
    use Global_var
    implicit none
-   integer::nMesh,mBlock,NVAR1,i,j,k,m,nx,ny,nz
-   Type (Block_TYPE),pointer:: B
-   real(PRE_EC):: du
+   integer::nMesh,mBlock
    call Set_Un(nMesh)
    call Comput_Residual_one_mesh(nMesh)              ! 单重网格上计算残差
    if(nMesh .ne. 1) call Add_force_function(nMesh)   !  添加强迫函数（多重网格的粗网格使用）
 
-    NVAR1=Mesh(nMesh)%NVAR
    do mBlock=1,Mesh(nMesh)%Num_Block
-     B => Mesh(nMesh)%Block(mBlock)
-     nx=B%nx; ny=B%ny; nz=B%nz
-!--------------------------------------------------------------------------------------
-!   时间推进 
-!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(nx,ny,nz,NVAR1,B)
-     do k=1,nz-1
-       do j=1,ny-1
-         do i=1,nx-1
-           do m=1,NVAR1
-             du=B%Res(m,i,j,k)/B%vol(i,j,k)   
-             B%U(m,i,j,k)=B%Un(m,i,j,k)+B%dt(i,j,k)*du
-           enddo
-         enddo
-       enddo
-	 enddo
-!$OMP END PARALLEL DO 
-  
-  enddo    
+     call Uupdate_one_block(nMesh,mBlock)            ! U = Un + dt*Res/Vol
+   enddo
 
-
-!----------------------------------------------------------------   
+!----------------------------------------------------------------
     if( IFLAG_LIMIT_FLOW == 1) then                      ! 对压力、密度进行限制
 	  call limit_flow(nMesh)
-	endif 
+	endif
 
-!---------------------------------------------------------------------------------------  
+!---------------------------------------------------------------------------------------
    call Boundary_condition_onemesh(nMesh)             ! 边界条件 （设定Ghost Cell的值）
    call update_buffer_onemesh(nMesh)                  ! 同步各块的交界区
    Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global            ! 时间 （使用全局时间步长法时有意义）
@@ -262,64 +313,33 @@
 
 
 ! 采用3阶RK方法推进1个时间步 （第nMesh重网格 的单重网格）
+!  (多重网格路径使用; 单重网格时主程序已将块循环提到最外层)
   subroutine NS_Time_advance_RK3(nMesh)
    use Global_var
    implicit none
-   integer::nMesh,mBlock,NVAR1,i,j,k,m,nx,ny,nz
-   Type (Block_TYPE),pointer:: B
-   real(PRE_EC):: du
- 
-   NVAR1=Mesh(nMesh)%NVAR
-   do mBlock=1,Mesh(nMesh)%Num_Block
-     B => Mesh(nMesh)%Block(mBlock)
+   integer::nMesh,mBlock
 
-!$OMP PARALLEL DO PRIVATE(i,j,k,m) SHARED(NVAR1,B)
-	 do k=-1,B%nz+1
-       do j=-1,B%ny+1
-	     do i=-1,B%nx+1
-	       do m=1,NVAR1
-	         B%Un(m,i,j,k)=B%U(m,i,j,k)
-           enddo
-	     enddo
-       enddo
-	 enddo
-!$OMP END PARALLEL DO 
- 
+   do mBlock=1,Mesh(nMesh)%Num_Block
+     call Set_Un_oneblock(nMesh,mBlock)              ! Un=U (含 -1..nx+1 范围)
    enddo
 
-   do KRK=1,3                                          ! 3-step Runge-Kutta Method
-	 call Comput_Residual_one_mesh(nMesh)              ! 计算残差
-     if(nMesh .ne. 1) call Add_force_function(nMesh)   ! 添加强迫函数（多重网格的粗网格使用）
+   do KRK=1,3                                        ! 3-step Runge-Kutta Method
+	 call Comput_Residual_one_mesh(nMesh)            ! 计算残差
+     if(nMesh .ne. 1) call Add_force_function(nMesh) ! 添加强迫函数（多重网格的粗网格使用）
 	 do mBlock=1,Mesh(nMesh)%Num_Block
-       B => Mesh(nMesh)%Block(mBlock)                  ! 第nMesh 重网格的第mBlock块
-       nx=B%nx; ny=B%ny; nz=B%nz
-!--------------------------------------------------------------------------------------
-!    时间推进
-
-!$OMP PARALLEL DO PRIVATE(i,j,k,m,du) SHARED(NVAR1,nx,ny,nz,Ralfa,Rbeta,Rgamma,B,KRK)
-       do k=1,nz-1 
-         do j=1,ny-1
-           do i=1,nx-1
-             do m=1,NVAR1
-		       du=B%Res(m,i,j,k)/B%Vol(i,j,k)  
-               B%U(m,i,j,k)=Ralfa(KRK)*B%Un(m,i,j,k)+Rgamma(KRK)*B%U(m,i,j,k)+B%dt(i,j,k)*Rbeta(KRK)*du        ! 3阶RK
-             enddo
-           enddo
-         enddo
-	   enddo
- !$OMP END PARALLEL DO 
-   enddo    
+       call Uupdate_one_block(nMesh,mBlock)          ! RK 第KRK子步的数据更新
+     enddo
 
 !---------------------------------------------------------------------------------------
 
-    if( IFLAG_LIMIT_FLOW == 1) then                      ! 对压力、密度进行限制
+    if( IFLAG_LIMIT_FLOW == 1) then                  ! 对压力、密度进行限制
 	  call limit_flow(nMesh)
-	endif 
+	endif
 
- 
+
      call Boundary_condition_onemesh(nMesh)         ! 边界条件 （设定Ghost Cell的值）
      call update_buffer_onemesh(nMesh)              ! 同步各块的交界区
-   enddo   
+   enddo
    Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global          ! 时间 （使用全局时间步长法时有意义）
    Mesh(nMesh)%Kstep=Mesh(nMesh)%Kstep+1            ! 计算步数
 
@@ -635,25 +655,21 @@
   subroutine Set_Un(nMesh)
    use Global_var
    implicit none
-   integer::nMesh,mBlock,NVAR1,i,j,k,m
-   Type (Block_TYPE),pointer:: B
-   NVAR1=Mesh(nMesh)%NVAR
+   integer::nMesh,mBlock
    do mBlock=1,Mesh(nMesh)%Num_Block
-     B => Mesh(nMesh)%Block(mBlock)
-!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(B,NVAR1)
-	 do k=-1,B%nz+1
-       do j=-1,B%ny+1
-	     do i=-1,B%nx+1
-	       do m=1,NVAR1
-	         B%Un(m,i,j,k)=B%U(m,i,j,k)
-           enddo
-	     enddo
-       enddo
-	 enddo
-!$OMP END PARALLEL DO 
+     call Set_Un_oneblock(nMesh,mBlock)
    enddo
-  
+
   end  subroutine Set_Un
+!------------------------------- Un1=Un; Un=U --------------------------------------
+  subroutine Set_Un1_Un(nMesh)
+   use Global_var
+   implicit none
+   integer::nMesh,mBlock
+   do mBlock=1,Mesh(nMesh)%Num_Block
+     call Set_Un1_Un_oneblock(nMesh,mBlock)
+   enddo
+  end  subroutine Set_Un1_Un
 !-------------------------------修正U --------------------------------------
   subroutine comput_new_U(nMesh)
    use Global_var

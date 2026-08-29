@@ -10,121 +10,132 @@
  !     Ver 1.01  2013-11-13:  boundary scheme can be used 
  !     Ver 1.16  2017-7-11:   如果物理量超限，则本块降为1阶迎风，且关闭粘性项；
   
-! 计算残差（网格的全部块）
+! 计算残差（网格的全部块）: 逐块调用 Residual_one_block （多重网格路径使用）
   Subroutine Comput_Residual_one_mesh(nMesh)
    use Global_Var
-   use Flow_Var 
    implicit none
-   integer:: nMesh,NVAR1,mBlock,nx,ny,nz,i,j,k,m,KL,IR,JR,KR
-   integer,save:: Iflag1=0
+   integer:: nMesh,mBlock
    real(PRE_EC):: Sfac,Sfac1
-   Type (Mesh_TYPE),pointer:: MP
+
+   call comput_Sfac(Sfac,Sfac1)             ! 双时间步长法的系数 (其它方法 Sfac=Sfac1=0)
+   do mBlock=1,Mesh(nMesh)%Num_Block
+     call Residual_one_block(nMesh,mBlock,Sfac,Sfac1)
+   enddo
+
+  end Subroutine Comput_Residual_one_mesh
+
+!-------------------------------------------------------------------------------------
+!  计算双时间步长法的时间导数项系数 Sfac,Sfac1 (其它时间推进方法 Sfac=Sfac1=0)
+!  Iflag1 为静态变量，仅首次调用时取1 (第一步 Un=U(n-1), 时间精度1阶)
+  subroutine comput_Sfac(Sfac,Sfac1)
+   use Global_Var
+   implicit none
+   real(PRE_EC):: Sfac,Sfac1
+   integer,save:: Iflag1=0
+
+   if(Time_Method .eq. Time_Dual_LU_SGS) then
+     if(Iflag1 .eq. 0) then
+       Iflag1=1
+       Sfac=1.d0/(3.d0*dt_global)  ! 第一个时间步， Un=U(n-1), 时间精度1阶
+       Sfac1=1.d0/dt_global
+     else
+       Sfac=1.d0/(2.d0*dt_global)
+       Sfac1=3.d0/(2.d0*dt_global)
+     endif
+   else
+     Sfac=0.d0
+     Sfac1=0.d0
+   endif
+  end subroutine comput_Sfac
+
+!-------------------------------------------------------------------------------------
+!  计算一个网格块的残差 (按块的核心模块)
+!  包括: 临时数组申请 -> limit_vt -> 守恒量解析 -> 残差(Residual) -> FDM补丁 ->
+!        叶轮机源项 -> 双时间步附加项 -> 谱半径 -> 残差光顺 -> dt -> LU-SGS的DU -> 释放
+!  单重网格时由主程序的块循环直接调用; 多重网格时由 Comput_Residual_one_mesh 调用
+  Subroutine Residual_one_block(nMesh,mBlock,Sfac,Sfac1)
+   use Global_Var
+   use Flow_Var
+   implicit none
+   integer:: nMesh,mBlock,NVAR1,nx,ny,nz,i,j,k,m,KL,IR,JR,KR
+   real(PRE_EC):: Sfac,Sfac1
    Type (Block_TYPE),pointer:: B
 
-!---------------------------------------------  
-  if(Time_Method .eq. Time_Dual_LU_SGS) then
-	 if(Iflag1 .eq. 0) then
-	   Iflag1=1
-	   Sfac=1.d0/(3.d0*dt_global)  ! 第一个时间步， Un=U(n-1), 时间精度1阶
-	   Sfac1=1.d0/dt_global
-	 else
-	   Sfac=1.d0/(2.d0*dt_global) 
-	   Sfac1=3.d0/(2.d0*dt_global)       
-	 endif
-  else
-     Sfac=0.d0
-	 Sfac1=0.d0
-  endif
+   B => Mesh(nMesh)%Block(mBlock)           ! 第nMesh 重网格的第mBlock块
+   nx=B%nx; ny=B%ny; nz=B%nz
+   NVAR1=Mesh(nMesh)%NVAR
+   KL=1-LAP
+   IR=nx+LAP-1
+   JR=ny+LAP-1
+   KR=nz+LAP-1
+   allocate(d(KL:IR,KL:JR,KL:KR),uu(KL:IR,KL:JR,KL:KR),v(KL:IR,KL:JR,KL:KR),  &
+            w(KL:IR,KL:JR,KL:KR), T(KL:IR,KL:JR,KL:KR), &
+            cc(KL:IR,KL:JR,KL:KR),p(KL:IR,KL:JR,KL:KR))
 
-!----------------------------------------------- 
-   MP=>Mesh(nMesh)
-   MP%Res_max(:) =0.d0  ! 最大残差
-   MP%Res_rms(:) =0.d0  ! 均方根残差            
-   NVAR1=MP%NVAR
-!----------------------------------------------
-   do mBlock=1,MP%Num_Block
-     B => MP%Block(mBlock)                  ! 第nMesh 重网格的第mBlock块
-     nx=B%nx; ny=B%ny; nz=B%nz
-     KL=1-LAP
-	 IR=nx+LAP-1
-	 JR=ny+LAP-1
-	 KR=nz+LAP-1
-	 allocate(d(KL:IR,KL:JR,KL:KR),uu(KL:IR,KL:JR,KL:KR),v(KL:IR,KL:JR,KL:KR),  &
-              w(KL:IR,KL:JR,KL:KR), T(KL:IR,KL:JR,KL:KR), &
-              cc(KL:IR,KL:JR,KL:KR),p(KL:IR,KL:JR,KL:KR))
-    
-	
-	 allocate(Flux(NVAR1,nx,ny,nz))                            ! 通量(流体方程)
-     allocate(Lci(nx,ny,nz),Lcj(nx,ny,nz),Lck(nx,ny,nz),Lvi(nx,ny,nz),Lvj(nx,ny,nz),Lvk(nx,ny,nz))  ! 谱半径（无粘、粘性）
+   allocate(Flux(NVAR1,nx,ny,nz))                            ! 通量(流体方程)
+   allocate(Lci(nx,ny,nz),Lcj(nx,ny,nz),Lck(nx,ny,nz),Lvi(nx,ny,nz),Lvj(nx,ny,nz),Lvk(nx,ny,nz))  ! 谱半径（无粘、粘性）
 
-!------------------------------------------------------------------------------------     
-	 call limit_vt(nMesh,mBlock)    ! 对SA，SST方程的物理量(vt,Kt,Wt)进行限制
+!------------------------------------------------------------------------------------
+   call limit_vt(nMesh,mBlock)    ! 对SA，SST方程的物理量(vt,Kt,Wt)进行限制
 
-	 call comput_duvtpc(nMesh,mBlock)                      ! 计算基本量 d,u,v,T,p,cc , vt,kt,Wt
+   call comput_duvtpc(nMesh,mBlock)                      ! 计算基本量 d,u,v,T,p,cc , vt,kt,Wt
 
 !---------------------------------------------------------------------------------------
-!  求解N-S方程的核心模块： 计算残差（右端项）  
-     call Residual (nMesh,mBlock)                          ! 计算一个网格块的残差（右端项） ; 第nMesh 重网格的第mBlock块
+!  求解N-S方程的核心模块： 计算残差（右端项）
+   call Residual (nMesh,mBlock)                          ! 计算一个网格块的残差（右端项） ; 第nMesh 重网格的第mBlock块
 !----------------------------------------------
-!    OpenCFD-SEC： 采用差分法计算该块的残差
+!  OpenCFD-SEC： 采用差分法计算该块的残差
 ! !!! FVM-FDM --------------
-   	 if(B%IFLAG_FVM_FDM  .eq. Method_FDM) call Residual_FDM(nMesh,mBlock)  ! 用有限体积法计算残差（补丁程序）   !!!SEC!!!
+   if(B%IFLAG_FVM_FDM  .eq. Method_FDM) call Residual_FDM(nMesh,mBlock)  ! 用有限体积法计算残差（补丁程序）   !!!SEC!!!
 !---FVM-FDM-------------
 
 ! 对于叶轮机求解器，添加源项 （惯性力项）
-    if(IF_TurboMachinary .eq. 1) then
+   if(IF_TurboMachinary .eq. 1) then
 
 !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,k)
-	  do k=1,nz-1
-	  do j=1,ny-1
+     do k=1,nz-1
+     do j=1,ny-1
       do i=1,nx-1
        B%Res(3,i,j,k)=B%Res(3,i,j,k)+B%vol(i,j,k)*d(i,j,k)*(Turbo_w**2*B%yc(i,j,k)+2.d0*Turbo_w*w(i,j,k))
        B%Res(4,i,j,k)=B%Res(4,i,j,k)+B%vol(i,j,k)*d(i,j,k)*(Turbo_w**2*B%zc(i,j,k)-2.d0*Turbo_w*v(i,j,k))
        B%Res(5,i,j,k)=B%Res(5,i,j,k)+B%vol(i,j,k)*d(i,j,k)*Turbo_w**2*(v(i,j,k)*B%yc(i,j,k)+w(i,j,k)*B%zc(i,j,k))
-	  enddo
-	  enddo
-	  enddo
+    enddo
+    enddo
+    enddo
 !$OMP END PARALLEL DO
    endif
 
 
-
-
-!  双时间步长法，添加附加残差     
-	 if(Time_Method .eq. Time_Dual_LU_SGS) then
+!  双时间步长法，添加附加残差
+   if(Time_Method .eq. Time_Dual_LU_SGS) then
 !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,k,m)
-	  do k=1,nz-1
-	  do j=1,ny-1
+     do k=1,nz-1
+     do j=1,ny-1
       do i=1,nx-1
       do m=1,NVAR1
        B%Res(m,i,j,k)=B%Res(m,i,j,k)-(3.d0*B%U(m,i,j,k)-4.d0*B%Un(m,i,j,k)+B%Un1(m,i,j,k))*B%vol(i,j,k)*Sfac
       enddo
-	  enddo
-	  enddo
-	  enddo
+   enddo
+   enddo
+   enddo
 !$OMP END PARALLEL DO
-     endif
+   endif
 
 
+   call comput_Lijk(nMesh,mBlock)                        ! 计算谱半径  (Blazek's book, p189-190), 残差光顺，局部时间步长及LU-SGS中均使用该值
+   if(If_Residual_smoothing .eq. 1 ) then
+       call Residual_smoothing(nMesh,mBlock)             ! 残差光顺
+   endif
+   call comput_dt(nMesh,mBlock)                          ! 计算(当地) 时间步长
 
-     call comput_Lijk(nMesh,mBlock)                        ! 计算谱半径  (Blazek's book, p189-190), 残差光顺，局部时间步长及LU-SGS中均使用该值
-	 if(If_Residual_smoothing .eq. 1 ) then
-	     call Residual_smoothing(nMesh,mBlock)             ! 残差光顺
-	 endif
-	 call comput_dt(nMesh,mBlock)                          ! 计算(当地) 时间步长
+   if(Time_Method .eq. Time_LU_SGS .or. Time_Method .eq. Time_Dual_LU_SGS) then
+      call du_LU_SGS(nMesh,mBlock,Sfac1)                      ! 采用LU_SGS方法计算DU=U(n+1)-U(n)
+   endif
 
-     if(Time_Method .eq. Time_LU_SGS .or. Time_Method .eq. Time_Dual_LU_SGS) then
-        call du_LU_SGS(nMesh,mBlock,Sfac1)                      ! 采用LU_SGS方法计算DU=U(n+1)-U(n)
-     endif
+   deallocate(d,uu,v,w,T,cc,p,Flux)
+   deallocate(Lci,Lcj,Lck,Lvi,Lvj,Lvk)
 
-	 deallocate(d,uu,v,w,T,cc,p,Flux)
-     deallocate(Lci,Lcj,Lck,Lvi,Lvj,Lvk)
-
-
-   enddo    
-   
-
-  end Subroutine Comput_Residual_one_mesh
+  end Subroutine Residual_one_block
 
 
 !------------------------------------------------------------------------------

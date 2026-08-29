@@ -126,8 +126,8 @@
   program main
    use Global_Var
    implicit none
-   integer:: ierr
-
+   integer:: ierr,mBlock,kt_in,m
+   real(PRE_EC):: Sfac,Sfac1,max_res
    call Init_mpi
   
    if(my_id .eq. 0) then
@@ -163,13 +163,72 @@
    do while(Mesh(1)%tt .lt. t_end )
     
      call show_Wall_time()
-     if(Num_Mesh .eq. 1)  then                          ! 单重网格推进1个时间步
-       call NS_Time_advance(1)
+     if(Num_Mesh .eq. 1) then                          ! 单重网格推进1个时间步
+!==========================================================================================
+!   重构后的主时间循环: 块循环提到最外层
+!   每个时间步: 先遍历每个 block 完成 残差计算+数据更新(时间推进),
+!   之后再统一施加边界条件并进行块间通信。添加新功能时可在块级直接扩展。
+       select case(Time_Method)
+       case(Time_RK3)                                  ! 3阶RK: 每步3个子步(stage)
+         call comput_Sfac(Sfac,Sfac1)                  ! =0
+         do mBlock=1,Mesh(1)%Num_Block
+           call Set_Un_oneblock(1,mBlock)              ! Un=U
+         enddo
+         do KRK=1,3
+           do mBlock=1,Mesh(1)%Num_Block               ! 遍历每个 block
+             call Residual_one_block(1,mBlock,Sfac,Sfac1)   ! 残差计算 (含dt与LU-SGS的DU)
+             call Uupdate_one_block(1,mBlock)               ! 数据更新 (时间推进)
+           enddo
+           if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
+           call Boundary_condition_onemesh(1)          ! 边界条件 (设定Ghost Cell的值)
+           call update_buffer_onemesh(1)               ! 同步各块的交界区
+         enddo
+
+       case(Time_Dual_LU_SGS)                          ! 双时间步长法: 内迭代
+         do kt_in=1, step_inner_Limit
+           call comput_Sfac(Sfac,Sfac1)                ! 双时间步长法系数 (每次内迭代调用, 与原逻辑一致)
+           do mBlock=1,Mesh(1)%Num_Block               ! 遍历每个 block
+             call Residual_one_block(1,mBlock,Sfac,Sfac1)   ! 残差计算 (含dt与LU-SGS的DU)
+             call Uupdate_one_block(1,mBlock)               ! 数据更新 (U=U+DU)
+           enddo
+           if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
+           call Boundary_condition_onemesh(1)          ! 边界条件 (设定Ghost Cell的值)
+           call update_buffer_onemesh(1)               ! 同步各块的交界区
+           call comput_max_Res_onemesh(1)              ! 计算最大/均方根残差
+           max_res=Mesh(1)%Res_rms(1)
+           do m=1,Mesh(1)%NVAR
+             max_res=max(max_res,Mesh(1)%Res_rms(m))
+           enddo
+           if( max_res .le. Res_Inner_Limit) exit      ! 达到残差标准，跳出内迭代
+         enddo
+         if(my_id .eq. 0) then
+           print*, "Inner step ... ", kt_in
+           print*, "rms residual eq =", Mesh(1)%Res_rms(1:Mesh(1)%NVAR)
+         endif
+         do mBlock=1,Mesh(1)%Num_Block
+           call Set_Un1_Un_oneblock(1,mBlock)          ! Un1=Un; Un=U
+         enddo
+
+       case default                                    ! LU_SGS 与 1阶Euler: 单遍块循环
+         call comput_Sfac(Sfac,Sfac1)                  ! =0
+         call Set_Un(1)                                ! Un=U
+         do mBlock=1,Mesh(1)%Num_Block                 ! 遍历每个 block
+           call Residual_one_block(1,mBlock,Sfac,Sfac1)     ! 残差计算 (含dt与LU-SGS的DU)
+           call Uupdate_one_block(1,mBlock)                 ! 数据更新 (时间推进)
+         enddo
+         if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
+         call Boundary_condition_onemesh(1)            ! 边界条件 (设定Ghost Cell的值)
+         call update_buffer_onemesh(1)                 ! 同步各块的交界区
+       end select
+
+       call force_vt_kw(1)                             ! 限制vt,Kt,Wt非负
+       Mesh(1)%tt=Mesh(1)%tt+dt_global                 ! 时间
+       Mesh(1)%Kstep=Mesh(1)%Kstep+1                   ! 计算步数
 	 else  if(Num_Mesh .eq. 2)  then                    ! 2重网格推进1个时间步
-  	   call NS_2stge_multigrid
+  	  call NS_2stge_multigrid
      else                                               ! 3重网格推进1个时间步
-  	   call NS_3stge_multigrid 
-     endif	  
+  	  call NS_3stge_multigrid
+     endif
  
  !  滤波 ,可以增强稳定性. 如Kstep_Filter=0则不使用滤波   
 	if(Kstep_smooth .gt. 0) then
