@@ -1,0 +1,24 @@
+{
+    // 浅色主题（仅对当前项目生效）
+    "workbench.colorTheme": "Quiet Light",
+    // Fortran 语言服务器 (Modern Fortran 扩展 + fortls)
+    "fortran.fortls.path": "/home/sundong/.local/bin/fortls",
+    "fortran.linter.compiler": "gfortran",
+    "fortran.fortls.directories": ["${workspaceFolder}/src"],
+    "fortran.linter.includePaths": ["${workspaceFolder}/src"],
+
+    // 文件关联与搜索排除（编译产物）
+    "files.associations": {
+        "*.f90": "FortranFreeForm",
+        "*.ec": "plaintext"
+    },
+    "search.exclude": {
+        "**/src/*.o": true,
+        "**/src/*.mod": true,
+        "**/src/*.out": true
+    },
+
+    // 源码含 GBK 中文注释，按 gb18030 读取避免乱码
+    "files.encoding": "gb18030",
+    "files.autoGuessEncoding": true
+}

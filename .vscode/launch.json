@@ -1,0 +1,32 @@
+{
+    // 调试配置：单进程 GDB 调试（需安装 C/C++ 扩展提供 cppdbg）
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug OpenCFD-EC (gdb, 单进程)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/opencfd-ec1.16a.out",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/src",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Fortran language mode",
+                    "text": "set language fortran",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "build (make)"
+        }
+    ]
+}

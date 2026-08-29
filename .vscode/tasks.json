@@ -1,0 +1,59 @@
+{
+    // 任务：编译 / 清理 / 运行 OpenCFD-EC
+    "version": "2.0.0",
+    "options": {
+        "cwd": "${workspaceFolder}/src"
+    },
+    "inputs": [
+        {
+            "id": "numProcs",
+            "type": "promptString",
+            "description": "输入 MPI 进程数 (np)",
+            "default": "4"
+        }
+    ],
+    "tasks": [
+        {
+            "label": "build (make)",
+            "type": "shell",
+            "command": "make",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gfortran"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            }
+        },
+        {
+            "label": "rebuild (clean + build)",
+            "type": "shell",
+            "command": "make clean && make",
+            "problemMatcher": ["$gfortran"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            }
+        },
+        {
+            "label": "clean (make clean)",
+            "type": "shell",
+            "command": "make clean",
+            "problemMatcher": []
+        },
+        {
+            "label": "run MPI",
+            "type": "shell",
+            "command": "mpirun -n ${input:numProcs} ./opencfd-ec1.16a.out",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        }
+    ]
+}

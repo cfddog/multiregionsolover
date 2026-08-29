@@ -1,0 +1,15 @@
+# 编译产物
+*.o
+*.mod
+*.out
+work.*
+*.pc
+
+# 编辑器/IDE
+*.swp
+*~
+
+# 计算产生的临时结果（保留网格与算例配置）
+cases/**/Residual.dat
+cases/**/force.log
+cases/**/error.log
