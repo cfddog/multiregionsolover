@@ -1,7 +1,7 @@
-! ³õÊ¼»¯£º°üÀ¨´´½¨Êý¾Ý½á¹¹¼°¸³³õÖµ
-! ¶ÔÓÚ¶àÖØÍø¸ñ£¬¸ù¾ÝÉÏ¼¶Íø¸ñµÄÐÅÏ¢£¬´´½¨¸÷¼¶Íø¸ñ
-!  ¼ì²éÍø¸ñÊÇ·ñÊÊÓÃÓÚ¶àÖØÍø¸ñ 
-!  µ¥·½ÏòÍø¸ñÊý= 2*K+1 ¿ÉÓÃ2ÖØÍø¸ñ£¬=4*K+1 ¿ÉÓÃ3ÖØÍø¸ñ£¬=8*K+1 ¿ÉÓÃ4ÖØÍø¸ñ ...  
+! Initialization: create data structures and assign initial values
+! For multi-grid, create each level of mesh based on the parent mesh information
+!  Check if the mesh is suitable for multi-grid
+!  Single-direction grid points = 2*K+1 supports 2-level mesh, =4*K+1 supports 3-level mesh, =8*K+1 supports 4-level mesh ...  
 !---------------------------------------------------------------------------------
 !------------------------------------------------------------------------------     
   subroutine init
@@ -20,32 +20,36 @@
    Cv=1.d0/(gamma*(gamma-1.d0)*Ma*Ma)
 !--------------------------------------------------------------------- 
 !-----------------------------------------------------------------------------------------
-   call partation                         ! ÇøÓò·Ö¸î £¨È·¶¨Ã¿¿éËùÊôµÄ½ø³Ì£©
-   allocate( Mesh(Num_Mesh) )             ! Ö÷Êý¾Ý½á¹¹£º ¡°Íø¸ñ¡± £¨Æä³ÉÔ±ÊÇ¡°Íø¸ñ¿é¡±£©¡£ Mesh(1)Îª¶àÖØÍø¸ñÖÐ×îÏ¸µÄÍø¸ñ£¬Mesh(2),Mesh(3)Îª´Ö¡¢¸ü´ÖµÄÍø¸ñ¡£
-   call Creat_main_Mesh                   ! ´´½¨Ö÷Íø¸ñ(¶àÖØÍø¸ñÖÐ×îÏ¸µÄÍø¸ñ) (´ÓÍø¸ñÎÄ¼þMesh3d.dat)
-   call read_main_Mesh                    ! ¶ÁÈëÖ÷Íø¸ñ
-   call read_inc    !¶ÁÍø¸ñÁ¬½ÓÐÅÏ¢ (bc3d.inc)
+   call partation                         ! Domain decomposition (determine which process each block belongs to)
+   call read_material_in
+   call bcast_material
+   call set_block_type
+   allocate( Mesh(Num_Mesh) )             ! Main data structure: "Mesh" (whose members are "Mesh Blocks"). Mesh(1) is the finest mesh in multi-grid, Mesh(2), Mesh(3) are coarser meshes.
+   call Creat_main_Mesh                   ! Create main mesh (finest mesh in multi-grid) (from mesh file Mesh3d.dat)
+   call read_main_Mesh                    ! Read main mesh
+   call read_inc    ! Read mesh connectivity information (bc3d.inc)
+   call read_inc_interface
    call Update_coordinate_buffer_onemesh(1)
    call Comput_Goemetric_var(1)
-   call update_Mesh_Center(1)    ! ¸üÐÂÖÐÐÄµãµÄ×ø±êµÄGhost Öµ £¨ÖÜÆÚÌõ¼þÊ¹ÓÃ£©
+   call update_Mesh_Center(1)    ! Update ghost values of center coordinates (for periodic conditions)
 
-   if(IF_Debug==1) call Output_mesh_debug                  ! Êä³öº¬ÐéÍø¸ñµÄÍø¸ñ
+   if(IF_Debug==1) call Output_mesh_debug                  ! Output mesh including ghost cells
   
     if(IF_Walldist ==  1)  then
-	   call comput_dist_wall   ! ¼ÆËã(»ò¶ÁÈ¡)µ½±ÚÃæµÄ¾àÀë
+	   call comput_dist_wall   ! Compute (or read) distance to wall
     else
 	   if(my_id .eq. 0) print*, " Need not read wall_dist.dat "
 	endif
 
    if(Num_Mesh .ge. 2) then
-     call Creat_Mesh(1,2)                 ! ¸ù¾Ý1ºÅÍø¸ñ£¨×îÏ¸Íø¸ñ£©ÐÅÏ¢£¬´´½¨2ºÅÍø¸ñ£¨´ÖÍø¸ñ£©
+     call Creat_Mesh(1,2)                 ! Create mesh 2 (coarse mesh) based on mesh 1 (finest mesh) information
    endif
    if(Num_Mesh .ge. 3) then
-     call Creat_Mesh(2,3)                 ! ¸ù¾Ý2ºÅÍø¸ñÐÅÏ¢£¨´ÖÍø¸ñ£©£¬ ´´½¨3ºÅÍø¸ñ£¨×î´ÖÍø¸ñ£©
+     call Creat_Mesh(2,3)                 ! Create mesh 3 (coarsest mesh) based on mesh 2 (coarse mesh) information
    endif
    
    do m=1,Num_Mesh
-     call set_BcK(m)   ! Éè¶¨±ß½çÖ¸Ê¾·û (2013-11)
+     call set_BcK(m)   ! Set boundary indicators (2013-11)
    enddo 
 
 ! !!! FVM_FDM FVM_FDM !!!!         hybrid Finite-Difference/ Finite-Valume Method   
@@ -55,7 +59,7 @@
 
 
 !--------------------------------------------------------------------------------------
-!   ´´½¨Êý¾Ý½á¹¹£º ×îÏ¸Íø¸ñ £¨´¢´æ¼¸ºÎÁ¿¼°ÊØºã±äÁ¿£©
+!    Create data structure: finest mesh (store geometric quantities and conservative variables)
   subroutine Creat_main_Mesh
    use Global_var
    implicit none
@@ -65,24 +69,24 @@
    
 !   print*, "-----------------------------"
 ! ---------node Coordinates----------------------------------------  
-!  Íø¸ñÎÄ¼þ£ºPLOT3D¸ñÊ½£»   
+!  Mesh file: PLOT3D format;   
    MP=>Mesh(1)
-   MP%NVAR=NVAR   ! ×îÃÜÍø¸ñÉÏµÄ±äÁ¿ÊýÄ¿
-   MP%Num_Block=Num_Block                      ! ±¾mpi½ø³Ì°üº¬µÄ¿éÊý
-   allocate(MP%Block(Num_block))               ! ´´½¨¡°Íø¸ñ¿é¡±
-   call set_size_blocks                        ! Éè¶¨Ã¿¿éµÄ´óÐ¡
-   call allocate_mem_Blocks(1)                 ! ¸øÃ¿¿éµÄ³ÉÔ±Êý×é¿ª±ÙÄÚ´æ
+   MP%NVAR=NVAR   ! Number of variables on the finest mesh
+   MP%Num_Block=Num_Block                      ! Number of blocks included in this MPI process
+   allocate(MP%Block(Num_block))               ! åˆ›å»ºâ€œç½‘æ ¼å—â€
+   call set_size_blocks                        ! è®¾å®šæ¯å—çš„å¤§å°
+   call allocate_mem_Blocks(1)                 ! ç»™æ¯å—çš„æˆå‘˜æ•°ç»„å¼€è¾Ÿå†…å­˜
 
-!  Éè¶¨²ÎÊý³õÖµ
-   allocate(MP%Res_max(NVAR),MP%Res_rms(NVAR))   ! ×î´ó²Ð²îÓë¾ù·½¸ù²Ð²î 
+!  è®¾å®šå‚æ•°åˆå€¼
+   allocate(MP%Res_max(NVAR),MP%Res_rms(NVAR))   ! æœ€å¤§æ®‹å·®ä¸Žå‡æ–¹æ ¹æ®‹å·® 
    MP%Kstep=0
    MP%tt=0.d0
-   Num_Cell=0   ! Íø¸ñµãÊý
+   Num_Cell=0   ! ç½‘æ ¼ç‚¹æ•°
     do m=1,Num_Block
     B => MP%Block(m)
     Num_Cell=Num_Cell+(B%nx-1)*(B%ny-1)*(B%nz-1)
 	
-	B%IF_OverLimit=0                       ! ÏÞÖÆÁ÷³¡±êÖ¾ £¨½µµÍ¾«¶ÈµÈ£©
+	B%IF_OverLimit=0                       ! é™åˆ¶æµåœºæ ‡å¿— ï¼ˆé™ä½Žç²¾åº¦ç­‰ï¼‰
 
     enddo
     call MPI_ALLREDUCE(Num_Cell,MP%Num_Cell,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
@@ -93,7 +97,7 @@
 
 
 !---------------------------------------------
-! Éè¶¨Ã¿¿éµÄ´óÐ¡(B%nx,B%ny,B%nz), ¸ù¾ÝÍø¸ñÎÄ¼þMesh3d.dat 
+! è®¾å®šæ¯å—çš„å¤§å°(B%nx,B%ny,B%nz), æ ¹æ®ç½‘æ ¼æ–‡ä»¶Mesh3d.dat 
   subroutine set_size_blocks
    use Global_var
    implicit none
@@ -105,17 +109,17 @@
   
    MP=>Mesh(1)
    NB=Total_Block
-   allocate(bNI(NB),bNJ(NB),bNK(NB))         ! ¿éµÄÎ¬Êý£¨È«¾Ö£©
+   allocate(bNI(NB),bNJ(NB),bNK(NB))         ! å—çš„ç»´æ•°ï¼ˆå…¨å±€ï¼‰
   
-  if(my_id .eq. 0) then      ! Ö÷½ø³Ì½øÐÐ¶ÁÐ´²Ù×÷
+  if(my_id .eq. 0) then      ! ä¸»è¿›ç¨‹è¿›è¡Œè¯»å†™æ“ä½œ
 
-   if( Mesh_File_Format .eq. 1) then   ! ¸ñÊ½ÎÄ¼þ
+   if( Mesh_File_Format .eq. 1) then   ! æ ¼å¼æ–‡ä»¶
      open(99,file="Mesh3d.dat")
      read(99,*) NB1   ! Block number
      read(99,*) (bNI(k), bNJ(k), bNK(k), k=1,NB)
-    else                                ! ÎÞ¸ñÊ½ÎÄ¼þ
+    else                                ! æ— æ ¼å¼æ–‡ä»¶
      open(99,file="Mesh3d.dat",form="unformatted")
-     read(99) NB1                       ! ×Ü¿éÊý
+     read(99) NB1                       ! æ€»å—æ•°
       if(NB1 .ne. NB) then 
 	     print*, "Warning !!! Block number Error !!!"
          print*, "please check 'partation.dat' ..."
@@ -130,15 +134,15 @@
    call MPI_bcast(bNJ,NB,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
    call MPI_bcast(bNK,NB,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
    
-   do m=1,MP%Num_Block   ! ±¾½ø³Ì°üº¬µÄ¿éÊý
-    B=> MP%Block(m)       ! ±¾¿é
-    mb= my_blocks(m)      ! ¿éºÅ
-    B%block_no=mb         ! ¿éºÅ  
-    B%mpi_id=my_id        ! ±¾¿éµÄ½ø³ÌºÅ
+   do m=1,MP%Num_Block   ! æœ¬è¿›ç¨‹åŒ…å«çš„å—æ•°
+    B=> MP%Block(m)       ! æœ¬å—
+    mb= my_blocks(m)      ! å—å·
+    B%block_no=mb         ! å—å·  
+    B%mpi_id=my_id        ! æœ¬å—çš„è¿›ç¨‹å·
     B%nx=bNI(mb)
     B%ny=bNJ(mb)
     B%nz=bNK(mb)
-    B%IFLAG_FVM_FDM=Method_FVM   ! Ä¬ÈÏÓÐÏÞÌå»ý·¨ 
+    B%IFLAG_FVM_FDM=Method_FVM   ! é»˜è®¤æœ‰é™ä½“ç§¯æ³• 
 	B%IF_OverLimit=0
 
    enddo
@@ -147,12 +151,12 @@
 
   end subroutine set_size_blocks
 
-!------¶ÁÈëÍø¸ñÐÅÏ¢ (Èç²ÉÓÃ¶àÖØÍø¸ñ£¬ÔòÎª×îÃÜµÄÍø¸ñ)----------------------------------
+!------è¯»å…¥ç½‘æ ¼ä¿¡æ¯ (å¦‚é‡‡ç”¨å¤šé‡ç½‘æ ¼ï¼Œåˆ™ä¸ºæœ€å¯†çš„ç½‘æ ¼)----------------------------------
   
 
 
 
-! ¸ù¾ÝÉÏ¼¶Íø¸ñÐÅÏ¢£¬´´½¨ÐÂÍø¸ñm2 
+! æ ¹æ®ä¸Šçº§ç½‘æ ¼ä¿¡æ¯ï¼Œåˆ›å»ºæ–°ç½‘æ ¼m2 
   subroutine Creat_Mesh(m1,m2)
    use Global_Var
    implicit none
@@ -160,50 +164,50 @@
    Type (Block_TYPE),pointer:: B1,B2
    TYPE (BC_MSG_TYPE),pointer:: Bc1,Bc2
    Type (Mesh_TYPE),pointer:: MP1,MP2
-   MP1=>Mesh(m1)             ! ÉÏÒ»¼¶Íø¸ñ £¨Ï¸Íø¸ñ£©
-   Mp2=>Mesh(m2)             ! ±¾¼¶Íø¸ñ   £¨´ÖÍø¸ñ£©
+   MP1=>Mesh(m1)             ! ä¸Šä¸€çº§ç½‘æ ¼ ï¼ˆç»†ç½‘æ ¼ï¼‰
+   Mp2=>Mesh(m2)             ! æœ¬çº§ç½‘æ ¼   ï¼ˆç²—ç½‘æ ¼ï¼‰
    
-   MP2%NVAR=5                ! ´ÖÍø¸ñÉÏµÄ±äÁ¿ÊýÄ¿
+   MP2%NVAR=5                ! ç²—ç½‘æ ¼ä¸Šçš„å˜é‡æ•°ç›®
 
    NB=MP1%Num_Block
-   MP2%Num_Block=NB          !  Íø¸ñm2Óëm1 ¿éÊýÏàÍ¬
-   MP2%Mesh_no=m2            ! Íø¸ñºÅ
+   MP2%Num_Block=NB          !  ç½‘æ ¼m2ä¸Žm1 å—æ•°ç›¸åŒ
+   MP2%Mesh_no=m2            ! ç½‘æ ¼å·
    MP2%Num_Cell=0      
-   NVAR1=MP2%NVAR    ! NVAR1=5  ´ÖÍø¸ñ²»Ê¹ÓÃÍÄÁ÷Ä£ÐÍ
+   NVAR1=MP2%NVAR    ! NVAR1=5  ç²—ç½‘æ ¼ä¸ä½¿ç”¨æ¹æµæ¨¡åž‹
    allocate(MP2%Res_max(NVAR1),MP2%Res_rms(NVAR1)) 
-   allocate(MP2%Block(NB))   ! ÔÚMP2ÖÐ´´½¨Êý¾Ý½á¹¹£º¡°¿é¡±
+   allocate(MP2%Block(NB))   ! åœ¨MP2ä¸­åˆ›å»ºæ•°æ®ç»“æž„ï¼šâ€œå—â€
      Num_Cell=0
    do m=1,NB
      B1=>MP1%Block(m)
      B2=>MP2%Block(m)
 	 B2%Block_no=B1%block_no
-     nx=(B1%nx-1)/2+1        ! ´ÖÍø¸ñµÄµãÊý
+     nx=(B1%nx-1)/2+1        ! ç²—ç½‘æ ¼çš„ç‚¹æ•°
 	 ny=(B1%ny-1)/2+1
 	 nz=(B1%nz-1)/2+1
 	 B2%nx=nx
 	 B2%ny=ny
 	 B2%nz=nz    
-	 Num_Cell=Num_Cell+(nx-1)*(ny-1)*(nz-1)          ! Í³¼ÆMP2µÄ×ÜÍø¸ñµ¥ÔªÊý
-     B2%IFLAG_FVM_FDM=Method_FVM   ! Ä¬ÈÏÓÐÏÞÌå»ý·¨ 
- 	 B2%IF_OverLimit=0           ! ÎïÀíÁ¿³¬ÏÞ£¬½µµÍ¾«¶È
+	 Num_Cell=Num_Cell+(nx-1)*(ny-1)*(nz-1)          ! ç»Ÿè®¡MP2çš„æ€»ç½‘æ ¼å•å…ƒæ•°
+     B2%IFLAG_FVM_FDM=Method_FVM   ! é»˜è®¤æœ‰é™ä½“ç§¯æ³• 
+ 	 B2%IF_OverLimit=0           ! ç‰©ç†é‡è¶…é™ï¼Œé™ä½Žç²¾åº¦
   
     enddo
     call MPI_ALLREDUCE(Num_Cell,MP2%Num_Cell,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
 
 
-!    ´´½¨¼¸ºÎÁ¿¼°ÎïÀíÁ¿
+!    åˆ›å»ºå‡ ä½•é‡åŠç‰©ç†é‡
 !--------------------------------------------------
-     call allocate_mem_Blocks(m2)           ! ¿ª±ÙÄÚ´æ
+     call allocate_mem_Blocks(m2)           ! å¼€è¾Ÿå†…å­˜
 !------------------------------------------------
     do m=1,NB
      B1=>MP1%Block(m)
      B2=>MP2%Block(m)
-!   Éè¶¨×ø±êÐÅÏ¢£¨¸ù¾Ý´Ö¡¢Ï¸Íø¸ñµÄ¶ÔÓ¦¹ØÏµ£©
+!   è®¾å®šåæ ‡ä¿¡æ¯ï¼ˆæ ¹æ®ç²—ã€ç»†ç½‘æ ¼çš„å¯¹åº”å…³ç³»ï¼‰
      do k=1,B2%nz     
 	   do j=1,B2%ny
 	     do i=1,B2%nx
 	       i1=2*i-1 ; j1=2*j-1 ;k1=2*k-1
-	       B2%x(i,j,k)=B1%x(i1,j1,k1)         !´ÖÍø¸ñÓëÏ¸Íø¸ñµÄ¶ÔÓ¦¹ØÏµ £¨¸ôÒ»¸öµãÉèÖÃÒ»¸ö´ÖÍø¸ñµã£©
+	       B2%x(i,j,k)=B1%x(i1,j1,k1)         !ç²—ç½‘æ ¼ä¸Žç»†ç½‘æ ¼çš„å¯¹åº”å…³ç³» ï¼ˆéš”ä¸€ä¸ªç‚¹è®¾ç½®ä¸€ä¸ªç²—ç½‘æ ¼ç‚¹ï¼‰
            B2%y(i,j,k)=B1%y(i1,j1,k1)
 		   B2%z(i,j,k)=B1%z(i1,j1,k1)
 	     enddo
@@ -215,35 +219,35 @@
      B1=>MP1%Block(m)
      B2=>MP2%Block(m)
 
-!    ´´½¨Á¬½ÓÐÅÏ¢
-     Bsub=B1%subface        ! ×ÓÃæÊý
+!    åˆ›å»ºè¿žæŽ¥ä¿¡æ¯
+     Bsub=B1%subface        ! å­é¢æ•°
      B2%subface=Bsub
      allocate(B2%bc_msg(Bsub))
      do ksub=1, Bsub
-	   Bc1=> B1%bc_msg(ksub)    ! ÉÏÒ»¼¶Íø¸ñµÄÁ¬½ÓÐÅÏ¢
-	   Bc2=> B2%bc_msg(ksub)    ! ±¾¼¶Íø¸ñµÄÁ¬½ÓÐÅÏ¢
+	   Bc1=> B1%bc_msg(ksub)    ! ä¸Šä¸€çº§ç½‘æ ¼çš„è¿žæŽ¥ä¿¡æ¯
+	   Bc2=> B2%bc_msg(ksub)    ! æœ¬çº§ç½‘æ ¼çš„è¿žæŽ¥ä¿¡æ¯
       
-	   Bc2%ib=(Bc1%ib-1)/2+1   ! ´Ö¡¢Ï¸Íø¸ñÏÂ±êµÄ¶ÔÓ¦¹ØÏµ
-	   Bc2%ie=(Bc1%ie-1)/2+1   ! ´Ö¡¢Ï¸Íø¸ñÏÂ±êµÄ¶ÔÓ¦¹ØÏµ
+	   Bc2%ib=(Bc1%ib-1)/2+1   ! ç²—ã€ç»†ç½‘æ ¼ä¸‹æ ‡çš„å¯¹åº”å…³ç³»
+	   Bc2%ie=(Bc1%ie-1)/2+1   ! ç²—ã€ç»†ç½‘æ ¼ä¸‹æ ‡çš„å¯¹åº”å…³ç³»
 	   Bc2%jb=(Bc1%jb-1)/2+1
 	   Bc2%je=(Bc1%je-1)/2+1
 	   Bc2%kb=(Bc1%kb-1)/2+1
 	   Bc2%ke=(Bc1%ke-1)/2+1
  	   
-	   Bc2%ib1=(Bc1%ib1-1)/2+1   ! ´Ö¡¢Ï¸Íø¸ñÏÂ±êµÄ¶ÔÓ¦¹ØÏµ
-	   Bc2%ie1=(Bc1%ie1-1)/2+1   ! ´Ö¡¢Ï¸Íø¸ñÏÂ±êµÄ¶ÔÓ¦¹ØÏµ
+	   Bc2%ib1=(Bc1%ib1-1)/2+1   ! ç²—ã€ç»†ç½‘æ ¼ä¸‹æ ‡çš„å¯¹åº”å…³ç³»
+	   Bc2%ie1=(Bc1%ie1-1)/2+1   ! ç²—ã€ç»†ç½‘æ ¼ä¸‹æ ‡çš„å¯¹åº”å…³ç³»
 	   Bc2%jb1=(Bc1%jb1-1)/2+1
 	   Bc2%je1=(Bc1%je1-1)/2+1
 	   Bc2%kb1=(Bc1%kb1-1)/2+1
 	   Bc2%ke1=(Bc1%ke1-1)/2+1
       
-	   Bc2%bc=Bc1%bc            ! ±ß½çÌõ¼þ £¨-1 ÎªÄÚ±ß½ç£©
-	   Bc2%face=Bc1%face        ! ÃæÀàÐÍ(1-6·Ö±ð´ú±í i-,j-,k-,i+,j+,k+)
-	   Bc2%f_no=Bc1%f_no        ! ×ÓÃæºÅ
-	   Bc2%nb1=Bc1%nb1          ! Á¬½Ó¿é
-	   Bc2%face1=Bc1%face1      ! Á¬½ÓÃæµÄÀàÐÍ(1-6)
-	   Bc2%f_no1=Bc1%f_no1      ! Á¬½ÓÃæµÄ×ÓÃæºÅ
-	   Bc2%L1=Bc1%L1            ! Á¬½Ó·½Ê½ÃèÊö
+	   Bc2%bc=Bc1%bc            ! è¾¹ç•Œæ¡ä»¶ ï¼ˆ-1 ä¸ºå†…è¾¹ç•Œï¼‰
+	   Bc2%face=Bc1%face        ! é¢ç±»åž‹(1-6åˆ†åˆ«ä»£è¡¨ i-,j-,k-,i+,j+,k+)
+	   Bc2%f_no=Bc1%f_no        ! å­é¢å·
+	   Bc2%nb1=Bc1%nb1          ! è¿žæŽ¥å—
+	   Bc2%face1=Bc1%face1      ! è¿žæŽ¥é¢çš„ç±»åž‹(1-6)
+	   Bc2%f_no1=Bc1%f_no1      ! è¿žæŽ¥é¢çš„å­é¢å·
+	   Bc2%L1=Bc1%L1            ! è¿žæŽ¥æ–¹å¼æè¿°
 	   Bc2%L2=Bc1%L2
 	   Bc2%L3=Bc1%L3
      enddo
@@ -269,12 +273,12 @@
     Type (Block_TYPE),pointer:: B	 
   
    if(Iflag_init .le. 0) then
-	 call init_flow_zero                   ! ´Ó¾ùÔÈ³¡£¨×ÔÓÉÁ÷»ò¾²Ö¹Á÷³¡£©ËãÆð £¨ÏÈ´Ó´ÖÍø¸ñ¼ÆËã£¬ÔÙ²åÖµµ½Ï¸Íø¸ñ£©
+	 call init_flow_zero                   ! ä»Žå‡åŒ€åœºï¼ˆè‡ªç”±æµæˆ–é™æ­¢æµåœºï¼‰ç®—èµ· ï¼ˆå…ˆä»Žç²—ç½‘æ ¼è®¡ç®—ï¼Œå†æ’å€¼åˆ°ç»†ç½‘æ ¼ï¼‰
    else
 	 call read_flow_data
    endif
  
- !    n¼°n-1Ê±¿ÌÁ÷³¡ £¨³õÊ¼Ê±¿ÌÉèÎªÏàÍ¬£©, Ë«Ê±¼ä²½LU-SGSÊ¹ÓÃ £¨½öÖ§³Öµ¥ÖØÍø¸ñ£©
+ !    nåŠn-1æ—¶åˆ»æµåœº ï¼ˆåˆå§‹æ—¶åˆ»è®¾ä¸ºç›¸åŒï¼‰, åŒæ—¶é—´æ­¥LU-SGSä½¿ç”¨ ï¼ˆä»…æ”¯æŒå•é‡ç½‘æ ¼ï¼‰
     if(Time_Method .eq. Time_dual_LU_SGS) then             
       MP=> Mesh(1)
       NVAR1=MP%NVAR
@@ -298,7 +302,7 @@
 
 
 !--------------------------------------------------------------------------------
-! ÓÃÀ´Á÷³õÊ¼»¯£» ¶àÖØÍø¸ñÇé¿öÏÂ£¬´Ó×î´ÖÍø¸ñ¿ªÊ¼¼ÆËã£¨È»ºó²åÖµµ½Ï¸Íø¸ñ£©  
+! ç”¨æ¥æµåˆå§‹åŒ–ï¼› å¤šé‡ç½‘æ ¼æƒ…å†µä¸‹ï¼Œä»Žæœ€ç²—ç½‘æ ¼å¼€å§‹è®¡ç®—ï¼ˆç„¶åŽæ’å€¼åˆ°ç»†ç½‘æ ¼ï¼‰  
   subroutine init_flow_zero
    use Global_var
    implicit none
@@ -308,26 +312,26 @@
    Type (Block_TYPE),pointer:: B	 
 !-------------------------------------------------------------------
    if(my_id .eq. 0) then      
-    if( Iflag_init .eq. Init_By_FreeStream)then    ! ÓÃ×ÔÓÉÀ´Á÷³õÊ¼»¯
+    if( Iflag_init .eq. Init_By_FreeStream)then    ! ç”¨è‡ªç”±æ¥æµåˆå§‹åŒ–
       print*, "Initial by Free-stream flow ......"
     else  if( Iflag_init .eq. Init_By_Zeroflow) then
-      print*, "Initial by Zero flow ......"                                          ! ÓÃ¾²Ö¹Á÷³¡³õÊ¼»¯
+      print*, "Initial by Zero flow ......"                                          ! ç”¨é™æ­¢æµåœºåˆå§‹åŒ–
     endif
    endif
 
   
-   MP=> Mesh(Num_Mesh)   ! Mesh(Num_Mesh) ÊÇ×î´ÖµÄÍø¸ñ
+   MP=> Mesh(Num_Mesh)   ! Mesh(Num_Mesh) æ˜¯æœ€ç²—çš„ç½‘æ ¼
    do m=1,MP%Num_Block
      B => MP%Block(m)                
-     if(IF_TurboMachinary ==0  .and. IF_Innerflow==0 ) then    ! ÍâÁ÷Ä£Ê½
+     if(IF_TurboMachinary ==0  .and. IF_Innerflow==0 ) then    ! å¤–æµæ¨¡å¼
 
 	  d0=1.d0
       p0=1.d0/(gamma*Ma*Ma)
-     if( Iflag_init .eq. Init_By_FreeStream)then    ! ÓÃ×ÔÓÉÀ´Á÷³õÊ¼»¯
+     if( Iflag_init .eq. Init_By_FreeStream)then    ! ç”¨è‡ªç”±æ¥æµåˆå§‹åŒ–
        u0=cos(A_alfa)*cos(A_beta)
        v0=sin(A_alfa)*cos(A_beta) 
        w0=sin(A_beta)
-     else  if( Iflag_init .eq. Init_By_Zeroflow) then                                          ! ÓÃ¾²Ö¹Á÷³¡³õÊ¼»¯
+     else  if( Iflag_init .eq. Init_By_Zeroflow) then                                          ! ç”¨é™æ­¢æµåœºåˆå§‹åŒ–
  	   u0=0.d0
        v0=0.d0
        w0=0.d0
@@ -346,17 +350,17 @@
 
            if(MP%NVAR .eq. 6) then
 ! see:       http://turbmodels.larc.nasa.gov/spalart.html
-		     B%U(6,i,j,k)=5.d0                 ! Éè¶¨Îª²ãÁ÷Õ³ÐÔÏµÊýµÄ5±¶ £¨0.98cÒÔºó°æ±¾£©
+		     B%U(6,i,j,k)=5.d0                 ! è®¾å®šä¸ºå±‚æµç²˜æ€§ç³»æ•°çš„5å€ ï¼ˆ0.98cä»¥åŽç‰ˆæœ¬ï¼‰
 
 		   else if (MP%NVAR .eq. 7) then
-		     B%U(6,i,j,k)=10.d0*Kt_Inf   ! ÍÄ¶¯ÄÜ £¨³õÖµÉèÖÃÎªÀ´Á÷µÄ10±¶£©
-			 B%U(7,i,j,k)=Wt_Inf         ! ±ÈºÄÉ¢ÂÊ
+		     B%U(6,i,j,k)=10.d0*Kt_Inf   ! æ¹åŠ¨èƒ½ ï¼ˆåˆå€¼è®¾ç½®ä¸ºæ¥æµçš„10å€ï¼‰
+			 B%U(7,i,j,k)=Wt_Inf         ! æ¯”è€—æ•£çŽ‡
            endif
        enddo
        enddo
 	   enddo
      
-	 else   ! Ò¶ÂÖ»úÄ£Ê½
+	 else   ! å¶è½®æœºæ¨¡å¼
 
     
 	  if( Iflag_init .eq. Init_By_Zeroflow) then                                         
@@ -365,11 +369,11 @@
 		p0=1.d0/(gamma*Ma*Ma)
 	  else 
        if(P_outlet > 0) then       !            
-	     pin0=1.d0/(gamma)       ! Èë¿Ú×ÜÑ¹
-	     p0= P_OUTLET                  ! ±³Ñ¹ £¨×÷Îª³õÊ¼Ñ¹Á¦£©
- 	     T0= (P_OUTLET/pin0)**((gamma-1.d0)/gamma)   ! ³õÊ¼ÎÂ¶È (×ÜÎÂ=1, ×ÜÃÜ¶È=1,×ÜÑ¹=1/gamma)
-	     d0= P_OUTLET/T0*gamma*Ma*Ma          ! ³õÊ¼ÃÜ¶È
-         vx=sqrt(2.d0*Cp*(1.d0-T0))   ! ³õÊ¼ËÙ¶È
+	     pin0=1.d0/(gamma)       ! å…¥å£æ€»åŽ‹
+	     p0= P_OUTLET                  ! èƒŒåŽ‹ ï¼ˆä½œä¸ºåˆå§‹åŽ‹åŠ›ï¼‰
+ 	     T0= (P_OUTLET/pin0)**((gamma-1.d0)/gamma)   ! åˆå§‹æ¸©åº¦ (æ€»æ¸©=1, æ€»å¯†åº¦=1,æ€»åŽ‹=1/gamma)
+	     d0= P_OUTLET/T0*gamma*Ma*Ma          ! åˆå§‹å¯†åº¦
+         vx=sqrt(2.d0*Cp*(1.d0-T0))   ! åˆå§‹é€Ÿåº¦
        else
          p0=1.d0/(gamma*Ma*Ma)
 		 d0=1.d0
@@ -383,7 +387,7 @@
       do i=1-LAP,B%nx+LAP-1
      
 	       u0=vx
-		   v0= Turbo_w*B%zc(i,j,k)   ! Ïà¶ÔËÙ¶È £¨ÓÉÓÚÐý×ª£©
+		   v0= Turbo_w*B%zc(i,j,k)   ! ç›¸å¯¹é€Ÿåº¦ ï¼ˆç”±äºŽæ—‹è½¬ï¼‰
 		   w0= -Turbo_w*B%yc(i,j,k)   
            B%U(1,i,j,k)=d0
            B%U(2,i,j,k)=d0*u0
@@ -392,10 +396,10 @@
            B%U(5,i,j,k)=p0/(gamma-1.d0)+0.5d0*d0*(u0*u0+v0*v0+w0*w0)
           
             if(MP%NVAR .eq. 6) then
-		     B%U(6,i,j,k)=5.d0                 ! Éè¶¨Îª²ãÁ÷Õ³ÐÔÏµÊýµÄ5±¶ £¨0.98cÒÔºó°æ±¾£©
+		     B%U(6,i,j,k)=5.d0                 ! è®¾å®šä¸ºå±‚æµç²˜æ€§ç³»æ•°çš„5å€ ï¼ˆ0.98cä»¥åŽç‰ˆæœ¬ï¼‰
 		    else if (MP%NVAR .eq. 7) then
-		     B%U(6,i,j,k)=10.d0*Kt_Inf   ! ÍÄ¶¯ÄÜ £¨³õÖµÉèÖÃÎªÀ´Á÷µÄ10±¶£©
-			 B%U(7,i,j,k)=Wt_Inf         ! ±ÈºÄÉ¢ÂÊ
+		     B%U(6,i,j,k)=10.d0*Kt_Inf   ! æ¹åŠ¨èƒ½ ï¼ˆåˆå€¼è®¾ç½®ä¸ºæ¥æµçš„10å€ï¼‰
+			 B%U(7,i,j,k)=Wt_Inf         ! æ¯”è€—æ•£çŽ‡
             endif
 
        enddo
@@ -406,10 +410,10 @@
 
    enddo
 
-   call Boundary_condition_onemesh(Num_Mesh)     ! ±ß½çÌõ¼þ £¨Éè¶¨Ghost CellµÄÖµ£©
-   call update_buffer_onemesh(Num_Mesh)          ! Í¬²½¸÷¿éµÄ½»½çÇø
+   call Boundary_condition_onemesh(Num_Mesh)     ! è¾¹ç•Œæ¡ä»¶ ï¼ˆè®¾å®šGhost Cellçš„å€¼ï¼‰
+   call update_buffer_onemesh(Num_Mesh)          ! åŒæ­¥å„å—çš„äº¤ç•ŒåŒº
 
-!  Initial smoothing    ! ³õÊ¼¹âË³ (µü´úKstep_Init_Smooth²½£©
+!  Initial smoothing    ! åˆå§‹å…‰é¡º (è¿­ä»£Kstep_Init_Smoothæ­¥ï¼‰
    do n=1,Kstep_init_smooth
      if(my_id .eq. 0 .and. mod(n,10) .eq. 0) print*, "Initial smoothing",n
 	 call smoothing_oneMesh(Num_Mesh,Smooth_2nd)     
@@ -419,8 +423,8 @@
    
 !-----------------------------------------------------------------
 !------------------------------------------------------
-!   ×¼±¸³õÖµµÄ¹ý³Ì
-!   ´Ó×î´ÖÍø¸ñ¼ÆËã£¬Öð¼¶²åÖµµ½Ï¸Íø¸ñ
+!   å‡†å¤‡åˆå€¼çš„è¿‡ç¨‹
+!   ä»Žæœ€ç²—ç½‘æ ¼è®¡ç®—ï¼Œé€çº§æ’å€¼åˆ°ç»†ç½‘æ ¼
    do nMesh=Num_Mesh,1,-1 
      do step=1, Pre_Step_Mesh(nMesh)   
        call NS_Time_advance(nMesh)
@@ -428,9 +432,9 @@
      enddo
 !     call output (nMesh)
      if(nMesh .gt. 1) then
-       call prolong_U(nMesh,nMesh-1,1)                  ! °ÑnMeshÖØÍø¸ñÉÏµÄÎïÀíÁ¿²åÖµµ½ÉÏÒ»ÖØÍø¸ñ; flag=1 ²åÖµU±¾Éí
-	   call Boundary_condition_onemesh(nMesh-1)         ! ±ß½çÌõ¼þ £¨Éè¶¨Ghost CellµÄÖµ£©
-	   call update_buffer_onemesh(nMesh-1)              ! Í¬²½¸÷¿éµÄ½»½çÇø 
+       call prolong_U(nMesh,nMesh-1,1)                  ! æŠŠnMeshé‡ç½‘æ ¼ä¸Šçš„ç‰©ç†é‡æ’å€¼åˆ°ä¸Šä¸€é‡ç½‘æ ¼; flag=1 æ’å€¼Uæœ¬èº«
+	   call Boundary_condition_onemesh(nMesh-1)         ! è¾¹ç•Œæ¡ä»¶ ï¼ˆè®¾å®šGhost Cellçš„å€¼ï¼‰
+	   call update_buffer_onemesh(nMesh-1)              ! åŒæ­¥å„å—çš„äº¤ç•ŒåŒº 
        print*, " Prolong  to mesh ", nMesh-1, "   OK"           
      endif
    enddo
@@ -457,28 +461,28 @@
      nx=B%nx ; ny= B%ny  ; nz= B%nz
 
 	  	 
-!   ÉêÇëÄÚ´æ   (x,y,z) ½Úµã×ø±ê£» (xc,yc,zc)Íø¸ñÖÐÐÄ×ø±ê; Vol ¿ØÖÆÌåÌå»ý£» U, Un ÊØºã±äÁ¿
-     allocate( B%x(0:nx+1,0:ny+1,0:nz+1), B%y(0:nx+1,0:ny+1,0:nz+1),B%z(0:nx+1,0:ny+1,0:nz+1))   ! ¸ñµã×ø±ê
+!   ç”³è¯·å†…å­˜   (x,y,z) èŠ‚ç‚¹åæ ‡ï¼› (xc,yc,zc)ç½‘æ ¼ä¸­å¿ƒåæ ‡; Vol æŽ§åˆ¶ä½“ä½“ç§¯ï¼› U, Un å®ˆæ’å˜é‡
+     allocate( B%x(0:nx+1,0:ny+1,0:nz+1), B%y(0:nx+1,0:ny+1,0:nz+1),B%z(0:nx+1,0:ny+1,0:nz+1))   ! æ ¼ç‚¹åæ ‡
   
-!  ¸ñÐÄ×ø±ê£¬ LAP²ãÐéÍø¸ñ  £¨±ãÓÚÊ¹ÓÃÖÜÏòÖÜÆÚÌõ¼þ£©          
+!  æ ¼å¿ƒåæ ‡ï¼Œ LAPå±‚è™šç½‘æ ¼  ï¼ˆä¾¿äºŽä½¿ç”¨å‘¨å‘å‘¨æœŸæ¡ä»¶ï¼‰          
    	 allocate( B%xc(1-LAP:nx+LAP-1,1-LAP:ny+LAP-1,1-LAP:nz+LAP-1) , &
 	           B%yc(1-LAP:nx+LAP-1,1-LAP:ny+LAP-1,1-LAP:nz+LAP-1) , &
-			   B%zc(1-LAP:nx+LAP-1,1-LAP:ny+LAP-1,1-LAP:nz+LAP-1)  )   ! LAP ²ãÐéÍø¸ñ   
+			   B%zc(1-LAP:nx+LAP-1,1-LAP:ny+LAP-1,1-LAP:nz+LAP-1)  )   ! LAP å±‚è™šç½‘æ ¼   
 	 
 	 
-	 allocate( B%U(NVAR1,1-LAP:nx+LAP-1,1-LAP:ny+LAP-1,1-LAP:nz+LAP-1) )   ! LAP ²ãÐéÍø¸ñ   ! bug is removed
-	 allocate( B%Un(NVAR1,-1:nx+1,-1:ny+1,-1:nz+1))  ! Ë«²ã Ghost Cell
+	 allocate( B%U(NVAR1,1-LAP:nx+LAP-1,1-LAP:ny+LAP-1,1-LAP:nz+LAP-1) )   ! LAP å±‚è™šç½‘æ ¼   ! bug is removed
+	 allocate( B%Un(NVAR1,-1:nx+1,-1:ny+1,-1:nz+1))  ! åŒå±‚ Ghost Cell
      allocate( B%Vol(nx-1,ny-1,nz-1)) 
-     allocate( B%Res(NVAR1,-1:nx+1,-1:ny+1,-1:nz+1))        !  ²Ð²î
-	 allocate( B%dt(-1:nx+1,-1:ny+1,-1:nz+1))               !  Ê±¼ä²½³¤
-	 allocate( B%deltU(5,-1:nx+1,-1:ny+1,-1:nz+1))          !  Á½Ê±¼ä²½UµÄ²îÖµ £¨¶àÖØÍø¸ñÊ¹ÓÃ£¬´Ó´ÖÍø¸ñ²åÖµ¶øÀ´£¬5¸ö±äÁ¿£©£»
-	 allocate( B%dU(NVAR1,-1:nx+1,-1:ny+1,-1:nz+1))         !  Á½Ê±¼ä²½UµÄ²îÖµ £¨LU-SGSÖÐÊ¹ÓÃ£©
-     allocate( B%Si(nx,ny,nz), B%Sj(nx,ny,nz), B%Sk(nx,ny,nz) )  ! ±íÃæ»ý
+     allocate( B%Res(NVAR1,-1:nx+1,-1:ny+1,-1:nz+1))        !  æ®‹å·®
+	 allocate( B%dt(-1:nx+1,-1:ny+1,-1:nz+1))               !  æ—¶é—´æ­¥é•¿
+	 allocate( B%deltU(5,-1:nx+1,-1:ny+1,-1:nz+1))          !  ä¸¤æ—¶é—´æ­¥Uçš„å·®å€¼ ï¼ˆå¤šé‡ç½‘æ ¼ä½¿ç”¨ï¼Œä»Žç²—ç½‘æ ¼æ’å€¼è€Œæ¥ï¼Œ5ä¸ªå˜é‡ï¼‰ï¼›
+	 allocate( B%dU(NVAR1,-1:nx+1,-1:ny+1,-1:nz+1))         !  ä¸¤æ—¶é—´æ­¥Uçš„å·®å€¼ ï¼ˆLU-SGSä¸­ä½¿ç”¨ï¼‰
+     allocate( B%Si(nx,ny,nz), B%Sj(nx,ny,nz), B%Sk(nx,ny,nz) )  ! è¡¨é¢ç§¯
      allocate( B%ni1(nx,ny,nz),B%ni2(nx,ny,nz),B%ni3(nx,ny,nz), & 
                B%nj1(nx,ny,nz),B%nj2(nx,ny,nz),B%nj3(nx,ny,nz), &
                B%nk1(nx,ny,nz),B%nk2(nx,ny,nz),B%nk3(nx,ny,nz))
-	 allocate( B%dw(nx-1,ny-1,nz-1))         ! µ½±ÚÃæµÄ¾àÀë
-!  Jocabian±ä»»ÏµÊý£¬ÓÃÀ´¼ÆËãÕ³ÐÔÏîÖÐµÄµ¼Êý 
+	 allocate( B%dw(nx-1,ny-1,nz-1))         ! åˆ°å£é¢çš„è·ç¦»
+!  Jocabianå˜æ¢ç³»æ•°ï¼Œç”¨æ¥è®¡ç®—ç²˜æ€§é¡¹ä¸­çš„å¯¼æ•° 
      allocate(B%ix1(nx,ny,nz),B%iy1(nx,ny,nz),B%iz1(nx,ny,nz), &
 	          B%jx1(nx,ny,nz),B%jy1(nx,ny,nz),B%jz1(nx,ny,nz), &
               B%kx1(nx,ny,nz),B%ky1(nx,ny,nz),B%kz1(nx,ny,nz))
@@ -492,28 +496,28 @@
 	          B%jx0(nx,ny,nz),B%jy0(nx,ny,nz),B%jz0(nx,ny,nz), &
               B%kx0(nx,ny,nz),B%ky0(nx,ny,nz),B%kz0(nx,ny,nz))
 !-------------------------------------------------------
-      allocate(B%dtime_mesh(nx-1,ny-1,nz-1))   ! Ê±¼ä²½³¤Òò×Ó £¨ÓÉÍø¸ñÖÊÁ¿¾ö¶¨£©
-               B%dtime_mesh(:,:,:)=1.d0                ! ³õÖµ
+      allocate(B%dtime_mesh(nx-1,ny-1,nz-1))   ! æ—¶é—´æ­¥é•¿å› å­ ï¼ˆç”±ç½‘æ ¼è´¨é‡å†³å®šï¼‰
+               B%dtime_mesh(:,:,:)=1.d0                ! åˆå€¼
 	 
-	 if(Time_Method .eq. Time_Dual_LU_SGS) then             ! Ë«Ê±¼äLU_SGSÊ¹ÓÃ n-1Ê±¿ÌµÄÎïÀíÁ¿
+	 if(Time_Method .eq. Time_Dual_LU_SGS) then             ! åŒæ—¶é—´LU_SGSä½¿ç”¨ n-1æ—¶åˆ»çš„ç‰©ç†é‡
           allocate(B%Un1(NVAR1,-1:nx+1,-1:ny+1,-1:nz+1))
 	 endif
 
 !-------------------------------------------------------
 
      if(If_viscous .eq. 1) then 
-      allocate(B%mu(-1:nx+1,-1:ny+1,-1:nz+1))   ! ²ãÁ÷Õ³ÐÔÏµÊý
-	  allocate(B%mu_t(-1:nx+1,-1:ny+1,-1:nz+1))    ! ÍÄÁ÷Õ³ÐÔÏµÊý
+      allocate(B%mu(-1:nx+1,-1:ny+1,-1:nz+1))   ! å±‚æµç²˜æ€§ç³»æ•°
+	  allocate(B%mu_t(-1:nx+1,-1:ny+1,-1:nz+1))    ! æ¹æµç²˜æ€§ç³»æ•°
 	  B%mu(:,:,:)=1.d0/Re
 	  B%mu_t(:,:,:)=0.d0
      endif
-!------±íÃæÁ¦  (¼ÆËã×ÜÌåÆø¶¯Á¦Ê±Ê¹ÓÃ)------------------------------------
+!------è¡¨é¢åŠ›  (è®¡ç®—æ€»ä½“æ°”åŠ¨åŠ›æ—¶ä½¿ç”¨)------------------------------------
      allocate( B%Surf1(ny,nz,3),B%Surf2(nx,nz,3), B%Surf3(nx,ny,3),  &
                B%Surf4(ny,nz,3),B%Surf5(nx,nz,3), B%Surf6(nx,ny,3)   )          
 	 B%Surf1(:,:,:)=0.d0; B%Surf2(:,:,:)=0.d0; B%Surf3(:,:,:)=0.d0
      B%Surf4(:,:,:)=0.d0; B%Surf5(:,:,:)=0.d0; B%Surf6(:,:,:)=0.d0
 !---------------------------------------------------------------------------
-! --------±äÁ¿ÇåÁã£¨×ÜÄÜ¡¢ÃÜ¶ÈÉèÖÃÎª1£¬ÆäÓàÇåÁã£©----------------------------
+! --------å˜é‡æ¸…é›¶ï¼ˆæ€»èƒ½ã€å¯†åº¦è®¾ç½®ä¸º1ï¼Œå…¶ä½™æ¸…é›¶ï¼‰----------------------------
      B%x(:,:,:)=0.d0; B%y(:,:,:)=0.d0; B%z(:,:,:)=0.d0; B%xc(:,:,:)=0.d0; B%yc(:,:,:)=0.d0; B%zc(:,:,:)=0.d0 
      B%U(1,:,:,:)=1.d0; B%U(2,:,:,:)=0.d0; B%U(3,:,:,:)=0.d0; B%U(4,:,:,:)=0.d0; B%U(5,:,:,:)=1.d0
 	 
@@ -526,11 +530,11 @@
 	   B%Res(:,:,:,:)=0.d0
    
     if( nMesh .ne. 1) then
-       allocate( B%QF(NVAR1,-1:nx+1,-1:ny+1,-1:nz+1))         ! Ç¿ÆÈº¯Êý
-	    B%QF(:,:,:,:)=0.d0                                    ! Ç¿ÆÈº¯Êý³õÊ¼»¯Îª0
+       allocate( B%QF(NVAR1,-1:nx+1,-1:ny+1,-1:nz+1))         ! å¼ºè¿«å‡½æ•°
+	    B%QF(:,:,:,:)=0.d0                                    ! å¼ºè¿«å‡½æ•°åˆå§‹åŒ–ä¸º0
     endif
  
- !----±ß½çÖ¸Ê¾·û (1 ÎïÀí±ß½ç£¬0ÄÚ±ß½ç)
+ !----è¾¹ç•ŒæŒ‡ç¤ºç¬¦ (1 ç‰©ç†è¾¹ç•Œï¼Œ0å†…è¾¹ç•Œ)
      allocate(B%BcI(ny-1,nz-1,2),B%BcJ(nx-1,nz-1,2),B%BcK(nx-1,ny-1,2))
      B%BcI(:,:,:)=0
 	 B%BcJ(:,:,:)=0
@@ -541,7 +545,7 @@
   end subroutine allocate_mem_Blocks
 
 
- ! Éè¶¨±ß½çÖ¸Ê¾·û (0 ÎïÀí±ß½ç£¬ 1 ÄÚ±ß½ç), ÓÃÓÚ ¸ß½×¸ñÊ½ £¨ÊÇ·ñÆôÓÃ±ß½ç¸ñÊ½£©
+ ! è®¾å®šè¾¹ç•ŒæŒ‡ç¤ºç¬¦ (0 ç‰©ç†è¾¹ç•Œï¼Œ 1 å†…è¾¹ç•Œ), ç”¨äºŽ é«˜é˜¶æ ¼å¼ ï¼ˆæ˜¯å¦å¯ç”¨è¾¹ç•Œæ ¼å¼ï¼‰
    subroutine set_BcK(nm)  
    use Global_var
    implicit none
@@ -557,7 +561,7 @@
      do  ksub=1,B%subface
      Bc=> B%bc_msg(ksub)
      ib=Bc%ib; ie=Bc%ie; jb=Bc%jb; je=Bc%je ; kb=Bc%kb; ke=Bc%ke      
-     if(Bc%bc >=0 ) then   ! ·ÇÄÚ±ß½ç
+     if(Bc%bc >=0 ) then   ! éžå†…è¾¹ç•Œ
        if(Bc%face .eq. 1 ) then   
          B%BcI(jb:je-1,kb:ke-1,1)=1
 	   else if(Bc%face .eq. 2) then
@@ -575,4 +579,53 @@
 	enddo
     enddo
    end
+
+!-----------------------------------------------------------------------
+  subroutine bcast_material
+   use Global_var
+   implicit none
+   integer:: ierr
+   if(.not. associated(Block_Type_List)) then
+     if(my_id .eq. 0) then
+       allocate(Block_Type_List(Total_block))
+       Block_Type_List(:)=BLOCK_FLUID
+     endif
+   endif
+   if(.not. associated(solid_rho_list)) then
+     if(my_id .eq. 0) then
+       allocate(solid_rho_list(Total_block), solid_Cp_list(Total_block), solid_k_list(Total_block))
+       solid_rho_list(:)=0.d0; solid_Cp_list(:)=0.d0; solid_k_list(:)=0.d0
+     endif
+   endif
+   if(my_id .ne. 0) then
+     allocate(Block_Type_List(Total_block))
+     allocate(solid_rho_list(Total_block), solid_Cp_list(Total_block), solid_k_list(Total_block))
+   endif
+   call MPI_bcast(Block_Type_List,Total_block,MPI_Integer,0,MPI_COMM_WORLD,ierr)
+   call MPI_bcast(solid_rho_list,Total_block,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+   call MPI_bcast(solid_Cp_list,Total_block,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+   call MPI_bcast(solid_k_list,Total_block,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+  end subroutine bcast_material
+
+!-----------------------------------------------------------------------
+  subroutine set_block_type
+   use Global_var
+   implicit none
+   integer:: m,ib
+   Type (Mesh_TYPE),pointer:: MP
+   Type (Block_TYPE),pointer:: B
+   MP=>Mesh(1)
+   do m=1,MP%Num_Block
+     B=>MP%Block(m)
+     ib=B%Block_no
+     if(associated(Block_Type_List)) then
+       B%Block_type=Block_Type_List(ib)
+     else
+       B%Block_type=BLOCK_FLUID
+     endif
+     B%solid_rho=solid_rho_list(ib)
+     B%solid_Cp=solid_Cp_list(ib)
+     B%solid_k=solid_k_list(ib)
+   enddo
+  end subroutine set_block_type
 !------------------------------------------------

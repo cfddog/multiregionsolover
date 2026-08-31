@@ -1,7 +1,7 @@
 !-----------------------------------------------------
-!   计算几何量：控制体体积和中心点坐标，Jocabian系数  
-!   2013-4-26:  可处理退化线 （面积为0的面） 
-!   2013-5-3: 修改粘性项Jocabian系数计算方法，与物理量导数方法一致 
+!   Compute geometric quantities: cell volume, cell-center coordinates, Jacobian coefficients
+!   2013-4-26:  Handles degenerate lines (faces with zero area)
+!   2013-5-3:  Modified Jacobian coefficient computation for viscous terms to be consistent with physical derivative method 
 
   subroutine Comput_Goemetric_var(nMesh)
    use   Global_Var
@@ -13,8 +13,8 @@
    real(PRE_EC),allocatable,dimension(:,:,:)::Vi,Vj,Vk
    Type (Mesh_TYPE),pointer:: MP
    Type (Block_TYPE),pointer:: B
-!  计算控制体的体积
-!  计算控制体各表面的面积 （为了避免内存占用过多，表面的法方向、切方向在计算中求出，不进行存储）
+!  Compute control volume
+!  Compute surface areas of each control volume (to avoid excessive memory usage, normal and tangent directions of surfaces are computed on-the-fly, not stored)
    MP=>Mesh(nMesh)
    do m=1,MP%Num_Block   
      B => MP%Block(m)
@@ -33,7 +33,7 @@
 		   if(ss .ge. Lim_Zero) then
 		     B%ni1(i,j,k)=s1x/ss; B%ni2(i,j,k)=s1y/ss ; B%ni3(i,j,k)=s1z/ss
            else
-		     B%ni1(i,j,k)=1.d0; B%ni2(i,j,k)=0.d0 ; B%ni3(i,j,k)=0.d0          ! 退化线；任意确定法方向
+		     B%ni1(i,j,k)=1.d0; B%ni2(i,j,k)=0.d0 ; B%ni3(i,j,k)=0.d0          ! Degenerate line; arbitrarily set normal direction
 		   endif
 		     
 
@@ -42,9 +42,9 @@
            za=(B%z(i,j,k)+B%z(i,j+1,k)+B%z(i,j,k+1)+B%z(i,j+1,k+1))*0.25d0
            Vi(i,j,k)=(s1x*xa+s1y*ya+s1z*za)*0.5d0
 !----------------------------------------------------------------------------------
-           t1x=B%x(i+1,j,k+1)-B%x(i,j,k); t1y=B%y(i+1,j,k+1)-B%y(i,j,k) ; t1z=B%z(i+1,j,k+1)-B%z(i,j,k)  ! 对角线1
-           t2x=B%x(i+1,j,k)-B%x(i,j,k+1); t2y=B%y(i+1,j,k)-B%y(i,j,k+1);  t2z=B%z(i+1,j,k)-B%z(i,j,k+1)   ! 对角线2
-           s1x=t1y*t2z-t1z*t2y ; s1y=t1z*t2x-t1x*t2z ; s1z=t1x*t2y-t1y*t2x   ! 法向量 （对角线向量叉乘得到）
+           t1x=B%x(i+1,j,k+1)-B%x(i,j,k); t1y=B%y(i+1,j,k+1)-B%y(i,j,k) ; t1z=B%z(i+1,j,k+1)-B%z(i,j,k)  ! Diagonal 1
+           t2x=B%x(i+1,j,k)-B%x(i,j,k+1); t2y=B%y(i+1,j,k)-B%y(i,j,k+1);  t2z=B%z(i+1,j,k)-B%z(i,j,k+1)   ! Diagonal 2
+           s1x=t1y*t2z-t1z*t2y ; s1y=t1z*t2x-t1x*t2z ; s1z=t1x*t2y-t1y*t2x   ! Normal vector (cross product of diagonal vectors)
            ss=sqrt(s1x*s1x+s1y*s1y+s1z*s1z)
            B%Sj(i,j,k)=ss*0.5d0
     
@@ -89,7 +89,7 @@
        enddo
      enddo
 
-!  网格中心点坐标
+!  Cell-center coordinates
      do k=0,B%nz
        do j=0,B%ny
          do i=0,B%nx
@@ -103,10 +103,10 @@
        enddo
      enddo              
      deallocate(Vi,Vj,Vk)
- ! -----------计算 Jocabian系数 （粘性项计算导数时使用）------------------------
- !  (I+1/2,J,K)点
- ! revised, 2013-5-3:  Jocabian系数与 物理量导数 计算方法一致，避免额外误差；
- ! revised, 2013-5-4:  避免使用角点坐标（计算域立方体的棱），以免出现不稳定性
+ ! -----------Compute Jacobian coefficients (used for derivative computation in viscous terms)------------------------
+!  At (I+1/2,J,K) point
+! revised, 2013-5-3:  Jacobian coefficients computed consistently with physical derivatives to avoid extra errors;
+! revised, 2013-5-4:  Avoid using corner coordinates (edges of the computational domain cube) to prevent instability
        do k=1,B%nz-1 
        do j=1,B%ny-1
        do i=1,B%nx
@@ -241,7 +241,7 @@
 	 enddo
 	 enddo
 	
-! (I,J,K-1/2) 点的值， 即 (i+1/2,j+1/2,k)点的值
+! Values at (I,J,K-1/2) point, i.e., at (i+1/2,j+1/2,k) point
 ! Revised, 2013-5-3 
  
      do k=1,B%nz 
@@ -376,7 +376,7 @@
      B => MP%Block(m)
      nx=B%nx; ny=B%ny ; nz=B%nz
  
- ! ----统计最大、最小网格 ----------------------
+ ! ----Statistics of max/min grid ----------------------
       Vmax=B%vol(1,1,1)
 	  Vmin=B%vol(1,1,1)
 	  im=1; jm=1; km=1
@@ -399,7 +399,7 @@
 
 
 
- !-----计算网格长度比、网格线的转角 ------------
+ !-----Compute grid aspect ratio and grid line turning angle ------------
  
  	 flmax=1.d0
 	 ftmax=0.d0
@@ -516,25 +516,25 @@
 
 
 !------------------------------------------------------------------    
-!  设定各重网格上的控制信息
+!  Set control parameters for each mesh level
   subroutine set_control_para
    use Global_var
    implicit none
    integer nMesh
    TYPE (Mesh_TYPE),pointer:: MP
    MP=>Mesh(1)            ! 最细的网格
-!  最细网格上的控制参数与主控制参数相同
+!  Control parameters on the finest mesh are the same as the main control parameters
    MP%Iflag_turbulence_model=Iflag_turbulence_model
    MP%Iflag_Scheme=Iflag_Scheme
    MP%IFlag_flux=IFlag_flux
    MP%IFlag_Reconstruction=IFlag_Reconstruction
-   MP%Bound_Scheme=Bound_scheme   !  边界格式
+   MP%Bound_Scheme=Bound_scheme   !  Boundary scheme
 
 !  设定粗网格上的控制参数
    do nMesh=2,Num_Mesh
      MP=>Mesh(nMesh)
-     MP%Iflag_turbulence_model=Turbulence_NONE    ! 粗网格不使用湍流模型
-     MP%Iflag_Scheme=Scheme_UD1                   ! 粗网格使用1阶迎风格式
+     MP%Iflag_turbulence_model=Turbulence_NONE    ! Coarse mesh does not use turbulence model
+     MP%Iflag_Scheme=Scheme_UD1                   ! Coarse mesh uses 1st order upwind scheme
      MP%IFlag_flux=IFlag_flux                     ! 粗网格的通量分裂技术、时间推进近似及重构技术与细网格相同
      MP%IFlag_Reconstruction=IFlag_Reconstruction
      MP%Bound_Scheme=Scheme_UD1                   ! 粗网格边界点使用1阶格式

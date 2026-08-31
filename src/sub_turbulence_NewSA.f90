@@ -29,10 +29,10 @@
 
 
 
- ! ¼ÆËãÍÄÁ÷Õ³ĞÔÏµÊı
+ ! è®¡ç®—æ¹æµç²˜æ€§ç³»æ•°
    allocate(vt(0:nx,0:ny,0:nz),Fluxv(nx,ny,nz),fluxv2(nx,ny,nz))
 	
-! OpenMPµÄ±àÒëÖ¸Ê¾·û£¨²»ÊÇ×¢ÊÍ£©£¬ Ö¸¶¨Do Ñ­»·²¢ĞĞÖ´ĞĞ£» Ö¸¶¨Ò»Ğ©¸÷½ø³ÌË½ÓĞµÄ±äÁ¿
+! OpenMPçš„ç¼–è¯‘æŒ‡ç¤ºç¬¦ï¼ˆä¸æ˜¯æ³¨é‡Šï¼‰ï¼Œ æŒ‡å®šDo å¾ªç¯å¹¶è¡Œæ‰§è¡Œï¼› æŒ‡å®šä¸€äº›å„è¿›ç¨‹ç§æœ‰çš„å˜é‡
 
 
 
@@ -40,7 +40,7 @@
    do k=0,nz
    do j=0,ny
    do i=0,nx
-    B%mu(i,j,k)=B%mu(i,j,k)*Re             ! Á¿¸Ù×ª»»
+    B%mu(i,j,k)=B%mu(i,j,k)*Re             ! é‡çº²è½¬æ¢
    enddo
    enddo
    enddo
@@ -54,7 +54,7 @@
     do j=0,ny
     do i=0,nx
      vt(i,j,k)=B%U(6,i,j,k)
-	 X=d(i,j,k)*vt(i,j,k)/B%mu(i,j,k)   ! ÍÄÁ÷Õ³ĞÔÏµÊıÓë²ãÁ÷Õ³ĞÔÏµÊıÖ®±È
+	 X=d(i,j,k)*vt(i,j,k)/B%mu(i,j,k)   ! æ¹æµç²˜æ€§ç³»æ•°ä¸å±‚æµç²˜æ€§ç³»æ•°ä¹‹æ¯”
      fv1=X**3/(X**3+Cv1**3)
      B%mu_t(i,j,k)=fv1*d(i,j,k)*vt(i,j,k)
     enddo
@@ -62,13 +62,13 @@
     enddo
 !$OMP END PARALLEL DO
    
-   ! ÏŞ¶¨ÍÄÁ÷Õ³ĞÔÏµÊı
+   ! é™å®šæ¹æµç²˜æ€§ç³»æ•°
    call limit_mut(nMesh,mBlock)
 
-! Éè¶¨ÍÄÁ÷Õ³ĞÔÏµÊıĞéÍø¸ñµÄÖµ
+! è®¾å®šæ¹æµç²˜æ€§ç³»æ•°è™šç½‘æ ¼çš„å€¼
  
 
-! ¼ÆËãvt·½³ÌµÄ²Ğ²î B%Res(6,:,:,:)
+! è®¡ç®—vtæ–¹ç¨‹çš„æ®‹å·® B%Res(6,:,:,:)
 
 !$OMP PARALLEL  DEFAULT(FIRSTPRIVATE) SHARED(nx,ny,nz,B,Re,vt,d,uu,v,w,Fluxv,fluxv2,CP1_NSA,CP2_NSA)
 !------i- direcion ---------------------------
@@ -76,8 +76,8 @@
     do k=1,nz-1 
      do j=1,ny-1
       do i=1,nx
-          s1x=B%ni1(i,j,k); s1y=B%ni2(i,j,k) ; s1z= B%ni3(i,j,k)  ! ¹éÒ»»¯µÄ·¨·½Ïò
-          vti=vt(i,j,k)-vt(i-1,j,k)                               ! SAÄ£ĞÍÖĞµÄvt
+          s1x=B%ni1(i,j,k); s1y=B%ni2(i,j,k) ; s1z= B%ni3(i,j,k)  ! å½’ä¸€åŒ–çš„æ³•æ–¹å‘
+          vti=vt(i,j,k)-vt(i-1,j,k)                               ! SAæ¨¡å‹ä¸­çš„vt
           vtj=0.25d0*(vt(i,j+1,k)-vt(i,j-1,k)+vt(i-1,j+1,k)-vt(i-1,j-1,k))
           vtk=0.25d0*(vt(i,j,k+1)-vt(i,j,k-1)+vt(i-1,j,k+1)-vt(i-1,j,k-1))
           ix=B%ix1(i,j,k); iy=B%iy1(i,j,k); iz=B%iz1(i,j,k)
@@ -86,11 +86,11 @@
           vtx=vti*ix+vtj*jx+vtk*kx
           vty=vti*iy+vtj*jy+vtk*ky
           vtz=vti*iz+vtj*jz+vtk*kz
-          v0=0.5d0*(1.d0+Cb2)/SA_sigma*(vt(i,j,k)+B%mu(i,j,k)/d(i,j,k) + vt(i-1,j,k)+B%mu(i-1,j,k)/d(i-1,j,k))  ! (I-1/2,J,K) µãµÄ¶¯Á¦Ñ§Õ³ĞÔÏµÊı
+          v0=0.5d0*(1.d0+Cb2)/SA_sigma*(vt(i,j,k)+B%mu(i,j,k)/d(i,j,k) + vt(i-1,j,k)+B%mu(i-1,j,k)/d(i-1,j,k))  ! (I-1/2,J,K) ç‚¹çš„åŠ¨åŠ›å­¦ç²˜æ€§ç³»æ•°
  
-          vn1=uu(i-1,j,k)*s1x+v(i-1,j,k)*s1y+w(i-1,j,k)*s1z   ! ·¨ÏòËÙ¶È
+          vn1=uu(i-1,j,k)*s1x+v(i-1,j,k)*s1y+w(i-1,j,k)*s1z   ! æ³•å‘é€Ÿåº¦
           vn2=uu(i,j,k)*s1x+v(i,j,k)*s1y+w(i,j,k)*s1z
-          vfi=0.5d0*((vn1+abs(vn1))*vt(i-1,j,k)+(vn2-abs(vn2))*vt(i,j,k))  ! Ò»½× L-F¸ñÊ½
+          vfi=0.5d0*((vn1+abs(vn1))*vt(i-1,j,k)+(vn2-abs(vn2))*vt(i,j,k))  ! ä¸€é˜¶ L-Fæ ¼å¼
           Fluxv(i,j,k)= (-vfi+v0/Re*(vtx*s1x+vty*s1y+vtz*s1z))* B%Si(i,j,k)    !!! Re
           Fluxv2(i,j,k)=(vtx*s1x+vty*s1y+vtz*s1z)*B%Si(i,j,k)
 	  enddo
@@ -112,7 +112,7 @@
     do k=1,nz-1 
     do j=1,ny
     do i=1,nx-1
-      s1x=B%nj1(i,j,k); s1y=B%nj2(i,j,k) ; s1z= B%nj3(i,j,k)  ! ¹éÒ»»¯µÄ·¨·½Ïò
+      s1x=B%nj1(i,j,k); s1y=B%nj2(i,j,k) ; s1z= B%nj3(i,j,k)  ! å½’ä¸€åŒ–çš„æ³•æ–¹å‘
       vti=0.25d0*(vt(i+1,j,k)-vt(i-1,j,k)+vt(i+1,j-1,k)-vt(i-1,j-1,k))
       vtj=vt(i,j,k)-vt(i,j-1,k)
       vtk=0.25d0*(vt(i,j,k+1)-vt(i,j,k-1)+vt(i,j-1,k+1)-vt(i,j-1,k-1))
@@ -122,10 +122,10 @@
       vtx=vti*ix+vtj*jx+vtk*kx
       vty=vti*iy+vtj*jy+vtk*ky
       vtz=vti*iz+vtj*jz+vtk*kz
-      v0=0.5d0*(1.d0+Cb2)/SA_sigma*(vt(i,j,k)+B%mu(i,j,k)/d(i,j,k) + vt(i,j-1,k)+B%mu(i,j-1,k)/d(i,j-1,k))  ! (I-1/2,J,K) µãµÄ¶¯Á¦Ñ§Õ³ĞÔÏµÊı   s11=Amu1*(tmp1*ux-tmp2*(vy+wz))    ! tmp1=4.d0/3.d0; tmp2=2.d0/3.d0
-      vn1=uu(i,j-1,k)*s1x+v(i,j-1,k)*s1y+w(i,j-1,k)*s1z   ! ·¨ÏòËÙ¶È
+      v0=0.5d0*(1.d0+Cb2)/SA_sigma*(vt(i,j,k)+B%mu(i,j,k)/d(i,j,k) + vt(i,j-1,k)+B%mu(i,j-1,k)/d(i,j-1,k))  ! (I-1/2,J,K) ç‚¹çš„åŠ¨åŠ›å­¦ç²˜æ€§ç³»æ•°   s11=Amu1*(tmp1*ux-tmp2*(vy+wz))    ! tmp1=4.d0/3.d0; tmp2=2.d0/3.d0
+      vn1=uu(i,j-1,k)*s1x+v(i,j-1,k)*s1y+w(i,j-1,k)*s1z   ! æ³•å‘é€Ÿåº¦
       vn2=uu(i,j,k)*s1x+v(i,j,k)*s1y+w(i,j,k)*s1z
-      vfi=0.5d0*((vn1+abs(vn1))*vt(i,j-1,k)+(vn2-abs(vn2))*vt(i,j,k))  ! Ò»½× L-F¸ñÊ½
+      vfi=0.5d0*((vn1+abs(vn1))*vt(i,j-1,k)+(vn2-abs(vn2))*vt(i,j,k))  ! ä¸€é˜¶ L-Fæ ¼å¼
       Fluxv(i,j,k)= (-vfi+v0/Re*(vtx*s1x+vty*s1y+vtz*s1z))* B%Sj(i,j,k)   !!! Re
       Fluxv2(i,j,k)= (vtx*s1x+vty*s1y+vtz*s1z)* B%Sj(i,j,k)
     enddo
@@ -147,7 +147,7 @@
    do k=1,nz 
    do j=1,ny-1
    do i=1,nx-1
-    s1x=B%nk1(i,j,k); s1y=B%nk2(i,j,k) ; s1z= B%nk3(i,j,k)  ! ¹éÒ»»¯µÄ·¨·½Ïò
+    s1x=B%nk1(i,j,k); s1y=B%nk2(i,j,k) ; s1z= B%nk3(i,j,k)  ! å½’ä¸€åŒ–çš„æ³•æ–¹å‘
     vti=0.25d0*(vt(i+1,j,k)-vt(i-1,j,k)+vt(i+1,j,k-1)-vt(i-1,j,k-1))
     vtj=0.25d0*(vt(i,j+1,k)-vt(i,j-1,k)+vt(i,j+1,k-1)-vt(i,j-1,k-1))
     vtk=vt(i,j,k)-vt(i,j,k-1)
@@ -158,11 +158,11 @@
       vtx=vti*ix+vtj*jx+vtk*kx
       vty=vti*iy+vtj*jy+vtk*ky
       vtz=vti*iz+vtj*jz+vtk*kz
-      v0=0.5d0*(1.d0+Cb2)/SA_sigma*(vt(i,j,k)+B%mu(i,j,k)/d(i,j,k) + vt(i,j,k-1)+B%mu(i,j,k-1)/d(i,j,k-1))  ! (I,J,K-1/2) µãµÄ¶¯Á¦Ñ§Õ³ĞÔÏµÊı
-     vn1=uu(i,j,k-1)*s1x+v(i,j,k-1)*s1y+w(i,j,k-1)*s1z   ! ·¨ÏòËÙ¶È
+      v0=0.5d0*(1.d0+Cb2)/SA_sigma*(vt(i,j,k)+B%mu(i,j,k)/d(i,j,k) + vt(i,j,k-1)+B%mu(i,j,k-1)/d(i,j,k-1))  ! (I,J,K-1/2) ç‚¹çš„åŠ¨åŠ›å­¦ç²˜æ€§ç³»æ•°
+     vn1=uu(i,j,k-1)*s1x+v(i,j,k-1)*s1y+w(i,j,k-1)*s1z   ! æ³•å‘é€Ÿåº¦
      vn2=uu(i,j,k)*s1x+v(i,j,k)*s1y+w(i,j,k)*s1z
-     vfi=0.5d0*((vn1+abs(vn1))*vt(i,j,k-1)+(vn2-abs(vn2))*vt(i,j,k))  ! Ò»½× L-F¸ñÊ½
-     Fluxv(i,j,k)= ( -vfi+v0/Re*(vtx*s1x+vty*s1y+vtz*s1z))*B%Sk(i,j,k)    ! ÎŞÕ³+Õ³ĞÔÍ¨Á¿
+     vfi=0.5d0*((vn1+abs(vn1))*vt(i,j,k-1)+(vn2-abs(vn2))*vt(i,j,k))  ! ä¸€é˜¶ L-Fæ ¼å¼
+     Fluxv(i,j,k)= ( -vfi+v0/Re*(vtx*s1x+vty*s1y+vtz*s1z))*B%Sk(i,j,k)    ! æ— ç²˜+ç²˜æ€§é€šé‡
      Fluxv2(i,j,k)= (vtx*s1x+vty*s1y+vtz*s1z)*B%Sk(i,j,k)   
     enddo
     enddo
@@ -178,13 +178,13 @@
      enddo
      enddo
 !$OMP END DO
-!--------------Ô´Ïî---------------------------------------------------------
+!--------------æºé¡¹---------------------------------------------------------
 !$OMP DO
    do k=1,nz-1
    do j=1,ny-1
    do i=1,nx-1
 !----- get S (normal of vorticity)  S=sqrt(0.5*Omiga_ij*Omiga_ij) at the cell's center ------
-!  ¼ÆËãÎĞÁ¿£»¼ÆËãÍÄÁ÷Õ³ĞÔÏµÊıµÄÌİ¶È
+!  è®¡ç®—æ¶¡é‡ï¼›è®¡ç®—æ¹æµç²˜æ€§ç³»æ•°çš„æ¢¯åº¦
       
 
    ui=uu(i+1,j,k)-uu(i-1,j,k)            
@@ -227,15 +227,15 @@
    pz=ppi*iz+pj*jz+pk*kz
 
 
-! ÎĞÁ¿
+! æ¶¡é‡
    S=sqrt((wy-vz)**2+(uz-wx)**2+(vx-uy)**2)
-   X=d(i,j,k)*vt(i,j,k)/B%mu(i,j,k)   ! ÍÄÁ÷Õ³ĞÔÏµÊıÓë²ãÁ÷Õ³ĞÔÏµÊıÖ®±È
+   X=d(i,j,k)*vt(i,j,k)/B%mu(i,j,k)   ! æ¹æµç²˜æ€§ç³»æ•°ä¸å±‚æµç²˜æ€§ç³»æ•°ä¹‹æ¯”
 !--------------------------------------------------------------------------   
 
-! Ô´Ïî ²ÉÓÃ Blazek's book,  p241 (7.38), (7.39)
+! æºé¡¹ é‡‡ç”¨ Blazek's book,  p241 (7.38), (7.39)
 
 
-!   Blazek's book µÄ¹«Ê½ÎÈ¶¨ĞÔ²»ºÃ (ÈİÒ×Ëã³ö¸ºµÄÍÄÁ÷Õ³ĞÔÏµÊı)
+!   Blazek's book çš„å…¬å¼ç¨³å®šæ€§ä¸å¥½ (å®¹æ˜“ç®—å‡ºè´Ÿçš„æ¹æµç²˜æ€§ç³»æ•°)
 !   Source term, Blazek's Book section (7.2.1),  modified from original form
 !   fv1=X**3/(X**3+Cv1**3)
 !   fv2=1.d0/(1.d0+X/Cv2)**3
@@ -280,7 +280,7 @@
    do k=0,nz
    do j=0,ny
    do i=0,nx
-    B%mu(i,j,k)=B%mu(i,j,k)/Re             ! Á¿¸Ù×ª»»
+    B%mu(i,j,k)=B%mu(i,j,k)/Re             ! é‡çº²è½¬æ¢
     B%mu_t(i,j,k)=B%mu_t(i,j,k)/Re
    enddo
    enddo
@@ -294,7 +294,7 @@
 end  subroutine  Turbulence_model_NewSA
 
 !-----------------------------------------------------------------------------------
-!-----¸ù¾İvt (v~) ¼ÆËã³öSAÄ£ĞÍÖĞµÄÍÄÁ÷Õ³ĞÔÏµÊımut-----------------------------------
+!-----æ ¹æ®vt (v~) è®¡ç®—å‡ºSAæ¨¡å‹ä¸­çš„æ¹æµç²˜æ€§ç³»æ•°mut-----------------------------------
 ! Blazek's Book p241 (7.37)
 
 

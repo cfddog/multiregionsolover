@@ -1,8 +1,8 @@
 ! modules for Boundary layer condition
-! Since Ver 1.1, 边界（非内部链接边界）只采用1层虚网格
-! 周期性条件通过 内边界实现 （某些情况下需要特殊处理）
+! Since Ver 1.1, only 1 layer of ghost cells is used for boundaries (non-internal connection boundaries)
+! Periodic conditions are implemented through internal boundaries (some cases require special handling)
 !---------------------------------------------------------------------
-! 处理边界条件（非内边界） （处理一套网格）
+! Process boundary conditions (non-internal boundaries) (process one set of grids)
     subroutine Boundary_condition_onemesh(nMesh)
      use Global_Var
      implicit none
@@ -16,56 +16,56 @@
        B => Mesh(nMesh)%Block(mBlock)
        do  ksub=1,B%subface
         Bc=> B%bc_msg(ksub)
-        if(Bc%bc <= 0 )  cycle              ! 非内边界
+        if(Bc%bc <= 0 )  cycle              ! Non-internal boundary
 
 
-          if(IF_TurboMachinary .eq. 0 ) then   ! 非叶轮机模式
+          if(IF_TurboMachinary .eq. 0 ) then   ! Non-turbomachinery mode
 
-		    if( Bc%bc .eq. BC_Wall  .and. If_viscous .eq. 1 ) then   ! (粘性) 壁面边界条件
+		    if( Bc%bc .eq. BC_Wall  .and. If_viscous .eq. 1 ) then   ! (Viscous) wall boundary condition
              call boundary_wall(nMesh,mBlock,ksub)
-		    else if( Bc%bc .eq. BC_Farfield  ) then    ! 远场      
+		    else if( Bc%bc .eq. BC_Farfield  ) then    ! Farfield      
                call boundary_Farfield(nMesh,mBlock,ksub,0)
             else if ( Bc%bc .eq. BC_Inflow  ) then               ! modified, 2017-5-12
 			   if ( IF_InnerFlow .eq. 0) then 
-	              call boundary_Farfield(nMesh,mBlock,ksub, FLAG_INLET)   ! 对于外流， 入口强制给定条件（按超声速入口）
+	              call boundary_Farfield(nMesh,mBlock,ksub, FLAG_INLET)   ! For external flow, inlet forced given condition (as supersonic inlet)
 	          else   
-	             call boundary_BC_Inflow_Turbo(nMesh,mBlock,ksub )        !  ! 内流入口 （给定总温、总压）, 与叶轮机模式入口相同 （Turbo_w=0）
+	             call boundary_BC_Inflow_Turbo(nMesh,mBlock,ksub )        !  ! Internal flow inlet (given total temperature and total pressure), same as turbomachinery mode inlet (Turbo_w=0)
               endif		
 			
 			else if( Bc%bc .eq. BC_Outflow) then
-			    if ( IF_InnerFlow .eq. 0 ) then          ! 外流， 强制为（超声速）出口边界条件——外推条件
+			    if ( IF_InnerFlow .eq. 0 ) then          ! External flow, forced as (supersonic) outlet boundary condition - extrapolation condition
                    call boundary_Farfield(nMesh,mBlock,ksub,FLAG_OUTLET)
                else 
-                  call boundary_BC_Outflow_Turbo(nMesh,mBlock,ksub )  ! 内流  ! 与叶轮机出口相同
+                  call boundary_BC_Outflow_Turbo(nMesh,mBlock,ksub )  ! Internal flow  ! Same as turbomachinery outlet
                endif
 
 	        else if( Bc%bc .eq. BC_Symmetry .or. (Bc%bc .eq. BC_Wall .and. If_viscous .eq. 0) ) then
-             call boundary_Symmetry_or_SlideWall(nMesh,mBlock,ksub)        ! 对称边界条件或滑移固壁
+             call boundary_Symmetry_or_SlideWall(nMesh,mBlock,ksub)        ! Symmetry boundary condition or slip wall
             else if ( Bc%bc .eq. BC_Extrapolate ) then 
              call boundary_Extrapolate(nMesh,mBlock,ksub)
-            else if ( Bc%bc >=900 ) then     ! 用户自定义边界条件    
+            else if ( Bc%bc >=900 ) then     ! User-defined boundary condition    
              call boundary_USER(nMesh,mBlock,ksub)
 		   else
 		      print*, "The boundary condition is not supported!!!"
 			  print*, "Block_no is ", B%block_no, "bc=",Bc%bc
 		      stop
 		   endif
-       else   ! 叶轮机模式  （仅入口、出口条件有区别）
-	       if( Bc%bc .eq. BC_Wall  .and. If_viscous .eq. 1 ) then   ! (粘性) 壁面边界条件
-             call boundary_wall(nMesh,mBlock,ksub)      !  壁面相对速度为0  （实际为旋转，如轮毂）
+       else   ! Turbomachinery mode (only inlet and outlet conditions differ)
+	       if( Bc%bc .eq. BC_Wall  .and. If_viscous .eq. 1 ) then   ! (Viscous) wall boundary condition
+             call boundary_wall(nMesh,mBlock,ksub)      !  Wall relative velocity is 0 (actually rotating, e.g., hub)
            else if ( Bc%bc .eq. BC_Wall_Turbo  .and. If_viscous .eq. 1 ) then
-             call boundary_wall_Turbo(nMesh,mBlock,ksub)       ! 壁面绝对速度为0  （如机匣）
+             call boundary_wall_Turbo(nMesh,mBlock,ksub)       ! Wall absolute velocity is 0 (e.g., casing)
             else if (  Bc%bc .eq. BC_Inflow ) then
              call boundary_BC_Inflow_Turbo(nMesh,mBlock,ksub )
 		    else if (  Bc%bc .eq. BC_outflow ) then
              call boundary_BC_Outflow_Turbo(nMesh,mBlock,ksub )
             else if (Bc%bc .eq. BC_Farfield) then
-              call boundary_Farfield(nMesh,mBlock,ksub,0)            ! 远场边界条件 （可自动识别出口）
+              call boundary_Farfield(nMesh,mBlock,ksub,0)            ! Farfield boundary condition (can automatically identify outlet)
             else if( Bc%bc .eq. BC_Symmetry .or. (Bc%bc .eq. BC_Wall .and. If_viscous .eq. 0) ) then
-             call boundary_Symmetry_or_SlideWall(nMesh,mBlock,ksub)        ! 对称边界条件或滑移固壁
+             call boundary_Symmetry_or_SlideWall(nMesh,mBlock,ksub)        ! Symmetry boundary condition or slip wall
             else if ( Bc%bc .eq. BC_Extrapolate ) then 
              call boundary_Extrapolate(nMesh,mBlock,ksub)
-            else if ( Bc%bc >= 900 ) then      ! 用户自定义边界条件 
+            else if ( Bc%bc >= 900 ) then      ! User-defined boundary condition 
              call boundary_USER(nMesh,mBlock,ksub)
 		    else
 		      print*, "The boundary condition is not supported  in TurboMachinary model!"
@@ -82,7 +82,7 @@
 !------------------------------------------------------------
 !-------------------------------------------------------------------  
 ! Wall boundary 
-! 设定两层虚网格(Ghost Cell) 
+! Set two layers of ghost cells (Ghost Cell) 
 
     subroutine boundary_wall(nMesh,mBlock,ksub)
      Use Global_Var
@@ -147,7 +147,8 @@
     end subroutine boundary_wall
 !-----------------------------------------------------
 !-----------------------------------------------------
-! 远场边界条件 （区分亚、超声速及出口、入口） 
+! 远场边界条件 （区分亚、超声速及出口、入口）
+! Farfield boundary condition (distinguishes subsonic/supersonic and outlet/inlet) 
 ! Ref. J. Blazek et al. "CFD principles and applications", P281-283
     subroutine boundary_Farfield(nMesh,mBlock,ksub,Flag)
      Use Global_Var
@@ -161,8 +162,8 @@
      real(PRE_EC):: d1,u1,v1,w1,p1,c1,d2,u2,v2,w2,p2,pb,db,ub,vb,wb,Ma_n
      integer,parameter:: FLAG_OUTLET=1 , FLAG_INLET=2
 
-!  本软件目前用来计算内流，给定无穷远条件
-!  A_alfa,A_beta  攻角及侧滑角 （根据坐标方向确定）；  A_alfa  (x-y)平面内的倾角； A_beta (x-z)平面内的倾角 
+!  This code currently computes internal flow, given freestream conditions
+!  A_alfa, A_beta  angle of attack and sideslip angle (determined by coordinate direction); A_alfa (x-y) plane inclination; A_beta (x-z) plane inclination 
      d_inf=1.d0
      u_inf=cos(A_alfa)*cos(A_beta)
      v_inf=sin(A_alfa)*cos(A_beta) 
@@ -179,21 +180,21 @@
            do i=ib,ie
 !-----------------------------------------------------------------
 
- !  (i1,j1,k1) 是靠近边界的内点， (i2,j2,k2)  是边界外的1层 Ghost Cell点    
- ! (n1,n2,n3)为外法线方向
+ !  (i1,j1,k1) is the interior point near the boundary, (i2,j2,k2) is the first layer of Ghost Cell outside the boundary    
+ ! (n1,n2,n3) is the outward normal direction
 
-             if(Bc%face .eq. 1) then                 ! i- 面
+             if(Bc%face .eq. 1) then                 ! i- face
                i1=i; j1=j; k1=k; i2=i-1 ; j2=j ; k2=k 
-               n1=-B%ni1(i,j,k) ; n2=-B%ni2(i,j,k); n3=-B%ni3(i,j,k)   ! 外法线  
+               n1=-B%ni1(i,j,k) ; n2=-B%ni2(i,j,k); n3=-B%ni3(i,j,k)   ! Outward normal  
 		     else if(Bc%face .eq. 2) then
                i1=i; j1=j; k1=k; i2=i;  j2=j-1 ; k2=k 
                n1=-B%nj1(i,j,k) ; n2=-B%nj2(i,j,k); n3=-B%nj3(i,j,k)     
              else if(Bc%face .eq. 3) then             
                i1=i; j1=j; k1=k; i2=i;  j2=j ; k2=k-1 
                n1=-B%nk1(i,j,k) ; n2=-B%nk2(i,j,k); n3=-B%nk3(i,j,k)     
-             else if(Bc%face .eq. 4) then             ! i+ 面 (i=ibegin=iend=nx), i1=i-1 是内点, i2=i=nx是Ghost Cell
+             else if(Bc%face .eq. 4) then             ! i+ face (i=ibegin=iend=nx), i1=i-1 is interior point, i2=i=nx is Ghost Cell
                i1=i-1; j1=j; k1=k;  i2=i; j2=j ; k2=k 
-               n1=B%ni1(i,j,k) ; n2=B%ni2(i,j,k); n3=B%ni3(i,j,k)   ! 外法线  
+               n1=B%ni1(i,j,k) ; n2=B%ni2(i,j,k); n3=B%ni3(i,j,k)   ! Outward normal  
              else if(Bc%face .eq. 5) then
                i1=i; j1=j-1; k1=k;  i2=i; j2=j ; k2=k 
                n1=B%nj1(i,j,k) ; n2=B%nj2(i,j,k); n3=B%nj3(i,j,k)     
@@ -203,7 +204,7 @@
 		     endif
 
             d1=B%U(1,i1,j1,k1); u1=B%U(2,i1,j1,k1)/d1; v1=B%U(3,i1,j1,k1)/d1; w1=B%U(4,i1,j1,k1)/d1
-            p1=(B%U(5,i1,j1,k1)-0.5d0*d1*(u1*u1+v1*v1+w1*w1))*(gamma-1.d0)              ! 内点处的值
+            p1=(B%U(5,i1,j1,k1)-0.5d0*d1*(u1*u1+v1*v1+w1*w1))*(gamma-1.d0)              ! Value at interior point
             c1=sqrt(gamma*p1/d1) 
 !                   
           if(Flag .eq. FLAG_OUTLET) then   ! 强制为(超声速)出口
@@ -212,14 +213,14 @@
 	          d2=d_inf; u2=u_inf; v2=v_inf; w2=w_inf; p2=p_inf  
 	  
 !------------------------------------------------------------------------------
-		  else                ! 普通远场边界条件
+		  else                ! Normal farfield boundary condition
 
 
-!   修改2012-5-21： 以来流 (而不是当地) Mach数判断，计算外流效果好； 计算内流尚待研究
-            if( P_OUTLET <= -1.d0 ) then            ! 强制按照来流定义 
-			 Ma_n=(u_inf*n1+v_inf*n2+w_inf*n3)*Ma   ! 法向Mach数， 强制以来流方向定义
+!   Modified 2012-5-21: Use freestream (rather than local) Mach number to judge; good for external flow; internal flow still under study
+            if( P_OUTLET <= -1.d0 ) then            ! Forced to use freestream definition 
+			 Ma_n=(u_inf*n1+v_inf*n2+w_inf*n3)*Ma   ! Normal Mach number, forced to use freestream direction definition
             else
-	         Ma_n=(u1*n1+v1*n2+w1*n3)/c1    ! 法向Mach数， 以内点值定义 （在边界层出口处效果不好）
+	         Ma_n=(u1*n1+v1*n2+w1*n3)/c1    ! Normal Mach number, defined by interior point value (poor effect at boundary layer outlet)
 		    endif
 			      
 		   if(Ma_n > 1.d0) then   ! 超声速出口  
@@ -232,18 +233,18 @@
               ub=u1+(p1-pb)/(d1*c1)*n1
               vb=v1+(p1-pb)/(d1*c1)*n2
               wb=w1+(p1-pb)/(d1*c1)*n3
-              p2=2.d0*pb-p1; d2=2.d0*db-d1; u2=2.d0*ub-u1; v2=2.d0*vb-v1; w2=2.d0*wb-w1  !ub界面值，u2为Ghost Cell值  ub=(u1+u2)/2 
+              p2=2.d0*pb-p1; d2=2.d0*db-d1; u2=2.d0*ub-u1; v2=2.d0*vb-v1; w2=2.d0*wb-w1  !ub interface value, u2 is the Ghost Cell value  ub=(u1+u2)/2 
              else
-               d2=d1 ; u2=u1 ; v2=v1 ; w2=w1; p2=p1   ! 外推
+               d2=d1 ; u2=u1 ; v2=v1 ; w2=w1; p2=p1   ! Extrapolation
 			 endif 
-			else if (Ma_n > -1.d0) then  ! 亚声速入口 
+			else if (Ma_n > -1.d0) then  ! Subsonic inlet 
               pb=0.5d0*(p1+p_inf-d1*c1*((u_inf-u1)*n1+(v_inf-v1)*n2+(w_inf-w1)*n3 ))
               db=d_inf+(pb-p_inf)/(c1*c1)
               ub=u_inf-(p_inf-pb)/(d1*c1)*n1
               vb=v_inf-(p_inf-pb)/(d1*c1)*n2
               wb=w_inf-(p_inf-pb)/(d1*c1)*n3
               p2=2.d0*pb-p1 ; d2=2.d0*db-d1 ; u2=2.d0*ub-u1 ; v2=2.d0*vb-v1 ; w2=2.d0*wb-w1
-            else   ! 超声速入口
+            else   ! Supersonic inlet
               d2=d_inf; u2=u_inf; v2=v_inf; w2=w_inf; p2=p_inf  
             endif  
           endif
@@ -255,7 +256,7 @@
             B%U(5,i2,j2,k2)=p2/(gamma-1.d0)+0.5d0*d2*(u2*u2+v2*v2+w2*w2)
  
     
-!    标量（SA, SST）的边界条件
+!    Scalar (SA, SST) boundary conditions
             if(Ma_n .gt. 0.d0 .or. Flag .eq. FLAG_OUTLET) then
 			  if(NVAR1 .eq. 6)  then
 			    B%U(6,i2,j2,k2)=B%U(6,i1,j1,k1)           ! vt
@@ -267,12 +268,12 @@
 			  if(NVAR1 .eq. 6)  then
 ! see:             http://turbmodels.larc.nasa.gov/spalart.html
 ! 		 	    B%U(6,i2,j2,k2)=0.1d0/Re           ! vt
-!		 	    B%U(6,i2,j2,k2)=5.d0/Re            ! vt 设定为层流粘性系数的5倍
-		 	    B%U(6,i2,j2,k2)=5.d0               ! vt 设定为层流粘性系数的5倍 （0.98c以后版本)
+! 		 	    B%U(6,i2,j2,k2)=5.d0/Re            ! vt set to 5 times the laminar viscosity coefficient
+		 	    B%U(6,i2,j2,k2)=5.d0               ! vt set to 5 times the laminar viscosity coefficient (after version 0.98c)
               
 			  else if(NVAR1 .eq. 7) then
-			    B%U(6,i2,j2,k2)=d_inf*Kt_inf          ! 湍动能来流值 
-			    B%U(7,i2,j2,k2)=d_inf*Wt_inf          ! 湍能比耗散率 
+			    B%U(6,i2,j2,k2)=d_inf*Kt_inf          ! Freestream turbulent kinetic energy 
+			    B%U(7,i2,j2,k2)=d_inf*Wt_inf          ! Freestream specific dissipation rate 
 			  endif   
 			endif
 
@@ -287,6 +288,7 @@
 ! 对称或滑移壁面条件
 ! Symmetry boundary condition or slide wall boundary condition
 ! 仅适用1层虚网格
+! Only uses 1 layer of ghost cells
 
     subroutine boundary_Symmetry_or_SlideWall(nMesh,mBlock,ksub)
      Use Global_Var
@@ -302,7 +304,7 @@
      Bc => B%bc_msg(ksub)
      ib=Bc%ib; ie=Bc%ie; jb=Bc%jb; je=Bc%je ; kb=Bc%kb; ke=Bc%ke      
 
-!   i2,i3 : 2层Ghost Cell;  i1,i4 2层内点
+!   i2,i3 : 2 layers of Ghost Cell;  i1,i4 : 2 layers of interior points
      if(Bc%face .eq. 1 .or. Bc%face .eq. 4) then   ! i- or i+
        if(Bc%face .eq. 1) then
          i=ib; i1=ib; i2=ib-1
@@ -316,9 +318,9 @@
 		    B%U(m,i2,j,k)=B%U(m,i1,j,k)
           enddo
            
-		   n1=B%ni1(i,j,k) ; n2=B%ni2(i,j,k); n3=B%ni3(i,j,k)   ! 归一化法方向  
+		   n1=B%ni1(i,j,k) ; n2=B%ni2(i,j,k); n3=B%ni3(i,j,k)   ! Normalized normal direction  
 		   Vn=B%U(2,i1,j,k)*n1+B%U(3,i1,j,k)*n2+B%U(4,i1,j,k)*n3   ! 法向动量
-!  对称边界条件，标量保持不变；垂直壁面的速度分量变号；平行壁面的速度分量不变
+!  Symmetry boundary condition: scalars remain unchanged; velocity component normal to the wall changes sign; velocity components parallel to the wall remain unchanged
            B%U(2,i2,j,k)= B%U(2,i2,j,k)-2.d0*Vn*n1 
            B%U(3,i2,j,k)= B%U(3,i2,j,k)-2.d0*Vn*n2       
            B%U(4,i2,j,k)= B%U(4,i2,j,k)-2.d0*Vn*n3       
@@ -373,7 +375,7 @@
     end subroutine boundary_Symmetry_or_SlideWall
 
 !-------------------------------------------------------------
-   subroutine comput_origin_var(U1,U2,U3,U4,U5,d,u,v,w,p,T,Ma,gamma)    ! 根据守恒变量，计算基本变量
+   subroutine comput_origin_var(U1,U2,U3,U4,U5,d,u,v,w,p,T,Ma,gamma)    ! Compute primitive variables from conservative variables
    use   precision_EC
    implicit none
    real(PRE_EC):: U1,U2,U3,U4,U5,d,u,v,w,T,p,Ma,gamma
@@ -385,7 +387,7 @@
     T=gamma*Ma*Ma*p/d 
    end
 !--------------------------------------------------------------
-   subroutine comput_conser_var(U1,U2,U3,U4,U5,d,u,v,w,p,Ma,gamma)    ! 根据基本变量,计算守恒变量
+   subroutine comput_conser_var(U1,U2,U3,U4,U5,d,u,v,w,p,Ma,gamma)    ! Compute conservative variables from primitive variables
    use   precision_EC
    implicit none
    real(PRE_EC):: U1,U2,U3,U4,U5,d,u,v,w,p,Ma,gamma
@@ -399,9 +401,9 @@
 
 
 
-!  绝热或等温边界条件
-!  设定两层Ghost Cell
-!  U1: 内点 (i=1); Ug1: Ghost点 (i=0)
+!  Adiabatic or isothermal wall boundary condition
+!  Set two layers of Ghost Cells
+!  U1: interior point (i=1); Ug1: Ghost point (i=0)
 	 subroutine wall_bound(NVAR,U1,Ug1,Ma,gamma,Twall,mu1,dw,Re)
 	 use   precision_EC
 	 implicit none
@@ -410,7 +412,7 @@
 	 real(PRE_EC):: d1,uu1,v1,w1,T1,p1,d2,uu2,v2,w2,T2,p2,Ma,gamma,Twall,mu1,dw,wt,Re
      real(PRE_EC),parameter:: beta1_SST=0.075d0
 
-!    U1 内点(i=1)； Ug1 Ghost边界点(i=0)
+!    U1: interior point (i=1); Ug1: Ghost boundary point (i=0)
      if(Twall .gt. 0.d0) then
        d1=U1(1)
        uu1=U1(2)/d1
@@ -418,10 +420,10 @@
        w1=U1(4)/d1
        p1=(U1(5)-0.5d0*d1*(uu1*uu1+v1*v1+w1*w1))*(gamma-1.d0)             
        T1=gamma*Ma*Ma*p1/d1 
-       p2=p1               ! 边界层假设，壁面处法向压力梯度为0
-       T2=2.d0*Twall-T1    ! 等温壁，温度外插    0.5*(T1+T2)=Twall
-       if( T2 .lt. 0.5*T1) T2=0.5*T1         !!! 2012-2-1  防止虚网格上的温度过低
-  	   uu2=-uu1              ! 无滑移壁    (u1+u2)*0.5=0
+       p2=p1               ! Boundary layer assumption, normal pressure gradient at wall is 0
+       T2=2.d0*Twall-T1    ! Isothermal wall, temperature extrapolation    0.5*(T1+T2)=Twall
+       if( T2 .lt. 0.5*T1) T2=0.5*T1         !!! 2012-2-1  Prevent ghost cell temperature from being too low
+  	   uu2=-uu1              ! No-slip wall    (u1+u2)*0.5=0
 	   v2=-v1
 	   w2=-w1
 	   d2=gamma*Ma*Ma*p2/T2 
@@ -454,7 +456,8 @@
 	 end
 
 !-----------------------------------------------------
-! 外插边界条件 
+! 外插边界条件
+! Extrapolation boundary condition 
     subroutine boundary_Extrapolate(nMesh,mBlock,ksub)
      Use Global_Var
      implicit none
@@ -464,7 +467,7 @@
      integer:: mBlock,ksub,ib,ie,jb,je,kb,ke,i,j,k,nMesh,NVAR1
      integer:: i1,j1,k1,i2,j2,k2,m
 
-!  本软件目前用来计算内流，给定无穷远条件
+!  This code currently computes internal flow, given freestream conditions
 
      NVAR1=Mesh(nMesh)%NVAR
      B => Mesh(nMesh)%Block(mBlock)
@@ -477,7 +480,7 @@
            do i=ib,ie
 !-----------------------------------------------------------------
 
- !  (i1,j1,k1) 是靠近边界的内点， (i2,j2,k2)  是边界外的1层 Ghost Cell点    
+ !  (i1,j1,k1) is the interior point near the boundary, (i2,j2,k2) is the first layer of Ghost Cell outside the boundary    
 
              if(Bc%face .eq. 1) then                 ! i- 面
                i1=i; j1=j; k1=k; i2=i-1 ; j2=j ; k2=k 
@@ -534,7 +537,7 @@
            do i=ib,ie
 !-----------------------------------------------------------------
 
- !  (i1,j1,k1) 是靠近边界的内点， (i2,j2,k2)  是边界外的1层 Ghost Cell点    
+ !  (i1,j1,k1) is the interior point near the boundary, (i2,j2,k2) is the first layer of Ghost Cell outside the boundary    
 
              if(Bc%face .eq. 1) then                 ! i- 面
                i1=i; j1=j; k1=k; i2=i-1 ; j2=j ; k2=k 
@@ -551,7 +554,7 @@
              endif
 
             d1=B%U(1,i1,j1,k1); u1=B%U(2,i1,j1,k1)/d1; v1=B%U(3,i1,j1,k1)/d1; w1=B%U(4,i1,j1,k1)/d1
-            p1=(B%U(5,i1,j1,k1)-0.5d0*d1*(u1*u1+v1*v1+w1*w1))*(gamma-1.d0)              ! 内点处的值
+            p1=(B%U(5,i1,j1,k1)-0.5d0*d1*(u1*u1+v1*v1+w1*w1))*(gamma-1.d0)              ! Value at interior point
 !------------------------------------------------------------------------------
 
 ! 设定总压=1， 总温=1   
@@ -585,10 +588,10 @@
              B%U(5,i2,j2,k2)=p2/(gamma-1.d0)+0.5d0*d2*(u2*u2+v2*v2+w2*w2)
  
     
-!    标量（SA, SST）的边界条件
+!    Scalar (SA, SST) boundary conditions
 			  if(NVAR1 .eq. 6)  then
 ! see:             http://turbmodels.larc.nasa.gov/spalart.html
-		 	    B%U(6,i2,j2,k2)=5.d0               ! vt 设定为层流粘性系数的5倍 （0.98c以后版本)
+		 	    B%U(6,i2,j2,k2)=5.d0               ! vt set to 5 times the laminar viscosity coefficient (after version 0.98c)
 
 			  else if(NVAR1 .eq. 7) then
 			    B%U(6,i2,j2,k2)=din*Kt_inf          ! 湍动能来流值 
@@ -677,7 +680,7 @@
 !-----------------------------------------------------------------
              i1=i-1; j1=j; k1=k;  i2=i; j2=j ; k2=k 
 
- !  (i1,j1,k1) 是靠近边界的内点， (i2,j2,k2) 是边界外的1层 Ghost Cell点    
+ !  (i1,j1,k1) is the interior point near the boundary, (i2,j2,k2) is the first layer of Ghost Cell outside the boundary    
  !  (n1,n2,n3) 为外法线方向
 
                n1=B%ni1(i,j,k) ; n2=B%ni2(i,j,k); n3=B%ni3(i,j,k)   ! 外法线  
@@ -686,14 +689,14 @@
             d1=B%U(1,i1,j1,k1); u1=B%U(2,i1,j1,k1)/d1; v1=B%U(3,i1,j1,k1)/d1; w1=B%U(4,i1,j1,k1)/d1
             p1=(B%U(5,i1,j1,k1)-0.5d0*d1*(u1*u1+v1*v1+w1*w1))*(gamma-1.d0)      
             c1=sqrt(gamma*p1/d1) 
-     	    Ma_n=(u1*n1+v1*n2+w1*n3)/c1    ! 法向Mach数， 以内点值定义 （在边界层出口处效果不好）
+     	    Ma_n=(u1*n1+v1*n2+w1*n3)/c1    ! Normal Mach number, defined by interior point value (poor effect at boundary layer outlet)
   
 !------------------------------------------------------------------------------
 		     if(P_outlet > 0.d0 .and. Ma_n <= 1.d0) then   !  
               pb=pout(k)               ! pressure
               p2=2.d0*pb-p1; d2=d1; u2=u1; v2=v1; w2=w1  !ub界面值，u2为Ghost Cell值  ub=(u1+u2)/2 
 			 else
-               d2=d1 ; u2=u1 ; v2=v1 ; w2=w1; p2=p1   ! 外推
+               d2=d1 ; u2=u1 ; v2=v1 ; w2=w1; p2=p1   ! Extrapolation
 			 endif 
 
               p2=2.d0*pb-p1    !ub界面值，u2为Ghost Cell值  ub=(u1+u2)/2 

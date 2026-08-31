@@ -1,6 +1,6 @@
- !  加速收敛技术
- !   1) 局部时间步长
- !   2) 残差光顺
+ !  Convergence acceleration techniques
+ !   1) Local time stepping
+ !   2) Residual smoothing
 
  !--------------------------------------------------------------------------------------------------
  ! 计算谱半径 see: Blazek's book, p189-190    
@@ -12,7 +12,7 @@
      real(PRE_EC) D0,un,S0,vol1
      Type (Block_TYPE),pointer:: B
 
-     B => Mesh(nMesh)%Block(mBlock)                 !第nMesh 重网格的第mBlock块
+     B => Mesh(nMesh)%Block(mBlock)                 ! The mBlock-th block of the nMesh-th mesh level
      nx=B%nx; ny=B%ny; nz=B%nz
 
 ! $OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(nx,ny,nz,gamma,PrL,Prt,uu,v,w,cc,B,Lci,Lvi,Lcj,Lvj,Lck,Lvk)
@@ -57,7 +57,7 @@
 
 
 !---------------------------------------------------------------------------------
-! 计算（当地）时间步长  ! J. Blazek, P.190
+! Compute (local) time step  ! J. Blazek, P.190
   subroutine comput_dt(nMesh,mBlock)
    use Global_Var
    use Flow_Var 
@@ -68,7 +68,7 @@
 
    Type (Block_TYPE),pointer:: B   
    C=1.d0
-   B => Mesh(nMesh)%Block(mBlock)                 !第nMesh 重网格的第mBlock块
+   B => Mesh(nMesh)%Block(mBlock)                 ! The mBlock-th block of the nMesh-th mesh level
    nx=B%nx; ny=B%ny; nz=B%nz
 
    if( B%IF_OverLimit .eq. 0) then                ! 物理量超限
@@ -87,7 +87,7 @@
          B%dt(i,j,k)=dt_fac*CFL*B%Vol(i,j,k)  &
 		           /(Lci(i,j,k)+Lcj(i,j,k)+Lck(i,j,k)+C*(Lvi(i,j,k)+Lvj(i,j,k)+Lvk(i,j,k)))
 
-         if(If_dtime_mesh .eq. 1) B%dt(i,j,k)=B%dt(i,j,k)*B%dtime_mesh(i,j,k)           ! 根据网格质量，修正时间步长
+         if(If_dtime_mesh .eq. 1) B%dt(i,j,k)=B%dt(i,j,k)*B%dtime_mesh(i,j,k)           ! Modify time step based on mesh quality
 
 		 if(B%dt(i,j,k) .gt. dtmax) B%dt(i,j,k)=dtmax
          if(B%dt(i,j,k) .lt. dtmin) B%dt(i,j,k)=dtmin
@@ -125,7 +125,7 @@
    real(PRE_EC):: as(Nmax),bs(Nmax),cs(Nmax),R(Nmax),Rs(Nmax),ei,Mn
    real(PRE_EC),parameter:: epsl=1.d0
    Type (Block_TYPE),pointer:: B
-   B => Mesh(nMesh)%Block(mBlock)                                         ! 指向其一块
+   B => Mesh(nMesh)%Block(mBlock)                                         ! Point to a block
    nx=B%nx;  ny= B%ny;  nz=B%nz
 
 !--i-direction---------------------------
@@ -133,7 +133,7 @@
     do j=1,ny-1
     do i=1,nx-1
       ei=epsl*min(1.0,Lci(i,j,k)/Lcj(i,j,k),Lci(i,j,k)/Lck(i,j,k))
- !     法向Mach数     
+ !     Normal Mach number     
 	  Mn=0.5d0*( uu(i,j,k)*(B%ni1(i,j,k)+B%ni1(i+1,j,k))+ &
                  v(i,j,k)*(B%ni2(i,j,k)+B%ni2(i+1,j,k))+ &
                  w(i,j,k)*(B%ni3(i,j,k)+B%ni3(i+1,j,k)) )/cc(i,j,k)    
@@ -163,7 +163,7 @@
    do j=1,ny-1
     ei=epsl*min(1.0,Lcj(i,j,k)/Lci(i,j,k),Lcj(i,j,k)/Lck(i,j,k))
 
-!     法向Mach数     
+!     Normal Mach number     
      Mn=0.5d0*( uu(i,j,k)*(B%nj1(i,j,k)+B%nj1(i,j+1,k))+ &
                 v(i,j,k)*(B%nj2(i,j,k)+B%nj2(i,j+1,k))+ &
                 w(i,j,k)*(B%nj3(i,j,k)+B%nj3(i,j+1,k)) )/cc(i,j,k)

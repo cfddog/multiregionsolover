@@ -7,7 +7,7 @@
    write(filename,"('Meshdeb-'I5.5'.dat')") my_id
    open(50,file=filename)
     
-!  Êä³öÍø¸ñÎÄ¼þ tecplot¸ñÊ½£»   
+!  è¾“å‡ºç½‘æ ¼æ–‡ä»¶ tecplotæ ¼å¼ï¼›   
    write(50,*) "variables=x,y,z"
    do m=1,Mesh(1)%Num_Block
      B=>Mesh(1)%Block(m)

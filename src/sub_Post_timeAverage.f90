@@ -1,4 +1,4 @@
-!  后处理模块： 进行时间平均
+!  Post-processing module: time averaging
 !--------------------------------------------------------
   subroutine Time_average      
    use Global_Var
@@ -9,20 +9,20 @@
 
    Type (Block_TYPE),pointer:: B
 
-!---仅被运行1次 -----------------
+!---Run only once -----------------
    if(Iflag == 0) then
      Iflag=1             
     do mB=1,Mesh(1)%Num_Block
      B => Mesh(1)%Block(mB)                                        
      nx=B%nx; ny=B%ny; nz=B%nz
- 	 allocate(B%U_average(0:nx,0:ny,0:nz,5))       ! 时均量 d,u,v,w,T
+ 	 allocate(B%U_average(0:nx,0:ny,0:nz,5))       ! Time-averaged quantities d,u,v,w,T
      enddo
 
-    call init_average        ! 初始化平均场
+    call init_average        ! Initialize average field
 
    endif
 !-------------------------------------
-! 时间平均  
+! Time averaging  
    if(my_id .eq. 0) print*, "Time Average ......", Istep_average+1
 
    tmp=1.d0/(Istep_average+1.d0)
@@ -55,7 +55,7 @@
   end
 
 !-----------------------------------------------------
-! 初始化, 目前版本只支持重新开始平均，暂不支持读取flow3d_average.dat
+! Initialization; current version only supports restarting average, does not support reading flow3d_average.dat
    subroutine init_average      
    use Global_Var
    implicit none
@@ -81,7 +81,7 @@
   end
 !----------------------------------------------------      
 
- !  输出平均量 （Plot3d格式）, 最细网格flow3d_average.dat  
+ !  Output averaged quantities (Plot3d format), finest mesh flow3d_average.dat  
   subroutine output_flow_average
    use Global_Var
    implicit none

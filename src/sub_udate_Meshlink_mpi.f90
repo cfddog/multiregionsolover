@@ -1,13 +1,13 @@
-!----¶à¿éÍø¸ñÖ®¼äµÄÁ¬½Ó--------------------------------------------------------------------------
-! ½»»»LAP²ã Íø¸ñ (¸ñĞÄµã) ĞÅÏ¢
+!----å¤šå—ç½‘æ ¼ä¹‹é—´çš„è¿æ¥--------------------------------------------------------------------------
+! äº¤æ¢LAPå±‚ ç½‘æ ¼ (æ ¼å¿ƒç‚¹) ä¿¡æ¯
 
 
 !---------Continue boundary (inner boundary) ------------------------------------------------------
-!  ´«ËÍÏàÁÚÃæµÄÖĞĞÄ×ø±ê¸ø±¾¿éµÄĞéÍø¸ñ  £¨±ãÓÚÊ¹ÓÃÖÜÆÚĞÔ±ß½çÌõ¼ş£©£» 
-!  ÓÉÓÚ×ø±ê´æ´¢ÔÚ½Úµã£¬ÎïÀíÁ¿´æ´¢ÔÚÖĞĞÄµã£¬ Òò¶ø´«Êä×ø±êÓë´«ÊäÎïÀíÁ¿µÄ·½·¨£¨ÏÂ±ê¶ÔÓ¦·½Ê½£©ÂÔÓĞÇø±ğ
-!  MPI²¢ĞĞ°æ£» 
-!  ²ßÂÔ£º ÈçÁ½¿é(block)Î»ÓÚÍ¬Ò»½ø³Ì(proc),Ôò²ÉÓÃÖ±½Ó´«µİ(²»Í¨¹ıMPI),ÒÔÌá¸ßĞ§ÂÊ£»
-!  Ê¹ÓÃMPI´«µİÊ±£¬Ê×ÏÈÊ¹ÓÃMPI_Bsend()·¢ËÍÈ«²¿ĞÅÏ¢£» È»ºóÊ¹ÓÃMPI_recv()½ÓÊÕ¡£ 
+!  ä¼ é€ç›¸é‚»é¢çš„ä¸­å¿ƒåæ ‡ç»™æœ¬å—çš„è™šç½‘æ ¼  ï¼ˆä¾¿äºä½¿ç”¨å‘¨æœŸæ€§è¾¹ç•Œæ¡ä»¶ï¼‰ï¼› 
+!  ç”±äºåæ ‡å­˜å‚¨åœ¨èŠ‚ç‚¹ï¼Œç‰©ç†é‡å­˜å‚¨åœ¨ä¸­å¿ƒç‚¹ï¼Œ å› è€Œä¼ è¾“åæ ‡ä¸ä¼ è¾“ç‰©ç†é‡çš„æ–¹æ³•ï¼ˆä¸‹æ ‡å¯¹åº”æ–¹å¼ï¼‰ç•¥æœ‰åŒºåˆ«
+!  MPIå¹¶è¡Œç‰ˆï¼› 
+!  ç­–ç•¥ï¼š å¦‚ä¸¤å—(block)ä½äºåŒä¸€è¿›ç¨‹(proc),åˆ™é‡‡ç”¨ç›´æ¥ä¼ é€’(ä¸é€šè¿‡MPI),ä»¥æé«˜æ•ˆç‡ï¼›
+!  ä½¿ç”¨MPIä¼ é€’æ—¶ï¼Œé¦–å…ˆä½¿ç”¨MPI_Bsend()å‘é€å…¨éƒ¨ä¿¡æ¯ï¼› ç„¶åä½¿ç”¨MPI_recv()æ¥æ”¶ã€‚ 
 
      subroutine update_Mesh_Center(nMesh)
      use Global_Var
@@ -15,17 +15,17 @@
      implicit none
      integer:: nMesh,ierr
 ! --------------------------------------------------------------------------------------- 
-! Ä£¿é±ß½çÍ¨ĞÅ£º  MPI °æ±¾
-    call Mesh_send_mpi(nMesh)   ! Ê¹ÓÃMPI·¢ËÍÈ«²¿ĞÅÏ¢ £»ÈçÄ¿±ê¿éÒ²ÔÚ±¾½ø³ÌÄÚ£¬Ôò²»Í¨¹ıMPI,Ö±½Ó½»»»ĞÅÏ¢.
-    call Mesh_recv_mpi(nMesh)   ! ½ÓÊÕÈ«²¿ĞÅÏ¢
+! æ¨¡å—è¾¹ç•Œé€šä¿¡ï¼š  MPI ç‰ˆæœ¬
+    call Mesh_send_mpi(nMesh)   ! ä½¿ç”¨MPIå‘é€å…¨éƒ¨ä¿¡æ¯ ï¼›å¦‚ç›®æ ‡å—ä¹Ÿåœ¨æœ¬è¿›ç¨‹å†…ï¼Œåˆ™ä¸é€šè¿‡MPI,ç›´æ¥äº¤æ¢ä¿¡æ¯.
+    call Mesh_recv_mpi(nMesh)   ! æ¥æ”¶å…¨éƒ¨ä¿¡æ¯
     call MPI_Barrier(MPI_COMM_WORLD,ierr)
-    call Mesh_Center_Periodic(nMesh)     ! ÀûÓÃÖÜÆÚÌõ¼ş£¬ĞŞ¸Ä×ø±ê £¨Ğı×ªÒ»¶¨½Ç¶È, »òÔö¼ÓDx,Dy,Dz£©
+    call Mesh_Center_Periodic(nMesh)     ! åˆ©ç”¨å‘¨æœŸæ¡ä»¶ï¼Œä¿®æ”¹åæ ‡ ï¼ˆæ—‹è½¬ä¸€å®šè§’åº¦, æˆ–å¢åŠ Dx,Dy,Dzï¼‰
 
   end subroutine update_Mesh_Center
 
 !---------------------------------------------------------------
 
-! Í¬Ò»½ø³ÌÄÚÁ½¿éÖ®¼äµÄÍ¨ĞÅ £¨¿ÉÖ±½ÓÍ¨ĞÅ£©
+! åŒä¸€è¿›ç¨‹å†…ä¸¤å—ä¹‹é—´çš„é€šä¿¡ ï¼ˆå¯ç›´æ¥é€šä¿¡ï¼‰
 
      subroutine Mesh_send_mpi(nMesh)  
      use Global_Var
@@ -46,72 +46,72 @@
    Bc=> B%bc_msg(ksub)
 
 !-----------------------------------------------------------------------------------------------
-      if(Bc%bc .ge. 0 ) cycle          ! ·ÇÄÚ±ß½ç inner boundary
+      if(Bc%bc .ge. 0 ) cycle          ! éå†…è¾¹ç•Œ inner boundary
       
 !--------------------------------------------------------
-!  B¿éÎªÔ´Êı¾İ£» B1¿éÎªÄ¿±êÊı¾İ£»   Êı¾İ´ÓÔ´Êı¾İĞ´ÈëÄ¿±êÊı¾İ
+!  Bå—ä¸ºæºæ•°æ®ï¼› B1å—ä¸ºç›®æ ‡æ•°æ®ï¼›   æ•°æ®ä»æºæ•°æ®å†™å…¥ç›®æ ‡æ•°æ®
 
-!      Ô´Êı¾İ:ÁÙ½ü±ß½çµÄLAP²ã ÄÚµã;   i=kb(1) to ke(1), j=kb(2) to ke(2),  k= kb(3) to ke(3)
-!      Ä¿±êÊı¾İ £¨ÁÙ½ü±ß½çµÄLAP²ã Ghostµã,  ÏÖ°æ±¾LAP=2£©
+!      æºæ•°æ®:ä¸´è¿‘è¾¹ç•Œçš„LAPå±‚ å†…ç‚¹;   i=kb(1) to ke(1), j=kb(2) to ke(2),  k= kb(3) to ke(3)
+!      ç›®æ ‡æ•°æ® ï¼ˆä¸´è¿‘è¾¹ç•Œçš„LAPå±‚ Ghostç‚¹,  ç°ç‰ˆæœ¬LAP=2ï¼‰
 
-!      Ô´Êı¾İ 
+!      æºæ•°æ® 
        kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
-       k=mod(Bc%face-1,3)+1                 ! k=1,2,3 Îªi,j,k·½Ïò
-	   if(Bc%face .gt. 3) kb(k)=kb(k)-LAP   ! i+, j+ or k+ Ãæ
+       k=mod(Bc%face-1,3)+1                 ! k=1,2,3 ä¸ºi,j,kæ–¹å‘
+	   if(Bc%face .gt. 3) kb(k)=kb(k)-LAP   ! i+, j+ or k+ é¢
        ke(k)=kb(k)+LAP-1
 
-!      Ä¿±êÊı¾İ £¨±ß½çÍâÀ©³äµÄLAP²ãGhostµã£©
+!      ç›®æ ‡æ•°æ® ï¼ˆè¾¹ç•Œå¤–æ‰©å……çš„LAPå±‚Ghostç‚¹ï¼‰
        kb1(1)=Bc%ib1; ke1(1)=Bc%ie1-1; kb1(2)=Bc%jb1; ke1(2)=Bc%je1-1; kb1(3)=Bc%kb1; ke1(3)=Bc%ke1-1
-       k=mod(Bc%face1-1,3)+1                    ! k=1,2,3 Îªi,j,k·½Ïò
-	   if(Bc%face1 .le. 3)  kb1(k)=kb1(k)-LAP   ! i-, j- or k- Ãæ
+       k=mod(Bc%face1-1,3)+1                    ! k=1,2,3 ä¸ºi,j,kæ–¹å‘
+	   if(Bc%face1 .le. 3)  kb1(k)=kb1(k)-LAP   ! i-, j- or k- é¢
        ke1(k)=kb1(k)+LAP-1
 
 
-!  L1,L2,L3 : ÃèÊöÎ¬µÄÁ¬½Ó ; P(1),P(2),P(3): ÃèÊöÁ¬½Ó´ÎĞò(Ë³Ğòor ÄæĞò)
-       L1=abs(Bc%L1); P(1)=sign(1,Bc%L1)    ! L1=1 ÒâÎ¶×Å£¨±¾Î¬£©ÓëÄ¿±êÊı¾İµÄµÚ1Î¬Á¬½Ó£¬ =2 ÎªÓëµÚ2Î¬Á¬½Ó, ...
+!  L1,L2,L3 : æè¿°ç»´çš„è¿æ¥ ; P(1),P(2),P(3): æè¿°è¿æ¥æ¬¡åº(é¡ºåºor é€†åº)
+       L1=abs(Bc%L1); P(1)=sign(1,Bc%L1)    ! L1=1 æ„å‘³ç€ï¼ˆæœ¬ç»´ï¼‰ä¸ç›®æ ‡æ•°æ®çš„ç¬¬1ç»´è¿æ¥ï¼Œ =2 ä¸ºä¸ç¬¬2ç»´è¿æ¥, ...
        L2=abs(Bc%L2); P(2)=sign(1,Bc%L2)
        L3=abs(Bc%L3); P(3)=sign(1,Bc%L3)
 
-!   ks(k) : Ä¿±êÊı¾İµÚkÎ¬µÄÆğÊ¼ÏÂ±ê
-	   do k=1,3  !   Ä¿±êÊı¾İ ÆğÊ¼ÏÂ±ê     
+!   ks(k) : ç›®æ ‡æ•°æ®ç¬¬kç»´çš„èµ·å§‹ä¸‹æ ‡
+	   do k=1,3  !   ç›®æ ‡æ•°æ® èµ·å§‹ä¸‹æ ‡     
 	    if(P(k) .gt. 0) then
-		 ks(k)=kb(k)     ! Ë³Ğò£¬´Ókb¿ªÊ¼
+		 ks(k)=kb(k)     ! é¡ºåºï¼Œä»kbå¼€å§‹
 		else
-		 ks(k)=ke(k)     ! ÄâĞò£¬ ´Óke¿ªÊ¼
+		 ks(k)=ke(k)     ! æ‹Ÿåºï¼Œ ä»keå¼€å§‹
 	    endif
 	  enddo
 !
 !-------------------------------------------------------------
       allocate(Usend(3,kb1(1):ke1(1),kb1(2):ke1(2),kb1(3):ke1(3)))
-       do k=kb1(3),ke1(3)             ! Ä¿±êÊı¾İµÄÏÂ±ê (i,j,k) , ´Ókbµ½ke
+       do k=kb1(3),ke1(3)             ! ç›®æ ‡æ•°æ®çš„ä¸‹æ ‡ (i,j,k) , ä»kbåˆ°ke
 	     do j=kb1(2),ke1(2)
 		   do i=kb1(1),ke1(1)
 		     ka(1)=i-kb1(1)            
 			 ka(2)=j-kb1(2)
 			 ka(3)=k-kb1(3)
-			 i1=ks(1)+ka(L1)*P(1)        ! Ô´Êı¾İµÄÏÂ±ê (i1,j1,k1), ´Ókb1µ½ke1 (Ğè¿¼ÂÇ a.Ë³Ğò»òÄæĞò, b. Î¬µÄÁ¬½Ó), L1,L2,L3¿ØÖÆÎ¬µÄÁ¬½Ó£¬P(k)¿ØÖÆË³Ğò/ÄæĞò
+			 i1=ks(1)+ka(L1)*P(1)        ! æºæ•°æ®çš„ä¸‹æ ‡ (i1,j1,k1), ä»kb1åˆ°ke1 (éœ€è€ƒè™‘ a.é¡ºåºæˆ–é€†åº, b. ç»´çš„è¿æ¥), L1,L2,L3æ§åˆ¶ç»´çš„è¿æ¥ï¼ŒP(k)æ§åˆ¶é¡ºåº/é€†åº
 			 j1=ks(2)+ka(L2)*P(2)
 			 k1=ks(3)+ka(L3)*P(3)
-			 Usend(1,i,j,k)=B%xc(i1,j1,k1)   ! ´ÓÔ´Êı¾İ£¨ÄÚµã£© ¿½±´Èë Ä¿±êÊı¾İ (ÁÙÊ±Êı×é)   
-			 Usend(2,i,j,k)=B%yc(i1,j1,k1)   ! ´ÓÔ´Êı¾İ£¨ÄÚµã£© ¿½±´Èë Ä¿±êÊı¾İ (ÁÙÊ±Êı×é)   
-			 Usend(3,i,j,k)=B%zc(i1,j1,k1)   ! ´ÓÔ´Êı¾İ£¨ÄÚµã£© ¿½±´Èë Ä¿±êÊı¾İ (ÁÙÊ±Êı×é)   
+			 Usend(1,i,j,k)=B%xc(i1,j1,k1)   ! ä»æºæ•°æ®ï¼ˆå†…ç‚¹ï¼‰ æ‹·è´å…¥ ç›®æ ‡æ•°æ® (ä¸´æ—¶æ•°ç»„)   
+			 Usend(2,i,j,k)=B%yc(i1,j1,k1)   ! ä»æºæ•°æ®ï¼ˆå†…ç‚¹ï¼‰ æ‹·è´å…¥ ç›®æ ‡æ•°æ® (ä¸´æ—¶æ•°ç»„)   
+			 Usend(3,i,j,k)=B%zc(i1,j1,k1)   ! ä»æºæ•°æ®ï¼ˆå†…ç‚¹ï¼‰ æ‹·è´å…¥ ç›®æ ‡æ•°æ® (ä¸´æ—¶æ•°ç»„)   
            
 		   enddo
 		 enddo
 		enddo
   
   !    
-	 Send_to_ID=B_proc(Bc%nb1)              ! ·¢ËÍÄ¿±ê¿éËùÔÚµÄ½ø³ÌºÅ
+	 Send_to_ID=B_proc(Bc%nb1)              ! å‘é€ç›®æ ‡å—æ‰€åœ¨çš„è¿›ç¨‹å·
 
-	 if( Send_to_ID .ne. my_id) then        ! Ä¿±ê¿é²»ÔÚ±¾½ø³ÌÄÚ
-       Num_data=3*(ke1(1)-kb1(1)+1)*(ke1(2)-kb1(2)+1)*(ke1(3)-kb1(3)+1)      ! Êı¾İÁ¿
-       tag=  Bc%nb1*1000+Bc%f_no1                                         ! ±ê¼Ç; ¿éºÅBc%nb1, ×ÓÃæºÅBc%f_no1 £¨ÏòÒ»¸ö½ø³Ì·¢ËÍ¶à¸öÊı¾İ°üÊ±£¬ÓÃÓÚÊ¶±ğ£©
+	 if( Send_to_ID .ne. my_id) then        ! ç›®æ ‡å—ä¸åœ¨æœ¬è¿›ç¨‹å†…
+       Num_data=3*(ke1(1)-kb1(1)+1)*(ke1(2)-kb1(2)+1)*(ke1(3)-kb1(3)+1)      ! æ•°æ®é‡
+       tag=  Bc%nb1*1000+Bc%f_no1                                         ! æ ‡è®°; å—å·Bc%nb1, å­é¢å·Bc%f_no1 ï¼ˆå‘ä¸€ä¸ªè¿›ç¨‹å‘é€å¤šä¸ªæ•°æ®åŒ…æ—¶ï¼Œç”¨äºè¯†åˆ«ï¼‰
 	   call MPI_Bsend(Usend,Num_data,OCFD_DATA_TYPE, Send_to_ID, tag, MPI_COMM_WORLD,ierr )
 !	   call MPI_send(Usend,Num_data,OCFD_DATA_TYPE, Send_to_ID, tag, MPI_COMM_WORLD,ierr )
 	 else 
-!        Ä¿±ê¿éÒ²ÔÚ±¾½ø³ÌÄÚ£¬Ö±½ÓĞ´Èë (²»Í¨¹ıMPI)
-         mb=B_n(Bc%nb1)          ! ¿éÄÚ²¿±àºÅ
-		 B1 =>  Mesh(nMesh)%Block(mb)  ! ÏàÁÚ¿é £¨Ä¿±ê¿é£©
+!        ç›®æ ‡å—ä¹Ÿåœ¨æœ¬è¿›ç¨‹å†…ï¼Œç›´æ¥å†™å…¥ (ä¸é€šè¿‡MPI)
+         mb=B_n(Bc%nb1)          ! å—å†…éƒ¨ç¼–å·
+		 B1 =>  Mesh(nMesh)%Block(mb)  ! ç›¸é‚»å— ï¼ˆç›®æ ‡å—ï¼‰
 	     do k=kb1(3),ke1(3)             ! 
 	      do j=kb1(2),ke1(2)
 		   do i=kb1(1),ke1(1)
@@ -130,9 +130,9 @@
   end
 !--------------------------------------------------------------------------
 
-! ½«È«²¿ĞÅÏ¢½ÓÊÕ
+! å°†å…¨éƒ¨ä¿¡æ¯æ¥æ”¶
 
-subroutine Mesh_recv_mpi(nMesh) ! Ê¹ÓÃMPI·¢ËÍÈ«²¿ĞÅÏ¢
+subroutine Mesh_recv_mpi(nMesh) ! ä½¿ç”¨MPIå‘é€å…¨éƒ¨ä¿¡æ¯
      use Global_Var
      use interface_defines
      implicit none
@@ -144,29 +144,29 @@ subroutine Mesh_recv_mpi(nMesh) ! Ê¹ÓÃMPI·¢ËÍÈ«²¿ĞÅÏ¢
      real(PRE_EC),allocatable,dimension(:,:,:,:):: Urecv
 
 !---------------------------------------------------------------------------------------
-! ½ÓÊÕ½×¶Î£¬½«È«²¿ĞÅÏ¢½ÓÊÕ
+! æ¥æ”¶é˜¶æ®µï¼Œå°†å…¨éƒ¨ä¿¡æ¯æ¥æ”¶
  do mBlock=1,Mesh(nMesh)%Num_Block
   B => Mesh(nMesh)%Block(mBlock)
   do  ksub=1,B%subface
    Bc=> B%bc_msg(ksub)
-   if(Bc%bc .ge. 0 ) cycle               ! ÄÚ±ß½ç inner boundary »òÖÜÆÚĞÔ±ß½ç
-   Recv_from_ID=B_proc(Bc%nb1)           ! ÏàÁÚ¿é£¨½ÓÊÕÔ´¿é£©ËùÔÚµÄ½ø³ÌºÅ
-   if(Recv_from_ID .eq. my_id) cycle     ! Ô´¿éÔÚ±¾½ø³ÌÄÚ£¬²»Ê¹ÓÃMPIÍ¨ĞÅ (Umessage_send_mpi()ÒÑÍê³ÉĞ´Èë²Ù×÷)  
+   if(Bc%bc .ge. 0 ) cycle               ! å†…è¾¹ç•Œ inner boundary æˆ–å‘¨æœŸæ€§è¾¹ç•Œ
+   Recv_from_ID=B_proc(Bc%nb1)           ! ç›¸é‚»å—ï¼ˆæ¥æ”¶æºå—ï¼‰æ‰€åœ¨çš„è¿›ç¨‹å·
+   if(Recv_from_ID .eq. my_id) cycle     ! æºå—åœ¨æœ¬è¿›ç¨‹å†…ï¼Œä¸ä½¿ç”¨MPIé€šä¿¡ (Umessage_send_mpi()å·²å®Œæˆå†™å…¥æ“ä½œ)  
    
 !------------------------------------------------------------------------------------------------
-!      Ä¿±êÊı¾İ £¨±ß½çÍâÀ©³äµÄLAP²ãGhostµã£©
+!      ç›®æ ‡æ•°æ® ï¼ˆè¾¹ç•Œå¤–æ‰©å……çš„LAPå±‚Ghostç‚¹ï¼‰
        kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
-       k=mod(Bc%face-1,3)+1                    ! k=1,2,3 Îªi,j,k·½Ïò
-	   if(Bc%face .le. 3)  kb(k)=kb(k)-LAP   ! i-, j- or k- Ãæ
+       k=mod(Bc%face-1,3)+1                    ! k=1,2,3 ä¸ºi,j,kæ–¹å‘
+	   if(Bc%face .le. 3)  kb(k)=kb(k)-LAP   ! i-, j- or k- é¢
        ke(k)=kb(k)+LAP-1
 
-       allocate(Urecv(3,kb(1):ke(1),kb(2):ke(2),kb(3):ke(3)))    ! ½ÓÊÕÊı×é£¬°´ÕÕÄ¿±êÊı¾İµÄ¸ñÊ½
-       Num_data=3*(ke(1)-kb(1)+1)*(ke(2)-kb(2)+1)*(ke(3)-kb(3)+1)      ! Êı¾İÁ¿
-	   tag=B%Block_no*1000+Bc%f_no                                  ! tag ±ê¼Ç£¬±ê¼Ç¿éºÅ+×ÓÃæºÅ
+       allocate(Urecv(3,kb(1):ke(1),kb(2):ke(2),kb(3):ke(3)))    ! æ¥æ”¶æ•°ç»„ï¼ŒæŒ‰ç…§ç›®æ ‡æ•°æ®çš„æ ¼å¼
+       Num_data=3*(ke(1)-kb(1)+1)*(ke(2)-kb(2)+1)*(ke(3)-kb(3)+1)      ! æ•°æ®é‡
+	   tag=B%Block_no*1000+Bc%f_no                                  ! tag æ ‡è®°ï¼Œæ ‡è®°å—å·+å­é¢å·
 	   
 	   call MPI_Recv(Urecv,Num_data,OCFD_DATA_TYPE,Recv_from_ID,tag,MPI_COMM_WORLD,status,ierr)
 
-        do k=kb(3),ke(3)             ! Ä¿±êÊı¾İµÄÏÂ±ê (i,j,k) , ´Ókbµ½ke
+        do k=kb(3),ke(3)             ! ç›®æ ‡æ•°æ®çš„ä¸‹æ ‡ (i,j,k) , ä»kbåˆ°ke
 	     do j=kb(2),ke(2)
 		   do i=kb(1),ke(1)
              B%xc(i,j,k)=Urecv(1,i,j,k)
@@ -182,8 +182,8 @@ subroutine Mesh_recv_mpi(nMesh) ! Ê¹ÓÃMPI·¢ËÍÈ«²¿ĞÅÏ¢
 
 
 !------------------------------------------------------------------------
-! ¸ù¾İÖÜÆÚĞÔÌõ¼ş£¬ ¶ÔGhost µãµÄ×ø±ê½øĞĞµ÷Õû
-! ×ó²à(BC_PeriodicL)µÄµã -Turbo_Seta;  ÓÒ²àµÄµã + Turbo_Seta
+! æ ¹æ®å‘¨æœŸæ€§æ¡ä»¶ï¼Œ å¯¹Ghost ç‚¹çš„åæ ‡è¿›è¡Œè°ƒæ•´
+! å·¦ä¾§(BC_PeriodicL)çš„ç‚¹ -Turbo_Seta;  å³ä¾§çš„ç‚¹ + Turbo_Seta
  
   subroutine Mesh_Center_Periodic(nMesh)
      use Global_Var
@@ -200,9 +200,9 @@ subroutine Mesh_recv_mpi(nMesh) ! Ê¹ÓÃMPI·¢ËÍÈ«²¿ĞÅÏ¢
   B => Mesh(nMesh)%Block(mBlock)
   do  ksub=1,B%subface
    Bc=> B%bc_msg(ksub)
-   if(Bc%bc .ne. BC_PeriodicL .and. Bc%bc .ne. BC_PeriodicR ) cycle               ! ·ÇÖÜÆÚĞÔ±ß½ç
-    if(Bc%bc == Bc_PeriodicL ) then    ! ×óÖÜÆÚ±ß½ç
-	    setaP= -Turbo_Periodic_Seta    !  Ò¶ÂÖ»úÖÜÏò¼ÆËãÓòµÄÖÜ½Ç
+   if(Bc%bc .ne. BC_PeriodicL .and. Bc%bc .ne. BC_PeriodicR ) cycle               ! éå‘¨æœŸæ€§è¾¹ç•Œ
+    if(Bc%bc == Bc_PeriodicL ) then    ! å·¦å‘¨æœŸè¾¹ç•Œ
+	    setaP= -Turbo_Periodic_Seta    !  å¶è½®æœºå‘¨å‘è®¡ç®—åŸŸçš„å‘¨è§’
 	    Xp = - Periodic_dX;  Yp=- Periodic_dY; Zp= - Periodic_dZ
 	endif
 
@@ -212,26 +212,26 @@ subroutine Mesh_recv_mpi(nMesh) ! Ê¹ÓÃMPI·¢ËÍÈ«²¿ĞÅÏ¢
 	endif
 
 !------------------------------------------------------------------------------------------------
-!    ±ß½çÍâÀ©³äµÄLAP²ãGhostµã
+!    è¾¹ç•Œå¤–æ‰©å……çš„LAPå±‚Ghostç‚¹
        kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
-       k=mod(Bc%face-1,3)+1                    ! k=1,2,3 Îªi,j,k·½Ïò
-	   if(Bc%face .le. 3)  kb(k)=kb(k)-LAP   ! i-, j- or k- Ãæ
+       k=mod(Bc%face-1,3)+1                    ! k=1,2,3 ä¸ºi,j,kæ–¹å‘
+	   if(Bc%face .le. 3)  kb(k)=kb(k)-LAP   ! i-, j- or k- é¢
        ke(k)=kb(k)+LAP-1
 	   
-     if( IF_TurboMachinary == 1) then  ! Ò¶ÂÖ»úÄ£Ê½
-        do k=kb(3),ke(3)             ! Ä¿±êÊı¾İµÄÏÂ±ê (i,j,k) , ´Ókbµ½ke
+     if( IF_TurboMachinary == 1) then  ! å¶è½®æœºæ¨¡å¼
+        do k=kb(3),ke(3)             ! ç›®æ ‡æ•°æ®çš„ä¸‹æ ‡ (i,j,k) , ä»kbåˆ°ke
 	     do j=kb(2),ke(2)
 		   do i=kb(1),ke(1)
              rr=sqrt(B%yc(i,j,k)**2+B%zc(i,j,k)**2)
 			 seta=acos(B%yc(i,j,k)/rr)
 			 if(B%zc(i,j,k) < 0) seta=-seta
- 			 seta=seta+SetaP     ! ¸ù¾İÖÜÆÚĞÔÌõ¼ş£¬ Ğı×ª SetaP ½Ç¶È
+ 			 seta=seta+SetaP     ! æ ¹æ®å‘¨æœŸæ€§æ¡ä»¶ï¼Œ æ—‹è½¬ SetaP è§’åº¦
              B%yc(i,j,k)=rr*cos(seta)
              B%zc(i,j,k)=rr*sin(seta)
            enddo
 		  enddo
 		enddo
-	 else             ! ·ÇÒ¶ÂÖ»úÄ£Ê½
+	 else             ! éå¶è½®æœºæ¨¡å¼
         do k=kb(3),ke(3)             
 	     do j=kb(2),ke(2)
 		   do i=kb(1),ke(1)

@@ -1,6 +1,6 @@
 !----------------------------------------------------------------------
-! 在给定的网格上求解N-S方程 （推进1个时间步）
-! 对于单重网格，nMesh=1;  对于多重网格，nMesh=1,2,3, ... 分别对应用细网格、粗网格、更粗网格 ...
+! Solve N-S equations on a given mesh (advance 1 time step)
+! For single grid, nMesh=1; for multi-grid, nMesh=1,2,3,... correspond to fine grid, coarse grid, coarser grid, ...
 ! 2015-11-26: A bug in Line 299 is removed   (KRK should be a shared data)
  
   subroutine NS_Time_advance(nMesh)
@@ -72,9 +72,9 @@
 
 
 !======================================================================================
-!  以下为"按块"的时间推进原语 (重构：将块循环提到最外层所引入)
-!  主程序 (单重网格) 直接遍历块调用这些原语，便于在块级添加新的计算功能；
-!  多重网格路径仍通过 NS_Time_advance_* (网格级) 调用。
+!  The following are "per-block" time advancement primitives (introduced by refactoring the block loop to the outermost level)
+!  The main program (single grid) directly iterates over blocks calling these primitives, making it easy to add new computation at the block level;
+!  The multi-grid path still calls through NS_Time_advance_* (mesh level).
 !======================================================================================
 
 !  一个块的数据更新（时间推进）: 根据 Time_Method 由 Res/Un/DU 更新 U
@@ -111,7 +111,7 @@
        do j=1,ny-1
          do i=1,nx-1
            do m=1,NVAR1
-             B%U(m,i,j,k)=B%U(m,i,j,k)+B%dU(m,i,j,k)           ! LU_SGS方法
+             B%U(m,i,j,k)=B%U(m,i,j,k)+B%dU(m,i,j,k)           ! LU_SGS method
            enddo
          enddo
        enddo
@@ -148,7 +148,7 @@
   end subroutine Uupdate_one_block
 
 !-----------------------------------------------------------------------
-!  设定 Un=U (一个块, 含 -1..nx+1 范围, 与 Set_Un 一致)
+!  Set Un=U (one block, including -1..nx+1 range, consistent with Set_Un)
   subroutine Set_Un_oneblock(nMesh,mBlock)
    use Global_var
    implicit none
@@ -192,23 +192,23 @@
 !$OMP END PARALLEL DO
   end subroutine Set_Un1_Un_oneblock
 
-! 采用 LU_SGS方法进行时间推进一个时间步 （第nMesh重网格 的单重网格）
-!  (多重网格路径使用; 单重网格时主程序已将块循环提到最外层,
-!   直接调用 Residual_one_block + Uupdate_one_block 完成同样的功能)
+!  Advance one time step using LU_SGS method (single grid of the nMesh-th mesh level)
+!  (Used by multi-grid path; for single grid, the main program has moved the block loop to the outermost level,
+!   directly calling Residual_one_block + Uupdate_one_block to achieve the same functionality)
   subroutine NS_Time_advance_LU_SGS(nMesh)
    use Global_var
    implicit none
    integer::nMesh,mBlock
    call Set_Un(nMesh)
-   call Comput_Residual_one_mesh(nMesh)              ! 单重网格上计算残差 (以及Du)
-   if(nMesh .ne. 1) call Add_force_function(nMesh)   !  添加强迫函数（多重网格的粗网格使用）
+   call Comput_Residual_one_mesh(nMesh)              ! Compute residual on single grid (and Du)
+   if(nMesh .ne. 1) call Add_force_function(nMesh)   !  Add forcing function (used by coarse grid in multi-grid)
 
    do mBlock=1,Mesh(nMesh)%Num_Block
      call Uupdate_one_block(nMesh,mBlock)            ! U = Un + DU
    enddo
 
 !----------------------------------------------------------------
-    if( IFLAG_LIMIT_Flow == 1) then                      ! 对压力、密度进行限制
+    if( IFLAG_LIMIT_Flow == 1) then                      ! Limit pressure and density
 	  call limit_flow(nMesh)
 	endif
 
@@ -216,8 +216,8 @@
    call Boundary_condition_onemesh(nMesh)             ! 边界条件 （设定Ghost Cell的值）
    call update_buffer_onemesh(nMesh)                  ! 同步各块的交界区
 
-   Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global            ! 时间 （使用全局时间步长法时有意义）
-   Mesh(nMesh)%Kstep=Mesh(nMesh)%Kstep+1              ! 计算步数
+   Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global            ! Time (meaningful when using global time stepping)
+   Mesh(nMesh)%Kstep=Mesh(nMesh)%Kstep+1              ! Step count
 
   end subroutine NS_Time_advance_LU_SGS
 !--------------------------------------------------------------------------------------
@@ -236,27 +236,26 @@
 
 	MP=>Mesh(nMesh)
     NVAR1=MP%NVAR
- do kt_in=1, step_inner_Limit                      ! 内循环迭代
-
-   call Comput_Residual_one_mesh(nMesh)              ! 单重网格上计算残差及Du
+ do kt_in=1, step_inner_Limit                      ! Inner iteration loop
+   call Comput_Residual_one_mesh(nMesh)              ! Compute residual and Du on single grid
    do mBlock=1,Mesh(nMesh)%Num_Block
      call Uupdate_one_block(nMesh,mBlock)            ! U = U + DU
    enddo
 
 !----------------------------------------------------------------
-    if( IFLAG_LIMIT_FLOW == 1) then                      ! 对压力、密度进行限制
+    if( IFLAG_LIMIT_FLOW == 1) then                      ! Limit pressure and density
 	  call limit_flow(nMesh)
 	endif
 
-  call Boundary_condition_onemesh(nMesh)             ! 边界条件 （设定Ghost Cell的值）
-  call update_buffer_onemesh(nMesh)                  ! 同步各块的交界区
-  call comput_max_Res_onemesh(nMesh)                 ! 计算最大残差及均方根残差
+  call Boundary_condition_onemesh(nMesh)             ! Boundary condition (set Ghost Cell values)
+  call update_buffer_onemesh(nMesh)                  ! Synchronize block interfaces
+  call comput_max_Res_onemesh(nMesh)                 ! Compute max residual and RMS residual
 
-     max_res=MP%Res_rms(1)       ! 最大均方根残差 (作为内迭代标准)
+     max_res=MP%Res_rms(1)       ! Maximum RMS residual (as inner iteration criterion)
      do m=1,NVAR1
  	  max_res=max(max_res,MP%Res_rms(m))
 	 enddo
-     if( max_res .le. Res_Inner_Limit) exit   ! 达到残差标准，跳出内迭代
+     if( max_res .le. Res_Inner_Limit) exit   ! Reach residual criterion, exit inner iteration
  enddo
 
    if(my_id .eq. 0) then
@@ -266,8 +265,8 @@
 
    call Set_Un1_Un(nMesh)                            ! Un1=Un; Un=U
 
-   Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global            ! 时间 （使用全局时间步长法时有意义）
-   Mesh(nMesh)%Kstep=Mesh(nMesh)%Kstep+1              ! 计算步数
+   Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global            ! Time (meaningful when using global time stepping)
+   Mesh(nMesh)%Kstep=Mesh(nMesh)%Kstep+1              ! Step count
 
   end subroutine NS_Time_Dual_LU_SGS
 !--------------------------------------------------------------------------------------
@@ -283,8 +282,8 @@
 
 
 
-! 采用1阶Euler法进行时间推进一个时间步 （第nMesh重网格 的单重网格）
-!  (多重网格路径使用; 单重网格时主程序已将块循环提到最外层)
+!  Advance one time step using 1st order Euler method (single grid of the nMesh-th mesh level)
+!  (Used by multi-grid path; for single grid, the main program has moved the block loop to the outermost level)
   subroutine NS_Time_advance_1Euler(nMesh)
    use Global_var
    implicit none
@@ -298,15 +297,15 @@
    enddo
 
 !----------------------------------------------------------------
-    if( IFLAG_LIMIT_FLOW == 1) then                      ! 对压力、密度进行限制
+    if( IFLAG_LIMIT_FLOW == 1) then                      ! Limit pressure and density
 	  call limit_flow(nMesh)
 	endif
 
 !---------------------------------------------------------------------------------------
    call Boundary_condition_onemesh(nMesh)             ! 边界条件 （设定Ghost Cell的值）
    call update_buffer_onemesh(nMesh)                  ! 同步各块的交界区
-   Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global            ! 时间 （使用全局时间步长法时有意义）
-   Mesh(nMesh)%Kstep=Mesh(nMesh)%Kstep+1              ! 计算步数
+   Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global            ! Time (meaningful when using global time stepping)
+   Mesh(nMesh)%Kstep=Mesh(nMesh)%Kstep+1              ! Step count
 
   end subroutine NS_Time_advance_1Euler
 !----------------------------------------------------------------------------------------
@@ -320,14 +319,14 @@
    integer::nMesh,mBlock
 
    do mBlock=1,Mesh(nMesh)%Num_Block
-     call Set_Un_oneblock(nMesh,mBlock)              ! Un=U (含 -1..nx+1 范围)
+     call Set_Un_oneblock(nMesh,mBlock)              ! Un=U (including -1..nx+1 range)
    enddo
 
    do KRK=1,3                                        ! 3-step Runge-Kutta Method
-	 call Comput_Residual_one_mesh(nMesh)            ! 计算残差
-     if(nMesh .ne. 1) call Add_force_function(nMesh) ! 添加强迫函数（多重网格的粗网格使用）
-	 do mBlock=1,Mesh(nMesh)%Num_Block
-       call Uupdate_one_block(nMesh,mBlock)          ! RK 第KRK子步的数据更新
+	 call Comput_Residual_one_mesh(nMesh)            ! Compute residual
+     if(nMesh .ne. 1) call Add_force_function(nMesh) ! Add forcing function (used by coarse grid in multi-grid)
+     do mBlock=1,Mesh(nMesh)%Num_Block
+       call Uupdate_one_block(nMesh,mBlock)          ! RK KRK-th sub-step data update
      enddo
 
 !---------------------------------------------------------------------------------------
@@ -337,8 +336,8 @@
 	endif
 
 
-     call Boundary_condition_onemesh(nMesh)         ! 边界条件 （设定Ghost Cell的值）
-     call update_buffer_onemesh(nMesh)              ! 同步各块的交界区
+     call Boundary_condition_onemesh(nMesh)         ! Boundary condition (set Ghost Cell values)
+     call update_buffer_onemesh(nMesh)              ! Synchronize block interfaces
    enddo
    Mesh(nMesh)%tt=Mesh(nMesh)%tt+dt_global          ! 时间 （使用全局时间步长法时有意义）
    Mesh(nMesh)%Kstep=Mesh(nMesh)%Kstep+1            ! 计算步数
@@ -402,7 +401,7 @@
 !-------------------------------------------------------------
 
 !--------------------------------------------------------------
-! 打印残差（最大残差和均方根残差）
+! Print residual (max residual and RMS residual)
   subroutine output_Res(nMesh)
    use Global_var
    implicit none
@@ -426,7 +425,7 @@
 
 
 !----------------------------------------------------------
-! 对SA,SST方程的物理量进行限制
+! Limit physical quantities of SA, SST equations
   subroutine limit_vt(nMesh,mBlock)
    use Global_Var
    use Flow_Var 
@@ -434,7 +433,7 @@
    Type (Block_TYPE),pointer:: B
    integer nMesh,mBlock,NVAR1,nx,ny,nz,i,j,k
    
-   B => Mesh(nMesh)%Block(mBlock)                 !第nMesh 重网格的第mBlock块
+   B => Mesh(nMesh)%Block(mBlock)                 ! The mBlock-th block of the nMesh-th mesh level
    nx=B%nx; ny=B%ny; nz=B%nz
    NVAR1=Mesh(nMesh)%NVAR
    if(NVAR1 .eq. 6) then
@@ -469,86 +468,86 @@
 
 
 !----------------------------------------------------------------------
-! 多重网格求解N-S方程 （推进1个时间步）
-! nMesh=1,2,3 分别对应用细网格、粗网格、更粗网格
-! 包括2重网格和3重网格两个子程序；
+! Solve N-S equations with multi-grid (advance 1 time step)
+! nMesh=1,2,3 correspond to fine grid, coarse grid, coarser grid, respectively
+! Includes two subroutines for 2-grid and 3-grid;
 ! Code by Li Xinliang & Leng Yan
 !---------------------------------------------------------------------------------------------
 !-----------------------------------------------------------------------------------------
-! 两重网格上推进1个时间步 (3阶RK or 1th Euler)
+! Advance 1 time step on 2-grid (3rd order RK or 1st Euler)
   subroutine NS_2stge_multigrid
    use Global_var
    implicit none
    integer::nMesh,m
    Type (Block_TYPE),pointer:: B
-   integer,parameter:: Time_step_coarse_mesh=3       ! 粗网格迭代步数
+   integer,parameter:: Time_step_coarse_mesh=3       ! Number of coarse mesh iteration steps
 !---------------------------------------------------
 ! -------------------------  网格1 -----------------
    if(Time_Method .eq. Time_Euler1) then
-	 call  NS_Time_advance_1Euler(1)                 ! 细网格，1阶Euler方法推进1步 -> U(n+1)
+	 call  NS_Time_advance_1Euler(1)                 ! Fine mesh, 1st order Euler advance 1 step -> U(n+1)
    else
-	 call  NS_Time_advance_RK3(1)                    ! 细网格，RK方法推进1步 -> U(n+1)
+	 call  NS_Time_advance_RK3(1)                    ! Fine mesh, RK method advance 1 step -> U(n+1)
    endif 
    call  Comput_Residual_one_mesh(1)                 ! 计算网格1的残差 R(n+1)  
    call  interpolation2h(1,2,2)                      ! 把残差插值到网格2 (储存在QF里面)
    call  interpolation2h(1,2,1)                      ! 把守恒变量从网格1插值到网格2   （flag=1 插值守恒变量，=2 插值残差）
 !------------------------------
-   call  Boundary_condition_onemesh(2)               ! 物理边界条件
-   call  update_buffer_onemesh(2)                    ! 内边界条件
-   call  Comput_Residual_one_mesh(2)                 ! 计算网格2的残差
-   call  comput_force_function(2)                    ! 计算强迫函数QF
+   call  Boundary_condition_onemesh(2)               ! Physical boundary conditions
+   call  update_buffer_onemesh(2)                    ! Internal boundary conditions
+   call  Comput_Residual_one_mesh(2)                 ! Compute residual of mesh 2
+   call  comput_force_function(2)                    ! Compute forcing function QF
    if(Time_Method .eq. Time_Euler1) then
 	 call Set_Un(2)                                  ! 记录初始值  （RK方法中已经包含了该步） 
      do m=1, Time_step_coarse_mesh
-	   call  NS_Time_advance_1Euler(2)               ! 1阶Euler迭代若干步
+	   call  NS_Time_advance_1Euler(2)               ! 1st order Euler iteration several steps
      enddo
    else 
 	 call  NS_Time_advance_RK3(2)                    ! RK方法推进1步 （网格2）
    endif
-   call  comput_delt_U(2)                            ! 计算修正量deltU （储存在Un里面）
-   call  prolong_U(2,1,2)                            ! 把修正量插值到细网格 (储存在Un里面); flag=2 插值deltU (储存在Un里)
+   call  comput_delt_U(2)                            ! Compute correction deltU (stored in Un)
+   call  prolong_U(2,1,2)                            ! Interpolate correction to fine mesh (stored in Un); flag=2 interpolate deltU (stored in Un)
 !------------------------------------	 
-   call  comput_new_U(1)                             ! 计算新的U  (U=U+deltU)
-   call  Boundary_condition_onemesh(1)               ! 物理边界条件
-   call  update_buffer_onemesh(1)                    ! 内边界条件
+   call  comput_new_U(1)                             ! Compute new U (U=U+deltU)
+   call  Boundary_condition_onemesh(1)               ! Physical boundary conditions
+   call  update_buffer_onemesh(1)                    ! Internal boundary conditions
 
   end subroutine NS_2stge_multigrid
 !------------------------------------------------------------------------------------------
 !-----------------------------------------------------------------------------------------
-! 三重网格上迭代1个时间步 （V-型迭代） 3阶RK or 1阶Euler
+! Advance 1 time step on 3-grid (V-cycle iteration) 3rd order RK or 1st Euler
   subroutine NS_3stge_multigrid
    use Global_var
    implicit none
    integer::nMesh,m
-   integer,parameter:: Time_step_coarse_mesh=3       ! 粗网格迭代步数 (对1阶Euler有效)
+   integer,parameter:: Time_step_coarse_mesh=3       ! Number of coarse mesh iteration steps (对1阶Euler有效)
 !---------------------------------------------------
 ! ---- ---------------------------------- 网格1 -----------------
    if(Time_Method .eq. Time_Euler1) then
-	 call  NS_Time_advance_1Euler(1)                 ! 细网格，1阶Euler方法推进1步 -> U(n+1)
+	 call  NS_Time_advance_1Euler(1)                 ! Fine mesh, 1st order Euler advance 1 step -> U(n+1)
    else
-	 call  NS_Time_advance_RK3(1)                    ! 细网格，RK方法推进1步 -> U(n+1)
+	 call  NS_Time_advance_RK3(1)                    ! Fine mesh, RK method advance 1 step -> U(n+1)
    endif
-   call  Comput_Residual_one_mesh(1)                 ! 计算网格1的残差 R(n+1)   ! ????? 该步似乎可以省略 ?????  
+   call  Comput_Residual_one_mesh(1)                 ! Compute residual of mesh 1 R(n+1)   ! ????? This step seems unnecessary ?????  
 ! -----------------------------  
    call  interpolation2h(1,2,2)                      ! 把残差插值到网格2 (储存在网格2的QF里面)
    call  interpolation2h(1,2,1)                      ! 把守恒变量从网格1插值到网格2 （储存到U里面）  （flag=1 插值守恒变量，=2 插值残差）
 !-------网格2 --------------------
-   call  Boundary_condition_onemesh(2)               ! 物理边界条件
-   call  update_buffer_onemesh(2)                    ! 内边界条件
-   call  Comput_Residual_one_mesh(2)                 ! 计算网格2的残差         Res_2h(0)
-   call  comput_force_function(2)                    ! 计算强迫函数QF （网格2）QF_2h=QF_2h-Res_2h(0) 
+   call  Boundary_condition_onemesh(2)               ! Physical boundary conditions
+   call  update_buffer_onemesh(2)                    ! Internal boundary conditions
+   call  Comput_Residual_one_mesh(2)                 ! Compute residual of mesh 2  Res_2h(0)
+   call  comput_force_function(2)                    ! Compute forcing function QF (mesh 2) QF_2h=QF_2h-Res_2h(0) 
    if(Time_Method .eq. Time_Euler1) then
 	 call Set_Un(2)                                  ! 记录初始值  （RK方法中已经包含了该步） 
      do m=1, Time_step_coarse_mesh
-	   call  NS_Time_advance_1Euler(2)               ! 1阶Euler迭代若干步
+	   call  NS_Time_advance_1Euler(2)               ! 1st order Euler iteration several steps
      enddo
    else 
 	 call  NS_Time_advance_RK3(2)                    ! RK方法推进1步 （网格2）
    endif
-   call  Comput_Residual_one_mesh(2)                 ! 计算网格2的残差 R_2h(n+1) 
+   call  Comput_Residual_one_mesh(2)                 ! Compute residual of mesh 2 R_2h(n+1) 
    call  Add_force_function(2)                       ! 添加上强迫残差(储存在Res里面)  RF_2h(n+1)=R_2h(n+1)+QF_2h  ;  目的：插值到网格3上
-   call  interpolation2h(2,3,2)                      ! 把残差插值到网格3 (储存在网格3的QF里面)
-   call  interpolation2h(2,3,1)                      ! 把守恒变量从网格2插值到网格3 （储存到U里面）  （flag=1 插值守恒变量，=2 插值残差）
+   call  interpolation2h(2,3,2)                      ! Interpolate residual to mesh 3 (stored in QF of mesh 3)
+   call  interpolation2h(2,3,1)                      ! Interpolate conservative variables from mesh 2 to mesh 3 (stored in U) (flag=1 interpolate conservative variables, =2 interpolate residual)
 !------网格3----------------------	  
    call  Boundary_condition_onemesh(3)               ! 边界条件: 物理边界 
    call  update_buffer_onemesh(3)                    ! 内边界
@@ -557,21 +556,21 @@
    if(Time_Method .eq. Time_Euler1) then
 	 call Set_Un(3)
      do m=1, Time_step_coarse_mesh
-	   call  NS_Time_advance_1Euler(3)               ! 1阶Euler迭代若干步
+	   call  NS_Time_advance_1Euler(3)               ! 1st order Euler iteration several steps
      enddo
    else 
 	 call  NS_Time_advance_RK3(3)                    ! RK方法推进1步 （网格3）
    endif
-   call  comput_delt_U(3)                            ! 计算修正量deltU (=U-Un)
-   call  prolong_U(3,2,2)                            ! 把修正量插值到网格2 (储存在deltU里面); flag=2 插值deltU 
-!------网格2------------------------      
-   call  comput_new_U(2)                             ! 网格2计算新的U  (U=U+deltU)
+   call  comput_delt_U(3)                            ! Compute correction deltU (=U-Un)
+   call  prolong_U(3,2,2)                            ! Interpolate correction to mesh 2 (stored in deltU); flag=2 interpolate deltU 
+!------Mesh 2------------------------      
+   call  comput_new_U(2)                             !-------Mesh 2---------------------计算新的U  (U=U+deltU)
    call  comput_delt_U(2)                            ! 计算修正量deltU =U-Un
-   call  prolong_U(2,1,2)                            ! 把修正量插值到细网格 (储存在deltU里面); flag=2 插值deltU 
+   call  prolong_U(2,1,2)                            ! Interpolate correction to fine mesh (stored in deltU); flag=2 interpolate deltU 
 !------网格1------------------------------
    call  comput_new_U(1)                             ! 计算新的U  (U=U+deltU)
-   call Boundary_condition_onemesh(1)                ! 物理边界条件
-   call update_buffer_onemesh(1)                     ! 内边界条件
+   call Boundary_condition_onemesh(1)                ! Physical boundary conditions
+   call update_buffer_onemesh(1)                     ! Internal boundary conditions
 
   end subroutine NS_3stge_multigrid
 
@@ -593,7 +592,7 @@
        do j=-1,B%ny+1
 	     do i=-1,B%nx+1
 	       do m=1,NVAR1
-	         B%QF(m,i,j,k)=B%QF(m,i,j,k)-B%Res(m,i,j,k)            ! QF原先储存着从细网格插值过来的残差
+	         B%QF(m,i,j,k)=B%QF(m,i,j,k)-B%Res(m,i,j,k)            ! QF originally stores the residual interpolated from fine mesh
            enddo
 	     enddo
        enddo

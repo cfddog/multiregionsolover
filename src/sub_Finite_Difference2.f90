@@ -1,7 +1,7 @@
 
 
 
-! 用差分法计算通量 （相当于补丁程序）
+!  Compute flux using FDM (acts as a patch routine)
 
    subroutine Residual_FDM(nMesh,mBlock)
    Use Global_Var
@@ -16,10 +16,10 @@
      MP=> Mesh(nMesh)
      B => MP%Block(mBlock)
 	 Bm=>FDM_Mesh(nMesh)%Block(mBlock)
-     nx=B%nx-1 ; ny=B%ny-1 ; nz=B%nz-1   ! 网格中心点的数目   
+     nx=B%nx-1 ; ny=B%ny-1 ; nz=B%nz-1   ! Number of cell centers   
      NVAR1=MP%NVAR
 !	print*, "------------------------------------------------"
-!   主干程序与差分法子程序（补丁程序）之间的接口
+!   Interface between main program and FDM subroutine (patch routine)
    call Residual_FDM_local(NVAR1,nx,ny,nz,B%Res(1,-1,-1,-1),    &
        d(1-LAP,1-LAP,1-LAP), uu(1-LAP,1-LAP,1-LAP), v(1-LAP,1-LAP,1-LAP),   & 
 	   w(1-LAP,1-LAP,1-LAP),p(1-LAP,1-LAP,1-LAP), T(1-LAP,1-LAP,1-LAP),  &
@@ -44,21 +44,21 @@
 !----- i- direction --------------------------------------------------------------------------
 
 
-! 利用差分方法计算通量
-! 接口简单，仅需传入几何量（坐标与Jocabian变换系数）及物理量(包括层流及湍流粘性系数)，返回流通量
+!  Compute flux using FDM
+!  Simple interface, only needs geometric quantities (coordinates and Jacobian coefficients) and physical quantities (including laminar and turbulent viscosity), returns the flux
 
 
 
    subroutine Residual_FDM_local(NVAR,nx,ny,nz,Res,d,u,v,w,p,T,mu,mut,ix,iy,iz,jx,jy,jz,kx,ky,kz,Jac,Cp,Pr,Prt,FD_Flux,FD_scheme)
    use   const_var
    implicit none
-   integer:: NVAR,nx,ny,nz   ! 储存变量点的数目（如变量储存在网格中心，则为网格中心点的数目）
-!                           注，这里的nx,ny,nz与主干程序中的B%nx, B%ny, B%nz 不同。 主干程序为网格节点的数目，本子程序nx,ny,nz为网格中心点的数目
+   integer:: NVAR,nx,ny,nz   ! Number of storage points (cell center count if variables stored at cell centers)
+!                           Note: nx,ny,nz here differ from B%nx, B%ny, B%nz in the main program. The main program uses grid node counts, while this subroutine uses cell center counts
    
- !  real(PRE_EC),dimension(-1:nx+2,-1:ny+2,-1:nz+2):: d,u,v,w,p,T  ! 与主干程序 (OpenCFD-EC) 结构一致， 如与其他主干程序衔接，可修改
-   real(PRE_EC),dimension(1-LAP:nx+LAP,1-LAP:ny+LAP,1-LAP:nz+LAP):: d,u,v,w,p,T  ! 与主干程序 (OpenCFD-EC) 结构一致， 如与其他主干程序衔接，可修改
-   real(PRE_EC),dimension(-1:nx+2,-1:ny+2,-1:nz+2):: mu,mut         ! 层流及湍流粘性系数, 
-   real(PRE_EC),dimension(NVAR,-1:nx+2,-1:ny+2,-1:nz+2 ):: Res     ! 残差（右端项）, 数据结构与主干程序(opencfd-ec)一致
+ !  real(PRE_EC),dimension(-1:nx+2,-1:ny+2,-1:nz+2):: d,u,v,w,p,T  ! Consistent with the main program (OpenCFD-EC) structure; modify if interfacing with other main programs
+  real(PRE_EC),dimension(1-LAP:nx+LAP,1-LAP:ny+LAP,1-LAP:nz+LAP):: d,u,v,w,p,T  ! Consistent with the main program (OpenCFD-EC) structure; modify if interfacing with other main programs
+  real(PRE_EC),dimension(-1:nx+2,-1:ny+2,-1:nz+2):: mu,mut         ! Laminar and turbulent viscosity coefficients 
+   real(PRE_EC),dimension(NVAR,-1:nx+2,-1:ny+2,-1:nz+2 ):: Res     ! Residual (RHS), data structure consistent with the main program (OpenCFD-EC)
 
    real(PRE_EC):: fluxi(nx,5),fluxj(ny,5),fluxk(nz,5)
    real(PRE_EC),dimension(nx,ny,nz):: ix,iy,iz,jx,jy,jz,kx,ky,kz,Jac
@@ -72,7 +72,7 @@
    real(PRE_EC):: ui,vi,wi,Ti,uj,vj,wj,Tj,uk,vk,wk,Tk,ux,vx,wx,Tx,uy,vy,wy,Ty,uz,vz,wz,Tz,t11,t12,t13,t22,t23,t33,E1,E2,E3
    real(PRE_EC):: A1,A2,A3
 
-! 无粘通量的计算
+! Inviscid flux computation
 !--------i- -----------------------------------
       
        do k=4,nz-3
@@ -168,10 +168,10 @@
  
 !--------------------------------------------------------------------------
 !--------------------------------------------------------------------------
-!   粘性通量的计算
+!   Viscous flux computation
     allocate(EV1(nx,ny,nz,4),Ev2(nx,ny,nz,4),EV3(nx,ny,nz,4))
 
-!  计算应力张量与热流项  (2阶中心差分)
+!  Compute stress tensor and heat flux terms (2nd-order central difference)
    do k=2,nz-1
    do j=2,ny-1
    do i=2,nx-1
@@ -206,8 +206,8 @@
      wz=wi*iz(i,j,k)+wj*jz(i,j,k)+wk*kz(i,j,k)
      Tz=Ti*iz(i,j,k)+Tj*jz(i,j,k)+Tk*kz(i,j,k)
 
-     Amu=mu(i,j,k)+mut(i,j,k)                      ! 层流+湍流粘性系数
-	 Amk=Cp*(mu(i,j,k)/Pr + mut(i,j,k)/Prt)        ! 层流+湍流热传导系数
+     Amu=mu(i,j,k)+mut(i,j,k)                      ! Laminar + turbulent viscosity coefficient
+     Amk=Cp*(mu(i,j,k)/Pr + mut(i,j,k)/Prt)        ! Laminar + turbulent thermal conductivity
 
      t11=(4.d0/3.d0*ux-2.d0/3.d0*(vy+wz))*Amu
      t22=(4.d0/3.d0*vy-2.d0/3.d0*(ux+wz))*Amu
@@ -240,13 +240,13 @@
    enddo
    enddo
 
-!  计算粘性通量
+!  Compute viscous flux
    do k=4,nz-3
    do j=4,ny-3
    do i=4,nx-3
    do m=2,5
     Res(m,i,j,k)=Res(m,i,j,k) +  0.5*(Ev1(i+1,j,k,m-1)-Ev1(i-1,j,k,m-1)   &
-	    +Ev2(i,j+1,k,m-1)-Ev2(i,j-1,k,m-1)+Ev3(i,j,k+1,m-1)-Ev3(i,j,k-1,m-1)  )                     ! 2阶中心差分   
+	    +Ev2(i,j+1,k,m-1)-Ev2(i,j-1,k,m-1)+Ev3(i,j,k+1,m-1)-Ev3(i,j,k-1,m-1)  )                     ! 2nd-order central difference   
    enddo
    enddo
    enddo
@@ -271,7 +271,7 @@
           vs,uc1,uc2,vc1,vc2,wc1,wc2,vvc1,vvc2,vv,W2,P2 
     real(PRE_EC),parameter:: epsl=1.d-10      ! 
        
-!c El 为特征值,其中El(:,1)为x方向的特征值（5个， u, u, u, u+c, u-c)
+!c El are eigenvalues: El(:,1) are x-direction eigenvalues (5 values: u, u, u, u+c, u-c)
         
       tmp1=2.d0*(gamma-1.d0)
       tmp2=1.d0/(2.d0*gamma)
@@ -384,7 +384,7 @@
 !		  W2=vvc2*(0.5d0*((1.d0-gamma)*vs*vs-2.d0*(gamma-1.d0)*vs*cc+2.d0*cc*cc)/(gamma*gamma-1.d0)+0.5d0*(u*u+v*v+w*w))
 		  W1=vvc1*(((1.d0-gamma)*vs*vs+2.d0*(gamma-1.d0)*vs*cc+2.d0*cc*cc)/(gamma*gamma-1.d0)+0.5d0*(u*u+v*v+w*w))
 		  W2=vvc2*(((1.d0-gamma)*vs*vs-2.d0*(gamma-1.d0)*vs*cc+2.d0*cc*cc)/(gamma*gamma-1.d0)+0.5d0*(u*u+v*v+w*w))
-!		  W1=vvc1*(cc*cc/(gamma-1.d0)+0.5d0*(u*u+v*v+w*w))  !可使定常流中总焓守恒
+!		  W1=vvc1*(cc*cc/(gamma-1.d0)+0.5d0*(u*u+v*v+w*w))  ! Enables total enthalpy conservation in steady flow
 !		  W2=vvc2*(cc*cc/(gamma-1.d0)+0.5d0*(u*u+v*v+w*w))
 		  fp(1)=tmp0*vvc1
           fp(2)=tmp0*vvc1*(u+ak1*(-vs+2.d0*cc)/gamma)
@@ -410,16 +410,16 @@
        integer:: nx,FD_scheme
 	   real(PRE_EC):: v(nx),hj(nx)
      if(FD_scheme .eq. FD_WENO5) then
-       call fp_weno5(nx,v,hj)           ! 采用5阶WENO
+       call fp_weno5(nx,v,hj)           ! Use 5th-order WENO
 	 else if(FD_scheme .eq. FD_WENO7) then
-	   call fp_weno7(nx,v,hj)           ! 内点采用WENO 7
-       call fp_weno5_onepoint(nx,v,hj,3)  ! 近左边界点(k=3)仍采用WENO 5
-       call fp_weno5_onepoint(nx,v,hj,nx-2)  ! 近右边界点(k=nx-2)人采用WENO 5
-     else if (FD_scheme .eq. FD_OMP6) then   ! 内点采用OMP6
+	   call fp_weno7(nx,v,hj)           ! Interior points use WENO 7
+       call fp_weno5_onepoint(nx,v,hj,3)  ! Near left boundary point (k=3) still uses WENO 5
+       call fp_weno5_onepoint(nx,v,hj,nx-2)  ! Near right boundary point (k=nx-2) still uses WENO 5
+     else if (FD_scheme .eq. FD_OMP6) then   ! Interior points use OMP6
 	   call fp_OMP6(nx,v,hj)
-       call fp_weno5_onepoint(nx,v,hj,3)  ! 近左边界点(k=3)仍采用WENO 5
-       call fp_weno5_onepoint(nx,v,hj,nx-2)  ! 近右边界点(k=nx-2)人采用WENO 5
-       call fp_weno5_onepoint(nx,v,hj,nx-3)  ! 近右边界点(k=nx-3)人采用WENO 5
+       call fp_weno5_onepoint(nx,v,hj,3)  ! Near left boundary point (k=3) still uses WENO 5
+       call fp_weno5_onepoint(nx,v,hj,nx-2)  ! Near right boundary point (k=nx-2) still uses WENO 5
+       call fp_weno5_onepoint(nx,v,hj,nx-3)  ! Near right boundary point (k=nx-3) still uses WENO 5
      endif
 	 end
 
@@ -431,16 +431,16 @@
        integer:: nx,FD_scheme
 	   real(PRE_EC):: v(nx),hj(nx)
      if(FD_scheme .eq. FD_WENO5) then
-       call fm_weno5(nx,v,hj)           ! 采用5阶WENO
+       call fm_weno5(nx,v,hj)           ! Use 5th-order WENO
 	 else if(FD_scheme .eq. FD_WENO7) then
-	   call fm_weno7(nx,v,hj)           ! 内点采用WENO 7
-       call fm_weno5_onepoint(nx,v,hj,3)  ! 近左边界点(k=3)仍采用WENO 5
-       call fm_weno5_onepoint(nx,v,hj,nx-2)  ! 近右边界点(k=nx-2)人采用WENO 5
-     else if (FD_scheme .eq. FD_OMP6) then   ! 内点采用OMP6
+	   call fm_weno7(nx,v,hj)           ! Interior points use WENO 7
+       call fm_weno5_onepoint(nx,v,hj,3)  ! Near left boundary point (k=3) still uses WENO 5
+       call fm_weno5_onepoint(nx,v,hj,nx-2)  ! Near right boundary point (k=nx-2) still uses WENO 5
+     else if (FD_scheme .eq. FD_OMP6) then   ! Interior points use OMP6
 	   call fm_OMP6(nx,v,hj)
-       call fm_weno5_onepoint(nx,v,hj,3)  ! 近左边界点(k=3)仍采用WENO 5
-       call fm_weno5_onepoint(nx,v,hj,4)  ! 近左边界点(k=4)仍采用WENO 5
-       call fm_weno5_onepoint(nx,v,hj,nx-2)  ! 近右边界点(k=nx-2)人采用WENO 5
+       call fm_weno5_onepoint(nx,v,hj,3)  ! Near left boundary point (k=3) still uses WENO 5
+       call fm_weno5_onepoint(nx,v,hj,4)  ! Near left boundary point (k=4) still uses WENO 5
+       call fm_weno5_onepoint(nx,v,hj,nx-2)  ! Near right boundary point (k=nx-2) still uses WENO 5
      endif
 	 end
 
@@ -448,7 +448,7 @@
 
 !----------------------------------------------------------------
 
- ! 5阶WENO格式计算正通量  
+ ! 5th-order WENO scheme for positive flux  
        subroutine fp_weno5(nx,v,hj)
        use precision_EC
 	   implicit none
@@ -462,7 +462,7 @@
 	 return
 	 end
 !-------------------------------------------------
- ! 5阶WENO格式计算负通量  
+ ! 5th-order WENO scheme for negative flux  
        subroutine fm_weno5(nx,v,hj)
        use precision_EC
 	   implicit none
@@ -479,7 +479,7 @@
 !---------------------------------------------------------------
  
  
- ! 5阶WENO格式计算正通量 (单个点) 
+ ! 5th-order WENO scheme for positive flux (single point)
 
        subroutine fp_weno5_onepoint(nx,v,hj,k)
        use precision_EC
@@ -509,7 +509,7 @@
 	 return
 	 end
 !-------------------------------------------------
- ! 5阶WENO格式计算负通量 (单个点) 
+ ! 5th-order WENO scheme for negative flux (single point)
        subroutine fm_weno5_onepoint(nx,v,hj,k)
        use precision_EC
 	   implicit none
@@ -541,7 +541,7 @@
 	 end	  
     
 !c---------------------------------------------------------------
-! 7阶WENO格式 WENO-Z (正通量)
+! 7th-order WENO-Z scheme (positive flux)
        subroutine fp_weno7(nx,v,hj)
        use precision_EC
 	   implicit none
@@ -611,7 +611,7 @@
    end
 
 !=========================================================================
-! 7阶WENO (WENO-Z)     
+! 7th-order WENO (WENO-Z)     
       subroutine fm_weno7(nx,v,hj)
        use precision_EC
 	   implicit none
@@ -684,7 +684,7 @@
 !--------------------------------------------
 
 ! Optimized 6th order Monotonicity-Preserving Schemes (Li XL et al.)
-! 网格基属于中心格式
+! Grid-based central scheme
 
 !================================================================================
        subroutine fp_OMP6(nx,v,hj)
@@ -724,7 +724,7 @@
 !------------------------------------------------------------------------------------
 !------------------------------------------------------------------------------------
 ! Optimized 6th order Monotonicity-Preserving Schemes (Li XL et al.)
-! 网格基属于中心格式
+! Grid-based central scheme
 
        subroutine fm_OMP6(nx,v,hj)
        use precision_EC

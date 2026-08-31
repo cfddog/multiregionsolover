@@ -1,6 +1,6 @@
 
-!  ��ȡ������Ϣ
-!  ������(0�Ž���)��ȡ���ݣ��������̽���
+ !
+ !
     subroutine read_main_mesh
     use Global_var
     implicit none
@@ -15,14 +15,14 @@
  
   if(my_id .eq. 0) then 
     print*, " read main mesh ..."
-	if( Mesh_File_Format .eq. 1) then   ! ��ʽ�ļ�
+	if( Mesh_File_Format .eq. 1) then !
      open(99,file="Mesh3d.dat")
      read(99,*) NB   ! Block number
      allocate( NI(NB),NJ(NB),NK(NB) )
      read(99,*) (NI(k), NJ(k), NK(k), k=1,NB)
-	else                                ! �޸�ʽ�ļ�
+	else !
      open(99,file="Mesh3d.dat",form="unformatted")
-     read(99) NB                       ! �ܿ���
+     read(99) NB !
      allocate( NI(NB),NJ(NB),NK(NB) )
      read(99) (NI(k), NJ(k), NK(k), k=1,NB)
     endif
@@ -42,8 +42,8 @@
                   (((Ux(i,j,k,2),i=1,nx),j=1,ny),k=1,nz) , &
                   (((Ux(i,j,k,3),i=1,nx),j=1,ny),k=1,nz)
 	 endif
-   if(B_proc(m) .eq. 0) then            ! ��Щ�����ڸ�����
-      mt=B_n(m)                          ! �ÿ��ڽ����ڲ��ı��
+   if(B_proc(m) .eq. 0) then !
+      mt=B_n(m) !
 	  B=>MP%Block(mt)
 	  do k=1,nz
 	  do j=1,ny
@@ -54,7 +54,7 @@
 	  enddo
 	  enddo
  	  enddo
-     else                        ! ���ÿ����ݷ��ͳ�
+     else !
 	   Num_data=nx*ny*nz*3
 	   Send_to_ID=B_proc(m)
 	   tag=B_n(m)
@@ -67,8 +67,8 @@
    deallocate(NI,NJ,NK)
    close(99)
   
-  else     ! �Ǹ��ڵ�
-    do m=1,MP%Num_Block     ! �����̰����Ŀ�
+  else !
+    do m=1,MP%Num_Block !
      B=>MP%Block(m)
 	 nx=B%nx; ny=B%ny; nz=B%nz
    	 allocate(Ux(nx,ny,nz,3))
@@ -93,8 +93,8 @@
  end subroutine read_main_mesh
 
 !-------------------------------------------------------------------------------------
-!  ��ȡ�������� ������ľ���
-!  ������(0�Ž���)��ȡ���ݣ��������̽���
+ !
+ !
     subroutine read_dw
     use Global_var
     implicit none
@@ -107,7 +107,7 @@
 
      MP=>Mesh(1)
 
-!------�����̶�ȡ����----------------------------- 
+ !
   if(my_id .eq. 0) then 
     print*, " read distance to the wall:  wall_dist.dat"
   
@@ -118,8 +118,8 @@
 	 allocate(dw(nx-1,ny-1,nz-1))
      read(99) (((dw(i,j,k),i=1,nx-1),j=1,ny-1),k=1,nz-1) 
      
-	 if(B_proc(m) .eq. 0) then            ! ��Щ�����ڸ�����
-      mt=B_n(m)                          ! �ÿ��ڽ����ڲ��ı��
+	 if(B_proc(m) .eq. 0) then !
+      mt=B_n(m) !
 	  B=>MP%Block(mt)
 	  do k=1,nz-1
 	  do j=1,ny-1
@@ -128,7 +128,7 @@
 	  enddo
 	  enddo
  	  enddo
-     else                        ! ���ÿ����ݷ��ͳ�
+     else !
 	   Num_data=(nx-1)*(ny-1)*(nz-1)
 	   Send_to_ID=B_proc(m)
 	   tag=B_n(m)
@@ -138,8 +138,8 @@
    enddo
    close(99)
   
-  else     ! �Ǹ��ڵ�
-    do m=1,MP%Num_Block     ! �����̰����Ŀ�
+  else !
+    do m=1,MP%Num_Block !
      B=>MP%Block(m)
 	 nx=B%nx; ny=B%ny; nz=B%nz
    	 allocate(dw(nx-1,ny-1,nz-1))
@@ -166,8 +166,8 @@
 
 !----------------------------------------------------------------------------
 !-------------------------------------------------------------------------------------
-!  ��ȡ����: d,u,v,w,T;  SA, SST �еı���
-!  ������(0�Ž���)��ȡ���ݣ��������̽���
+ !
+ !
     subroutine read_flow_data
     use Global_var
     implicit none
@@ -182,20 +182,20 @@
      MP=>Mesh(1)
      NVAR1=MP%NVAR
 
-!------�����̶�ȡ���ݣ����͵���������----------------------------- 
+ !
   if(my_id .eq. 0) then 
     print*, " read flow data:  flow3d.dat"
  
      open(99,file="flow3d.dat",form="unformatted")
     
- 	 if(NVAR1 .eq. 6) then        ! 6���Ա���
+ 	 if(NVAR1 .eq. 6) then !
       Inquire(file="SA3d.dat",exist=Ex)
       if(Ex) then
         open(100,file="SA3d.dat",form="unformatted")
       endif
 	 endif
      
-	 if(NVAR1 .eq. 7) then          ! 7���Ա���
+	 if(NVAR1 .eq. 7) then !
      Inquire(file="SST3d.dat",exist=Ex)
      if(Ex) then
        open(101,file="SST3d.dat",form="unformatted")
@@ -235,10 +235,10 @@
 		   enddo
   	  endif
      endif
-!------------����--------------------------------
+ !
      
-	 if(B_proc(m) .eq. 0) then            ! ��Щ�����ڸ�����
-      mt=B_n(m)                           ! �ÿ��ڽ����ڲ��ı��
+	 if(B_proc(m) .eq. 0) then !
+      mt=B_n(m) !
 	  B=>MP%Block(mt)
 	  do k=0,nz
 	  do j=0,ny
@@ -249,7 +249,7 @@
 	  enddo
 	  enddo
  	  enddo
-     else                        ! ���ÿ����ݷ��ͳ�
+     else !
 	   Num_data=(nx+1)*(ny+1)*(nz+1)*NVAR1
 	   Send_to_ID=B_proc(m)
 	   tag=B_n(m)
@@ -267,9 +267,9 @@
     endif
    endif
 
-  else     ! �Ǹ��ڵ�
+  else !
    
-    do m=1,MP%Num_Block     ! �����̰����Ŀ�
+    do m=1,MP%Num_Block !
       B=>MP%Block(m)
 	  nx=B%nx; ny=B%ny; nz=B%nz
    	  allocate(U(0:nx,0:ny,0:nz,NVAR1))
@@ -296,8 +296,8 @@
    if(my_id .eq. 0)  print*, "read flow3d.dat OK"
 
 !----------------------------------Transform data----------------
-! ���������λd,u,v,w,T, ת��Ϊ�غ����
- do m=1,MP%Num_Block     ! �����̰����Ŀ�
+ !
+ do m=1,MP%Num_Block !
     B=>MP%Block(m)
     nx=B%nx; ny=B%ny; nz=B%nz
  
@@ -321,7 +321,7 @@
  
  enddo
 
-!---------------����ʱ�䲽-----------------------
+ !
   if(my_id .eq. 0) then
    Inquire(file="Step_mess.dat",exist=Ex)
     if(Ex) then
@@ -345,7 +345,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 
 !----------------------------------------------------------------------
-!  ������μ������� ��Plot3d��ʽ��, ��ϸ����flow3d.dat  
+ !
 
   subroutine output_flow
    use Global_Var
@@ -364,7 +364,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    NVAR1=MP%NVAR
 
 
-!   ������㲽����ʱ����Ϣ
+ !
    if(my_id .eq. 0) then
      open(88,file="Step_mess.dat")
      write(88,*) MP%Kstep, MP%tt
@@ -393,13 +393,13 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    if(NVAR1 .eq. 6) open(100,file="SA3d.dat",form="unformatted")    ! U6
    if(NVAR1 .eq. 7) open(101,file="SST3d.dat",form="unformatted")   ! U6,U7
   
-   do m=1, Total_block   ! ȫ����
+   do m=1, Total_block !
      
 	 nx=bNi(m); ny=bNj(m); nz=bNk(m)
 	 allocate(U(0:nx,0:ny,0:nz,NVAR1))
 
-	if(B_proc(m) .eq. 0) then            ! ��Щ�����ڸ�����
-      mt=B_n(m)                           ! �ÿ��ڽ����ڲ��ı��
+	if(B_proc(m) .eq. 0) then !
+      mt=B_n(m) !
 	  B=>MP%Block(mt)
 	 
 	  do k=0,nz
@@ -421,10 +421,10 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 	  enddo
  	  enddo
 
-    else                        ! ���ոÿ���Ϣ
+    else !
 	   Num_data=NVAR1*(nx+1)*(ny+1)*(nz+1)
 	   Recv_from_ID=B_proc(m)
-	   tag=B_n(m)             ! �ڸÿ��еı��
+	   tag=B_n(m) !
  	  call MPI_Recv(U,Num_data,OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD,Status,ierr )
     endif
 ! write Data ....
@@ -445,9 +445,9 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    close(100)
    close(101)
  
- else     ! ��0�ڵ�
+ else !
 
-    do m=1,MP%Num_Block     ! �����̰����Ŀ�
+    do m=1,MP%Num_Block !
       B=>MP%Block(m)
 	  nx=B%nx; ny=B%ny; nz=B%nz
    	  allocate(U(0:nx,0:ny,0:nz,NVAR1))
@@ -487,7 +487,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 
 !----------------------------------------------------------------------
-!  �������ճ��ϵ��vt ��Plot3d��ʽ��, ��ϸ����vt.dat  
+ !
 
   subroutine output_vt
    use Global_Var
@@ -507,12 +507,12 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    print*, "write vt.dat ......"
    open(99,file="vt.dat",form="unformatted")                    ! d,u,v,w,T
  
-   do m=1, Total_block   ! ȫ����
+   do m=1, Total_block !
 	 nx=bNi(m); ny=bNj(m); nz=bNk(m)
 	 allocate(U(0:nx,0:ny,0:nz))
 
-	if(B_proc(m) .eq. 0) then            ! ��Щ�����ڸ�����
-      mt=B_n(m)                           ! �ÿ��ڽ����ڲ��ı��
+	if(B_proc(m) .eq. 0) then !
+      mt=B_n(m) !
 	  B=>MP%Block(mt)
 	 
 	  do k=0,nz
@@ -522,10 +522,10 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 	  enddo
 	  enddo
  	  enddo
-    else                        ! ���ոÿ���Ϣ
+    else !
 	   Num_data=(nx+1)*(ny+1)*(nz+1)
 	   Recv_from_ID=B_proc(m)
-	   tag=B_n(m)             ! �ڸÿ��еı��
+	   tag=B_n(m) !
  	  call MPI_Recv(U,Num_data,OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD,Status,ierr )
     endif
 ! write Data ....
@@ -538,9 +538,9 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    close(100)
    close(101)
  
- else     ! ��0�ڵ�
+ else !
 
-    do m=1,MP%Num_Block     ! �����̰����Ŀ�
+    do m=1,MP%Num_Block !
       B=>MP%Block(m)
 	  nx=B%nx; ny=B%ny; nz=B%nz
    	  allocate(U(0:nx,0:ny,0:nz))
@@ -568,7 +568,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 
 !----------------------------------------------------------------------
-!  ���������ľ���  
+ !
 
   subroutine write_dw
    use Global_Var
@@ -589,12 +589,12 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    print*, "write wall_dist.dat ......"
    open(99,file="wall_dist.dat",form="unformatted")                    ! dw
   
-   do m=1, Total_block   ! ȫ����
+   do m=1, Total_block !
  	 nx=bNi(m); ny=bNj(m); nz=bNk(m)
 	 allocate(U(nx-1,ny-1,nz-1))
 
-	if(B_proc(m) .eq. 0) then            ! ��Щ�����ڸ�����
-      mt=B_n(m)                          ! �ÿ��ڽ����ڲ��ı��
+	if(B_proc(m) .eq. 0) then !
+      mt=B_n(m) !
 	  B=>MP%Block(mt)
 	 
 	  do k=1,nz-1
@@ -604,10 +604,10 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 	  enddo
 	  enddo
  	  enddo
-    else                        ! ���ոÿ���Ϣ
+    else !
 	   Num_data=(nx-1)*(ny-1)*(nz-1)
 	   Recv_from_ID=B_proc(m)
-	   tag=B_n(m)             ! �ڸÿ��еı��
+	   tag=B_n(m) !
  	  call MPI_Recv(U,Num_data,OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD,Status,ierr )
     endif
 ! write Data ....
@@ -616,9 +616,9 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    enddo
    close(99)
  
- else     ! ��0�ڵ�
+ else !
 
-    do m=1,MP%Num_Block     ! �����̰����Ŀ�
+    do m=1,MP%Num_Block !
       B=>MP%Block(m)
 	  nx=B%nx; ny=B%ny; nz=B%nz
    	  allocate(U(nx-1,ny-1,nz-1))
@@ -647,39 +647,45 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 
 !----Boundary message (bc3d.inc, OpenCFD-EC Build-in format)----------------------------------------------------------
-! OpenCFD-EC�ڽ���.inc�߽����Ӹ�ʽ���� Gridgen ��.inp��ʽ�����Ϸ�չ���ġ�
-!  ��.inp��ʽ����һЩ������Ϣ��������������f_no,
-!  ������face �Լ����ӵ������f_no1,���ӵ�������face1
-!  �Լ����Ӵ���L1, L2, L3  (����L1=1��ʾ��ά�����ӿ�ĵ�1ά�����ӣ� L1=-1��ʾ�����ӿ�ĵ�1Ϊ��������).
-!  ��Щ������ϢΪ��-��֮���ͨ�ţ�������MPI����ͨ�ţ��ṩ�˱����������ڼ�ͨ�Ŵ���
+ !
+ !
+ !
+ !
+ !
 !--------------------------------------------------------------------------------------------------------------------
   subroutine read_inc 
    use Global_Var
    implicit none
-   integer,parameter:: NC=21         ! .inc�ļ�ÿ��Ԫ��21��Ԫ��
+   integer,parameter:: NC=21 !
    integer:: nx,ny,nz,NB,Nsub,m,mt,k,j
    integer:: Send_to_ID,tag,ierr,Status(MPI_Status_SIZE)
    Type (Block_TYPE),pointer:: B
    TYPE (BC_MSG_TYPE),pointer:: Bc
-   integer,pointer,dimension(:,:):: Bs 
+   integer,pointer,dimension(:,:):: Bs
+   logical:: ext_inc
 
- !  ��Gridgen .inp ��ʽת��Ϊ .inc��ʽ   
+ !
 	if(my_id .eq. 0) then
-	  call  convert_inp_inc 
+	  inquire(file="bc3d.inp",exist=ext_inc)
+	  if(ext_inc) then
+	    call  convert_inp_inc
+	  else
+	    print*, "bc3d.inp not found, skip conversion"
+	  endif
 	endif
 
 
-!  read bc3d.inc, �����̶��룬����������������
+ !
    if(my_id .eq. 0) then
      print*, "read bc3d.inc (Link/boundary file)......"
      open(88,file="bc3d.inc")
      read(88,*)
      read(88,*) NB
- !   ��ȡ.inc�ļ��е�Ԫ��   
+ !
     do m=1,NB
      read(88,*) nx,ny,nz
      read(88,*)
-     read(88,*) Nsub   ! m���������
+     read(88,*) Nsub !
  	 allocate(Bs(NC,Nsub))
 	 do k=1,Nsub
 	  read(88,*) (Bs(j,k),j=1,9)
@@ -687,14 +693,14 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 !	 read(88,*) Bc%ib,Bc%ie,Bc%jb,Bc%je,Bc%kb,Bc%ke,Bc%bc,Bc%face,Bc%f_no
 !	 read(88,*) Bc%ib1,Bc%ie1,Bc%jb1,Bc%je1,Bc%kb1,Bc%ke1,Bc%nb1,Bc%face1,Bc%f_no1,Bc%L1,Bc%L2,Bc%L3
      enddo
-!     ���ÿ���Ϣ���ͳ�ȥ
+ !
       
      if(B_Proc(m) .eq. 0) then
-!          �ÿ���0����
-       	 mt=B_n(m)   ! ��0�����е��ڲ����
+ !
+       	 mt=B_n(m) !
 		 B=>Mesh(1)%Block(mt)
 		 B%subface=Nsub   
-	     allocate(B%bc_msg(B%subface))   ! �߽�����
+	     allocate(B%bc_msg(B%subface)) !
          do k=1,Nsub
 		 Bc=>B%bc_msg(k)
           Bc%ib=Bs(1,k); Bc%ie=Bs(2,k); Bc%jb=Bs(3,k); Bc%je=Bs(4,k)
@@ -705,18 +711,18 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 		  Bc%f_no1=Bs(18,k); Bc%L1=Bs(19,k); Bc%L2=Bs(20,k); Bc%L3=Bs(21,k)
          enddo
       else
-!        ��nsub ��Bs ���ͳ�ȥ
-	     Send_to_ID=B_proc(m)              ! ����Ŀ������ڵĽ��̺�
-	     tag=B_n(m)                        ! ���
-  	     call MPI_send(Nsub,1,MPI_INTEGER, Send_to_ID, tag, MPI_COMM_WORLD,ierr )        !������
-  	     call MPI_send(Bs,size(Bs),MPI_INTEGER, Send_to_ID, tag, MPI_COMM_WORLD,ierr )    !����������Ϣ
+ !
+	     Send_to_ID=B_proc(m) !
+	     tag=B_n(m) !
+  	     call MPI_send(Nsub,1,MPI_INTEGER, Send_to_ID, tag, MPI_COMM_WORLD,ierr ) !
+  	     call MPI_send(Bs,size(Bs),MPI_INTEGER, Send_to_ID, tag, MPI_COMM_WORLD,ierr ) !
      endif
 	  deallocate(Bs)
     enddo
 	  close(88)
    endif
 
-! �Ǹ�����
+ !
    if(my_id .ne. 0) then
       do m=1,Mesh(1)%Num_Block
 	    B=>Mesh(1)%Block(m)
@@ -724,7 +730,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
  	    allocate(Bs(Nc,Nsub))
  	    call MPI_Recv(Bs,Nsub*Nc,MPI_INTEGER,0,m,MPI_COMM_WORLD,status,ierr)
 	    B%subface=Nsub   
-      	allocate(B%bc_msg(B%subface))   ! �߽�����
+      	allocate(B%bc_msg(B%subface)) !
  	     do k=1,Nsub
 		  Bc=>B%bc_msg(k)
           Bc%ib=Bs(1,k); Bc%ie=Bs(2,k); Bc%jb=Bs(3,k); Bc%je=Bs(4,k)
@@ -740,5 +746,100 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 	 call MPI_Barrier(MPI_COMM_WORLD,ierr)
 	 if(my_id .eq. 0) print*, "read bc3d.inc OK"
 
-  end  subroutine read_inc 
+  end  subroutine read_inc
+
+!----------------------------------------------------------------------
+! Read interface connection information (bc3d_interface.inc)
+! Similar to read_inc but populates bc_msg2 instead of bc_msg
+!----------------------------------------------------------------------
+  subroutine read_inc_interface
+   use Global_Var
+   implicit none
+   integer,parameter:: NC=21
+   integer:: nx,ny,nz,NB,Nsub,m,mt,k,j
+   integer:: Send_to_ID,tag,ierr,Status(MPI_Status_SIZE)
+   Type (Block_TYPE),pointer:: B
+   TYPE (BC_MSG_TYPE),pointer:: Bc
+   integer,pointer,dimension(:,:):: Bs
+   logical:: ex_if
+   integer:: have_interface
+
+   have_interface=0
+   if(my_id .eq. 0) then
+     inquire(file="bc3d_interface.inp",exist=ex_if)
+     if(ex_if) then
+       have_interface=1
+     endif
+   endif
+   call MPI_bcast(have_interface,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+
+   if(have_interface .eq. 0) then
+     if(my_id .eq. 0) print*, "bc3d_interface.inp not found, skip interface"
+     return
+   endif
+
+   if(my_id .eq. 0) then
+     call convert_inp_inc_interface
+   endif
+
+   if(my_id .eq. 0) then
+     print*, "read bc3d_interface.inc (Interface link file)......"
+     open(88,file="bc3d_interface.inc")
+     read(88,*)
+     read(88,*) NB
+     do m=1,NB
+       read(88,*) nx,ny,nz
+       read(88,*)
+       read(88,*) Nsub
+       allocate(Bs(NC,Nsub))
+       do k=1,Nsub
+         read(88,*) (Bs(j,k),j=1,9)
+         read(88,*) (Bs(j,k),j=10,21)
+       enddo
+       if(B_Proc(m) .eq. 0) then
+         mt=B_n(m)
+         B=>Mesh(1)%Block(mt)
+         B%subface=Nsub
+         allocate(B%bc_msg2(B%subface))
+         do k=1,Nsub
+           Bc=>B%bc_msg2(k)
+           Bc%ib=Bs(1,k); Bc%ie=Bs(2,k); Bc%jb=Bs(3,k); Bc%je=Bs(4,k)
+           Bc%kb=Bs(5,k); Bc%ke=Bs(6,k); Bc%bc=Bs(7,k); Bc%face=Bs(8,k); Bc%f_no=Bs(9,k)
+           Bc%ib1=Bs(10,k); Bc%ie1=Bs(11,k); Bc%jb1=Bs(12,k); Bc%je1=Bs(13,k)
+           Bc%kb1=Bs(14,k); Bc%ke1=Bs(15,k); Bc%nb1=Bs(16,k); Bc%face1=Bs(17,k)
+           Bc%f_no1=Bs(18,k); Bc%L1=Bs(19,k); Bc%L2=Bs(20,k); Bc%L3=Bs(21,k)
+         enddo
+       else
+         Send_to_ID=B_proc(m)
+         tag=B_n(m)
+         call MPI_send(Nsub,1,MPI_INTEGER, Send_to_ID, tag, MPI_COMM_WORLD,ierr)
+         call MPI_send(Bs,size(Bs),MPI_INTEGER, Send_to_ID, tag, MPI_COMM_WORLD,ierr)
+       endif
+       deallocate(Bs)
+     enddo
+     close(88)
+   endif
+
+   if(my_id .ne. 0) then
+     do m=1,Mesh(1)%Num_Block
+       B=>Mesh(1)%Block(m)
+       call MPI_Recv(Nsub,1,MPI_INTEGER,0,m,MPI_COMM_WORLD,status,ierr)
+       allocate(Bs(Nc,Nsub))
+       call MPI_Recv(Bs,Nsub*Nc,MPI_INTEGER,0,m,MPI_COMM_WORLD,status,ierr)
+       B%subface=Nsub
+       allocate(B%bc_msg2(B%subface))
+       do k=1,Nsub
+         Bc=>B%bc_msg2(k)
+         Bc%ib=Bs(1,k); Bc%ie=Bs(2,k); Bc%jb=Bs(3,k); Bc%je=Bs(4,k)
+         Bc%kb=Bs(5,k); Bc%ke=Bs(6,k); Bc%bc=Bs(7,k); Bc%face=Bs(8,k); Bc%f_no=Bs(9,k)
+         Bc%ib1=Bs(10,k); Bc%ie1=Bs(11,k); Bc%jb1=Bs(12,k); Bc%je1=Bs(13,k)
+         Bc%kb1=Bs(14,k); Bc%ke1=Bs(15,k); Bc%nb1=Bs(16,k); Bc%face1=Bs(17,k)
+         Bc%f_no1=Bs(18,k); Bc%L1=Bs(19,k); Bc%L2=Bs(20,k); Bc%L3=Bs(21,k)
+       enddo
+       deallocate(Bs)
+     enddo
+   endif
+   call MPI_Barrier(MPI_COMM_WORLD,ierr)
+   if(my_id .eq. 0) print*, "read bc3d_interface.inc OK"
+  end subroutine read_inc_interface 
 

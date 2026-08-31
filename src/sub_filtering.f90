@@ -2,10 +2,10 @@
 ! Revised by Li Xinliang, 2013-10-4
   module filting_Var
    use precision_EC
-   real(PRE_EC), save,pointer,dimension(:,:,:,:)::  f,f0 ! ����
+   real(PRE_EC), save,pointer,dimension(:,:,:,:)::  f,f0 ! 锟斤拷锟斤拷
   end module Filting_Var
    
-! �߾����˲���4�׾��ȣ�
+! 锟竭撅拷锟斤拷锟剿诧拷锟斤拷4锟阶撅拷锟饺ｏ拷
   subroutine Filtering_oneMesh(nMesh)     
    use Global_Var
    use filting_Var
@@ -76,7 +76,7 @@
    integer:: nMesh,mBlock
    integer:: i,j,k,m,nx,ny,nz,NVAR1,i1,i2
    Type (Block_TYPE),pointer:: B
-   integer,parameter:: KLP=4   ! �˲�����������
+   integer,parameter:: KLP=4   ! 锟剿诧拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷
    real(PRE_EC),parameter:: eps0=1.d-8,  a1= 1.d0/2.d0,  a2= 9.d0/32.d0,    a3=-1.d0/32.d0
    real(PRE_EC):: p1,p2,alpha
  
@@ -131,7 +131,7 @@
    integer:: nMesh,mBlock
    integer:: i,j,k,m,nx,ny,nz,NVAR1,i1,i2
    Type (Block_TYPE),pointer:: B
-   integer,parameter:: KLP=4   ! �˲�����������
+   integer,parameter:: KLP=4   ! 锟剿诧拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷
    real(PRE_EC),parameter:: eps0=1.d-8,  a1= 1.d0/2.d0,  a2= 9.d0/32.d0,    a3=-1.d0/32.d0
    real(PRE_EC):: p1,p2,alpha
  
@@ -185,7 +185,7 @@
    integer:: nMesh,mBlock
    integer:: i,j,k,m,nx,ny,nz,NVAR1,i1,i2
    Type (Block_TYPE),pointer:: B
-   integer,parameter:: KLP=4   ! �˲�����������
+   integer,parameter:: KLP=4   ! 锟剿诧拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷
    real(PRE_EC),parameter:: eps0=1.d-8,  a1= 1.d0/2.d0,  a2= 9.d0/32.d0,    a3=-1.d0/32.d0
    real(PRE_EC):: p1,p2,alpha
  

@@ -1,4 +1,4 @@
-!  2017-7-11  ¶ÔÁ÷³¡½øĞĞÏŞÖÆ £¨·ÀÖ¹ÎïÀíÁ¿³¬½ç£©
+!  2017-7-11  å¯¹æµåœºè¿›è¡Œé™åˆ¶ ï¼ˆé˜²æ­¢ç‰©ç†é‡è¶…ç•Œï¼‰
 !-------------------------------------------
   subroutine limit_flow(nMesh)
    use Global_var
@@ -18,8 +18,8 @@
   end
 
 !----------------------------------------
-!  ÏŞ¶¨Ñ¹Á¦¼°ÃÜ¶ÈµÄ±ä»¯·ù¶È (see CFL3D User's manual: p236, Time Advancement)
-!  ±ä»¯·ù¶È³¬¹ıãĞÖµ(Èç, -20%) Ôò½øĞĞÌØÊâ´¦Àí
+!  é™å®šå‹åŠ›åŠå¯†åº¦çš„å˜åŒ–å¹…åº¦ (see CFL3D User's manual: p236, Time Advancement)
+!  å˜åŒ–å¹…åº¦è¶…è¿‡é˜ˆå€¼(å¦‚, -20%) åˆ™è¿›è¡Œç‰¹æ®Šå¤„ç†
 
    subroutine limit_flow_U(nMesh)
    use Global_var
@@ -30,7 +30,7 @@
    real(PRE_EC),dimension(:,:,:),pointer:: d1,u1,v1,w1,p1
    integer:: ia,ja,ka,i1,j1,k1,kn,Nneg,Kneg(3,10)
    real(PRE_EC):: d0,u0,v0,w0,p0, sn1
-   ! alfac ÏŞ¶¨Öµ£» phic Ä¿±êÖµ (p1 -> pn/phic)
+   ! alfac é™å®šå€¼ï¼› phic ç›®æ ‡å€¼ (p1 -> pn/phic)
    
    Type (Block_TYPE),pointer:: B
 
@@ -85,7 +85,7 @@
        do j=1,ny-1
        do i=1,nx-1
         if(d1(i,j,k) <Ldmin .or. p1(i,j,k) < Lpmin .or. d1(i,j,k) > Ldmax .or. p1(i,j,k) > Lpmax    &
-		  .or. abs(u1(i,j,k)) > Lumax .or. abs(v1(i,j,k)) > Lumax  .or. abs(w1(i,j,k)) > Lumax   ) then                 ! ÎïÀíÁ¿³¬ÏŞ
+		  .or. abs(u1(i,j,k)) > Lumax .or. abs(v1(i,j,k)) > Lumax  .or. abs(w1(i,j,k)) > Lumax   ) then                 ! ç‰©ç†é‡è¶…é™
 	
 	
 		  Nneg=Nneg+1
@@ -114,7 +114,7 @@
 		   enddo
 		   enddo
 
-		   if( kn ==0 ) then         ! ÖÜÎ§È«²¿Îª¡°»µµã¡±
+		   if( kn ==0 ) then         ! å‘¨å›´å…¨éƒ¨ä¸ºâ€œåç‚¹â€
 			 d0=d1(i,j,k)
 			 u0=u1(i,j,k)
 			 v0=v1(i,j,k)
@@ -168,7 +168,7 @@
 	 enddo
      close(101)
 
-     B%IF_OverLimit=1                ! Éè¶¨ÎïÀíÁ¿³¬ÏŞ±êÖ¾
+     B%IF_OverLimit=1                ! è®¾å®šç‰©ç†é‡è¶…é™æ ‡å¿—
    endif
     
    deallocate(d1,u1,v1,w1,p1)
@@ -217,7 +217,7 @@
 		  enddo
 		  enddo
 
-		  if( kn ==0 ) then         ! ÖÜÎ§È«²¿Îª¡°»µµã¡±
+		  if( kn ==0 ) then         ! å‘¨å›´å…¨éƒ¨ä¸ºâ€œåç‚¹â€
             B%U(6,i,j,k)=LSAmax			 
 		  else
 		    B%U(6,i,j,k)=s0/kn

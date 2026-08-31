@@ -1,8 +1,8 @@
 !---------------------------------------------------------
-!  分区： 确定 “进程”与“块”之间的联系
-!  B_proc(m), 给出m块所属的进程号 
-!  B_n(m), 给出m块在该进程中的内部编号
-!  my_blocks(:), 给出本进程所包含的块号
+!  Partition: determine the relationship between "process" and "block"
+!  B_proc(m), gives the process ID to which block m belongs
+!  B_n(m), gives the internal number of block m within its process
+!  my_blocks(:), gives the block numbers contained in the current process
 !    
    subroutine partation
    use Global_var
@@ -25,7 +25,7 @@
 	   print*, "Find partation.dat, read it"
 	   open(100,file="partation.dat")
 	   read(100,*)
-       read(100,*)  Total_block, TP          ! 总块数
+       read(100,*)  Total_block, TP          ! Total number of blocks
 	   read(100,*) 
        if(TP .ne. Total_proc) then
         print*, "Error ! Total_proc is not the same as that in  'partation.dat' "
@@ -40,7 +40,7 @@
 
 	 call MPI_bcast(Total_block,1,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
      allocate (B_proc(Total_block),B_n(Total_block))   
-!   读入B_proc(:)  , 块-->进程 对应关系     
+!   Read B_proc(:), block --> process mapping     
 	 
 	 if(my_id .eq. 0) then
      if(EXT) then
@@ -58,22 +58,22 @@
 
      call MPI_bcast(B_proc(1),Total_block,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
 
-!  计算B_n(m), 第m块在该进程的内部编号
+!  Compute B_n(m), internal number of block m within its process
     do m=1, Total_block
 	 B_n(m)=0
-	 do k=1,m                 ! m块前面有多数个块在B_proc(m)进程
+	 do k=1,m                 ! Number of blocks before m that belong to B_proc(m) process
 	  if(B_proc(k) .eq. B_proc(m))  B_n(m)=B_n(m)+1
 	 enddo
 	enddo 
 
 
-!  统计每个进程包含的块数
+!  Count the number of blocks contained in each process
      Num_block=0
 	 do m=1, Total_block
-	 if(B_proc(m) .eq. my_id )   Num_block=Num_block+1    ! my_id进程包含的块数
+	 if(B_proc(m) .eq. my_id )   Num_block=Num_block+1    ! Number of blocks contained in my_id process
      enddo
      
-	 allocate (my_blocks(Num_block))       ! 本进程包含的块号（数组）
+	 allocate (my_blocks(Num_block))       ! Block numbers contained in this process (array)
 	 k=1
 	 do m=1, Total_block
   	  if(B_proc(m) .eq. my_id )  then
@@ -122,9 +122,9 @@
 	  print*, "Total Cell number=", Total_Cell
 	  print*, "Total Grid number=", Total_grid
  
-!    按网格点从多到少的次序排序
+!     Sort by grid points in descending order
      do m=1,Num_block
-	   G0=B_grid(m,1)     ! 点数
+	   G0=B_grid(m,1)     ! Grid points
 	    mg=m
 	    do n=m+1,Num_block   ! 找出数目最大的
          if(B_grid(n,1) .gt. G0 ) then
@@ -132,7 +132,7 @@
 			mg=n
          endif
        enddo
-!        mg块与m块交换
+!        Swap block mg with block m
          t1=B_grid(mg,1)
 		 t2=B_grid(mg,2)
 		 B_grid(mg,1)=B_grid(m,1)
@@ -156,7 +156,7 @@
        Pgrid(m0)=Pgrid(m0)+B_grid(m,1)
 	   Bproc(mb)=m0-1
      enddo
-!-------------输出--------------------------------------------------
+!-------------Output--------------------------------------------------
      open(99,file="partation-auto.dat")
 	 write(99,*) " Total_block_number    Total_Proc_number "
 	 write(99,*)  Num_block, Num_proc

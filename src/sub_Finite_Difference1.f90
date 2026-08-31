@@ -1,5 +1,5 @@
 
-!----差分-有限体积混合算法----------------
+!----Hybrid Finite Difference / Finite Volume Method----------------
 ! Copyright by Li Xinliang (c) lixl@imech.ac.cn
 
  subroutine init_FDM
@@ -29,9 +29,9 @@
 	 open(99,file="FDM.in")
 	 read(99,*)
 	 read(99,*) 
-	 read(99,*)   FD_Flux, FD_scheme   ! 内嵌差分法采用的通量方式、数值格式
+	 read(99,*)   FD_Flux, FD_scheme   ! Flux method and numerical scheme used by the embedded FDM
      read(99,*)
-	 read(99,*)   nbk    ! 内嵌差分法的块数
+	 read(99,*)   nbk    ! Number of blocks for the embedded FDM
          allocate(BFDM(nbk))	 
 	 read(99,*)
 	 read(99,*)   (BFDM(k),k=1,nbk)
@@ -56,9 +56,9 @@
 	endif
   
 
-   MP=>Mesh(1)         ! 仅最密的网格使用FDM
+   MP=>Mesh(1)         ! Only the finest mesh uses FDM
    do m=1,MP%Num_Block   
-    B=> MP%Block(m)       ! 本块
+    B=> MP%Block(m)       ! This block
     B%IFLAG_FVM_FDM=Method_FVM
 Loop1:	do k=1,nbk
 	      if( BFDM(k) == B%block_no ) then
@@ -70,7 +70,7 @@ Loop1:	do k=1,nbk
   enddo	   
   end
 
-!-----计算差分法相关的Jacobian系数-------------------
+!-----Compute Jacobian coefficients for the FDM method-------------------
 
   subroutine comput_Jacobian_FDM
   use Global_var
@@ -84,13 +84,13 @@ Loop1:	do k=1,nbk
   character(len=50):: filename
 
 !---------------------------------------------------------
-! 依赖的全局数据：
-! Num_Mesh  （整型变量） 网格的套数  （例如，采用3重网格，则该数为3）
-! Mesh(k)%Num_Block  网格的块数；
-! Flag_FDM(:) （整型数组）, 如果Flag_FDM(k)=0, 则第k块网格采用有限体积法， 如果为1，则采用有限差分法；
+!  Dependent global data:
+!  Num_Mesh (integer) Number of mesh levels (e.g., 3 for a 3-level multigrid)
+!  Mesh(k)%Num_Block  Number of blocks in the mesh;
+!  Flag_FDM(:) (integer array), if Flag_FDM(k)=0, block k uses FVM; if 1, uses FDM;
 !----------------------------------------------------------
 
-! 创建数据结构
+! Create data structures
    allocate(FDM_Mesh(Num_Mesh))
    do m=1,Num_Mesh
     Num_block=Mesh(m)%Num_Block
@@ -98,7 +98,7 @@ Loop1:	do k=1,nbk
     do nB=1,Num_block
     Bm=>FDM_Mesh(m)%Block(nB)
 	B=>Mesh(m)%Block(nB) 
- 	  if(B%IFLAG_FVM_FDM .eq. Method_FDM)   then  ! 该块采用差分法计算
+ 	  if(B%IFLAG_FVM_FDM .eq. Method_FDM)   then  ! This block uses FDM
        nx=B%nx-1; ny=B%ny-1; nz=B%nz-1   
 	  allocate(Bm%ix(nx,ny,nz), Bm%iy(nx,ny,nz), Bm%iz(nx,ny,nz), &
 	          Bm%jx(nx,ny,nz), Bm%jy(nx,ny,nz), Bm%jz(nx,ny,nz), &
@@ -120,15 +120,15 @@ Loop1:	do k=1,nbk
 	 if(B%IFLAG_FVM_FDM .ne. Method_FDM ) cycle    ! only for FDM (Finite difference method)
  !    print*, " Comput Jocabian Coefficient, Block No.", m
 
-     nx=B%nx-1  ! 网格点数（若物理量储存于网格中心，指的是网格中心的数目）
+     nx=B%nx-1  ! Number of grid points (cell center count if variables stored at cell centers)
 	 ny=B%ny-1 
 	 nz=B%nz-1     
 
 
-!   申请内存  储存坐标 
+!   Allocate memory for coordinates 
      allocate(x(nx,ny,nz),y(nx,ny,nz),z(nx,ny,nz))
 
-!  物理量所在点的坐标 （若物理量储存在网格中心，则为网格中心点的坐标）
+!  Coordinates of points where variables are stored (cell centers if stored at cell centers)
      do k=1,nz
 	 do j=1,ny
 	 do i=1,nx
@@ -138,7 +138,7 @@ Loop1:	do k=1,nbk
 	 enddo
 	 enddo
      enddo
-!  计算Jacobian系数
+!  Compute Jacobian coefficients
     call grid_Jacobian(nx,ny,nz,   x(1,1,1),y(1,1,1),z(1,1,1), &
 	                   Bm%ix(1,1,1),Bm%iy(1,1,1),Bm%iz(1,1,1), &
 	                   Bm%jx(1,1,1),Bm%jy(1,1,1),Bm%jz(1,1,1), &
@@ -198,7 +198,7 @@ Loop1:	do k=1,nbk
 	  xi1=xi(i,j,k); xj1=xj(i,j,k); xk1=xk(i,j,k)
 	  yi1=yi(i,j,k); yj1=yj(i,j,k); yk1=yk(i,j,k)
 	  zi1=zi(i,j,k); zj1=zj(i,j,k); zk1=zk(i,j,k)
-	  Jac1=1.d0/(xi1*yj1*zk1+yi1*zj1*xk1+zi1*xj1*yk1-zi1*yj1*xk1-yi1*xj1*zk1-xi1*zj1*yk1)   ! 1./Jocabian = d(x,y,z)/d(i,j,k) 
+	  Jac1=1.d0/(xi1*yj1*zk1+yi1*zj1*xk1+zi1*xj1*yk1-zi1*yj1*xk1-yi1*xj1*zk1-xi1*zj1*yk1)   ! 1./Jacobian = d(x,y,z)/d(i,j,k) 
       Jac(i,j,k)=Jac1
 	  ix(i,j,k)=Jac1*(yj1*zk1-zj1*yk1)
 	  iy(i,j,k)=Jac1*(zj1*xk1-xj1*zk1)
@@ -218,7 +218,7 @@ Loop1:	do k=1,nbk
     end subroutine grid_Jacobian
 
 !c==========================================================================================
-! 采用差分方法计算三个方向的导数 （内部6阶中心差分，边界处降阶）, 用于计算Jacobian系数 
+!  Compute derivatives in three directions using finite differences (6th-order centered interior, reduced order at boundaries), used for Jacobian coefficients 
        subroutine dx0(nx,f,fx)
         use precision_EC
 		implicit none

@@ -1,5 +1,5 @@
 !--OpenCFD EC Ver 0.6d----------------------------------------------------------------
-! Í¨Á¿·ÖÁÑÄ£¿é£¬°üº¬HLL/HLLC, Roe, Steger-Warming, Van Leer, AUSM+ µÈ¶àÖÖ·½·¨
+! é€šé‡åˆ†è£‚æ¨¡å—ï¼ŒåŒ…å«HLL/HLLC, Roe, Steger-Warming, Van Leer, AUSM+ ç­‰å¤šç§æ–¹æ³•
 ! Developed by Li Xinliang and Leng Yan
 !--------------------------------------------------------------------------------------
 !  Flux by using  HLL or  HLLC approximate Riemann slover
@@ -142,7 +142,7 @@
 !-----------------------------------------------------------
 !-----------------------------------------------------------
 ! Flux by using Roe approximate Riemann slover
-! ´úÂëÓÉÀäÑÒ¿ª·¢
+! ä»£ç ç”±å†·å²©å¼€å‘
 ! A bug is removed, 2011-5-6
 ! A bug is removed, 2015-8-31
     subroutine Flux_Roe_1D(QL,QR,Flux,gamma)  
@@ -164,7 +164,7 @@
      UR(1)=dr; UR(2)=dr*uur; UR(3)=dr*vvr; UR(4)=dr*wwr; UR(5)=pr/(gamma-1.d0)+dr*(uur*uur+vvr*vvr+wwr*wwr)*0.5d0 
      Fl(1)=UL(2); Fl(2)=UL(2)*uul+pl; Fl(3)=UL(3)*uul; Fl(4)=UL(4)*uul; Fl(5)=uul*(UL(5)+pl)
      Fr(1)=UR(2); Fr(2)=UR(2)*uur+pr; Fr(3)=UR(3)*uur; Fr(4)=UR(4)*uur; Fr(5)=uur*(UR(5)+pr)
-!----RoeÆ½¾ù---------------------
+!----Roeå¹³å‡---------------------
      tmpp=sqrt(dr/dl)
      avd=0.25d0*dl*(1.d0+tmpp)*(1.d0+tmpp)
      avu=(uul+tmpp*uur)/(1.d0+tmpp)
@@ -179,7 +179,7 @@
      lamda(2)=abs(avu)
      lamda(3)=abs(avu+ava)
 
-! HartenĞÍìØĞŞÕı 
+! Hartenå‹ç†µä¿®æ­£ 
      if(lamda(1) < delt) then
        lamda(1)=( lamda(1)**2 +delt*delt)/(2.d0*delt)
      end if
@@ -210,7 +210,7 @@
 	end
 
 !c========================================================
-! Van Leer Á÷Í¨Ê¸Á¿·ÖÁÑ £¨´úÂëÓÉÀäÑÒ¿ª·¢£©
+! Van Leer æµé€šçŸ¢é‡åˆ†è£‚ ï¼ˆä»£ç ç”±å†·å²©å¼€å‘ï¼‰
 !-------Extend 1D Van Leer FLux for finite volume method
 ! F=F+ (uL) + F- (uR)	
 
@@ -275,7 +275,7 @@
 	  end
 
 !------------------------------------------------------------------------------------------------
-! AUSM+ Í¨Á¿·ÖÁÑ £¨´úÂëÓÉÀäÑÒ¿ª·¢£©
+! AUSM+ é€šé‡åˆ†è£‚ ï¼ˆä»£ç ç”±å†·å²©å¼€å‘ï¼‰
 !-------Extend 1D Ausm FLux for finite volume method
 ! F=F+ (uL) + F- (uR)	
 

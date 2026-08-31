@@ -1,12 +1,12 @@
 !-----------------------------------------------------
-!  ¼ÆËãµ½±ÚÃæµÄ¾àÀë    
+!  è®¡ç®—åˆ°å£é¢çš„è·ç¦»    
 !  Code by Li Xinliang
 
   module Wall_dist
    use precision_EC
    implicit none
-   integer,save:: Npw_total                ! ×Ü±ÚÃæÍø¸ñÊý
-   real(PRE_EC),allocatable,dimension(:,:):: Xw   ! ±ÚÃæµãµÄ×ø±ê
+   integer,save:: Npw_total                ! æ€»å£é¢ç½‘æ ¼æ•°
+   real(PRE_EC),allocatable,dimension(:,:):: Xw   ! å£é¢ç‚¹çš„åæ ‡
   end module Wall_dist
 
  subroutine Comput_dist_wall
@@ -16,7 +16,7 @@
     logical EXT
 	integer:: Iext,ierr
 
-!  ÅÐ¶Ï 'wall_dist.dat'ÎÄ¼þÊÇ·ñ´æÔÚ£¬ Èç´æÔÚÔò¶ÁÈ¡£» Èç²»´æÔÚ£¬Ôò¼ÆËãµ½±ÚÃæµÄ¾àÀë
+!  åˆ¤æ–­ 'wall_dist.dat'æ–‡ä»¶æ˜¯å¦å­˜åœ¨ï¼Œ å¦‚å­˜åœ¨åˆ™è¯»å–ï¼› å¦‚ä¸å­˜åœ¨ï¼Œåˆ™è®¡ç®—åˆ°å£é¢çš„è·ç¦»
 
    if(my_id .eq. 0) then
      Inquire(file="wall_dist.dat",Exist=EXT)
@@ -33,9 +33,9 @@
    if(Iext .eq. 1) then
      call read_dw
    else
-     call wall_point         ! ÊÕ¼¯±ÚÃæÍø¸ñµã
-     call comput_wall_dist          ! ¼ÆËã¸÷µãµ½±ÚÃæµÄ¾àÀë
-     call write_dw           ! Ð´ÈëÎÄ¼þ
+     call wall_point         ! æ”¶é›†å£é¢ç½‘æ ¼ç‚¹
+     call comput_wall_dist          ! è®¡ç®—å„ç‚¹åˆ°å£é¢çš„è·ç¦»
+     call write_dw           ! å†™å…¥æ–‡ä»¶
    endif
 
    end subroutine Comput_dist_wall
@@ -77,7 +77,7 @@
       do j=1,ny-1
        do i=1,nx-1
         B%dw(i,j,k)=(dis(i,j,k)+dis(i,j+1,k)+dis(i,j,k+1)+dis(i,j+1,k+1)+ &
-            dis(i+1,j,k)+dis(i+1,j+1,k)+dis(i+1,j,k+1)+dis(i+1,j+1,k+1))*0.125    ! ¸ñÐÄµãÉÏµÄÖµ
+            dis(i+1,j,k)+dis(i+1,j+1,k)+dis(i+1,j,k+1)+dis(i+1,j+1,k+1))*0.125    ! æ ¼å¿ƒç‚¹ä¸Šçš„å€¼
         Dis_max=max(Dis_max,B%dw(i,j,k))
         Dis_min=min(Dis_min,B%dw(i,j,k))
        enddo
@@ -104,7 +104,7 @@
   
    
    
-! ÊÕ¼¯±ÚÃæÉÏµÄÍø¸ñµã  
+! æ”¶é›†å£é¢ä¸Šçš„ç½‘æ ¼ç‚¹  
   subroutine wall_point
     use  Global_Var
     use  Wall_dist
@@ -113,12 +113,12 @@
 	Type (Mesh_TYPE),pointer:: MP
     Type (Block_TYPE),pointer:: B
     TYPE(BC_MSG_TYPE),pointer:: BC
-    integer,allocatable,dimension(:):: Npw,Nc,displs  ! ¸÷½ø³Ì±ÚÃæµãµÄÊýÄ¿
-    real(PRE_EC),allocatable,dimension(:,:):: Xw1  ! ±ÚÃæµã£¨±¾½ø³Ì£©
+    integer,allocatable,dimension(:):: Npw,Nc,displs  ! å„è¿›ç¨‹å£é¢ç‚¹çš„æ•°ç›®
+    real(PRE_EC),allocatable,dimension(:,:):: Xw1  ! å£é¢ç‚¹ï¼ˆæœ¬è¿›ç¨‹ï¼‰
     allocate(Npw(0:Total_proc-1),Nc(0:Total_proc-1),displs(0:Total_proc-1))
 
     MP=> Mesh(1)
-!     Í³¼Æ±ÚÃæÍø¸ñµãµÄÊýÄ¿
+!     ç»Ÿè®¡å£é¢ç½‘æ ¼ç‚¹çš„æ•°ç›®
       Npw1=0
       do mb=1,MP%Num_Block
           B=>Mp%Block(mb)
@@ -131,7 +131,7 @@
 	   enddo
        allocate(Xw1(3,Npw1))
 
-!    ¶ÁÈë±¾½ø³ÌµÄ±ÚÃæÍø¸ñ×ø±ê
+!    è¯»å…¥æœ¬è¿›ç¨‹çš„å£é¢ç½‘æ ¼åæ ‡
       k0=1
       do mb=1,MP%Num_Block
           B=>Mp%Block(mb)
@@ -152,12 +152,12 @@
             enddo
 	   enddo
 
-! È«²¿½ø³ÌµÄ×Ü±ÚÃæÍø¸ñÊý
+! å…¨éƒ¨è¿›ç¨‹çš„æ€»å£é¢ç½‘æ ¼æ•°
        call MPI_ALLREDUCE(Npw1,Npw_Total,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
        allocate(Xw(3,Npw_total))
-! ½øÐÐÈ«ËÑ¼¯²Ù×÷£¬µÃµ½È«²¿µÄ±ÚÃæÍø¸ñ×ø±ê
+! è¿›è¡Œå…¨æœé›†æ“ä½œï¼Œå¾—åˆ°å…¨éƒ¨çš„å£é¢ç½‘æ ¼åæ ‡
        call MPI_Allgather(Npw1,1,MPI_Integer,Npw,1,MPI_Integer,MPI_COMM_WORLD,ierr)
-	   Nc(:)=3*Npw(:)   !Êý¾ÝÁ¿ 
+	   Nc(:)=3*Npw(:)   !æ•°æ®é‡ 
 	   displs(0)=0
 	   do m=1,Total_proc-1
 	     displs(m)=displs(m-1)+Nc(m-1)

@@ -1,27 +1,27 @@
-!  后处理模块,  计算力和力矩
+!  Post-processing module: compute forces and moments
 !  A bug removed, 2017-3-13 
 !--------------------------------------------------------
   subroutine comput_force      
    use Global_Var
    implicit none
    integer:: i,j,k,m,mB,nf,nx,ny,nz,NM,ierr
-   real(PRE_EC):: Fx,Fy,Fz,Mx,My,Mz   ! 6分量
-   real(PRE_EC):: Px,Py,Pz,Cfx,Cfy,Cfz   ! 压力和摩擦力
+   real(PRE_EC):: Fx,Fy,Fz,Mx,My,Mz   ! 6 components
+   real(PRE_EC):: Px,Py,Pz,Cfx,Cfy,Cfz   ! Pressure and friction forces
    real(PRE_EC):: fx0,fy0,fz0,xc,yc,zc,p1,p2
    real(PRE_EC):: P_inf,Pw  
-   real(PRE_EC):: CL,CD,CS      ! 升力系数、阻力系数、侧向力系数
-   real(PRE_EC),dimension(:),allocatable:: Mx1,My1,Mz1,Px1,Py1,Pz1,Cfx1,Cfy1,Cfz1    ! 各块的气动力、力矩
-   real(PRE_EC),dimension(9):: Ft,Ft0  ! mpi reduce 汇总
+   real(PRE_EC):: CL,CD,CS      ! Lift, drag, and side force coefficients
+   real(PRE_EC),dimension(:),allocatable:: Mx1,My1,Mz1,Px1,Py1,Pz1,Cfx1,Cfy1,Cfz1    ! Aerodynamic forces and moments of each block
+   real(PRE_EC),dimension(9):: Ft,Ft0  ! MPI reduce summary
    
    integer:: nMesh
    Type (Block_TYPE),pointer:: B
    Type (BC_MSG_TYPE),pointer:: Bc
    character(len=50):: filename
 
-!   print*, "comput force ..."    ! 如没有该语句在SW上运行出错 ???
+!   print*, "comput force ..."    ! If this statement is missing, an error occurs when running on SW ???
 
    p_inf=1.d0/(gamma*Ma*Ma)
-! 搜索细网格所有块的所有子面，如果发现固壁边界条件，则统计气动力及力矩
+! Search all subfaces of all blocks in the fine mesh; if a wall boundary condition is found, compute forces and moments
    NM=Mesh(1)%Num_Block
    allocate(Mx1(NM),My1(NM),Mz1(NM),Px1(NM),Py1(NM),Pz1(NM),Cfx1(NM),Cfy1(NM),Cfz1(NM))
    
@@ -35,19 +35,19 @@
        Bc=> B%bc_msg(nf)
 
        if(Bc%bc .eq. BC_WALL) then
-         if(Bc%face .eq. 1 ) then              ! i- 面
+         if(Bc%face .eq. 1 ) then              ! i- face
            do k=Bc%kb,Bc%ke-1
              do j=Bc%jb,Bc%je-1
-!-------------------------------表面压力----------------------------------------------------  
+!-------------------------------Surface Pressure----------------------------------------------------  
                p1=(gamma-1.d0)*(B%U(5,1,j,k)-(B%U(2,1,j,k)**2+B%U(3,1,j,k)**2+B%U(4,1,j,k)**2)/B%U(1,1,j,k))
                p2=(gamma-1.d0)*(B%U(5,0,j,k)-(B%U(2,0,j,k)**2+B%U(3,0,j,k)**2+B%U(4,0,j,k)**2)/B%U(1,0,j,k))
-               Pw=-(0.5d0*(p1+p2)-p_inf )*B%si(1,j,k)    ! 外法向
-! -------------------------积分表面压力及表面摩擦阻力 -----------------------------------          
+               Pw=-(0.5d0*(p1+p2)-p_inf )*B%si(1,j,k)    ! Outward normal
+! -------------------------Integrate surface pressure and skin friction-----------------------------------          
                Px1(mB)=Px1(mB)+Pw*B%ni1(1,j,k) ;   Py1(mB)=Py1(mB)+Pw*B%ni2(1,j,k) ;  Pz1(mB)=Pz1(mB)+Pw*B%ni3(1,j,k)   
-!              粘性力 （i-, j-, k- 为正； i+ , j+, k+ 为负）
+!              Viscous force (i-, j-, k- are positive; i+, j+, k+ are negative)
                Cfx1(mB)=Cfx1(mB)+B%Surf1(j,k,1) ;  Cfy1(mB)=Cfy1(mB)+B%Surf1(j,k,2) ;  Cfz1(mB)=Cfz1(mB)+B%Surf1(j,k,3)     
 
-! --------------------------计算力矩 (矩心坐标 centroid(1:3) )------------------------            
+! --------------------------Compute moment (centroid coordinates centroid(1:3))------------------------            
                fx0=Pw*B%ni1(1,j,k)+B%Surf1(j,k,1)             
                fy0=Pw*B%ni2(1,j,k)+B%Surf1(j,k,2)
                fz0=Pw*B%ni3(1,j,k)+B%Surf1(j,k,3)
@@ -61,7 +61,7 @@
            enddo
 
 
-         else if(Bc%face .eq. 2 ) then       ! j- 面
+         else if(Bc%face .eq. 2 ) then       ! j- face
            do k=Bc%kb,Bc%ke-1
              do i=Bc%ib,Bc%ie-1
                p1=(gamma-1.d0)*(B%U(5,i,1,k)-(B%U(2,i,1,k)**2+B%U(3,i,1,k)**2+B%U(4,i,1,k)**2)/B%U(1,i,1,k))
@@ -70,7 +70,7 @@
                Px1(mB)=Px1(mB)+Pw*B%nj1(i,1,k);   Py1(mB)=Py1(mB)+Pw*B%nj2(i,1,k) ;   Pz1(mB)=Pz1(mB)+Pw*B%nj3(i,1,k)   
                Cfx1(mB)=Cfx1(mB)+B%Surf2(i,k,1); Cfy1(mB)=Cfy1(mB)+B%Surf2(i,k,2);  Cfz1(mB)=Cfz1(mB)+B%Surf2(i,k,3)
 
- ! --------------------------计算力矩 (以坐标原点为中心) ---------------------------           
+ ! --------------------------Compute moment (centered at coordinate origin)---------------------------           
                fx0=Pw*B%nj1(i,1,k)+B%Surf2(i,k,1)                
                fy0=Pw*B%nj2(i,1,k)+B%Surf2(i,k,2)
                fz0=Pw*B%nj3(i,1,k)+B%Surf2(i,k,3)
@@ -84,7 +84,7 @@
            enddo        
 
 
-         else if(Bc%face .eq. 3 ) then       ! k- 面
+         else if(Bc%face .eq. 3 ) then       ! k- face
            do j=Bc%jb,Bc%je-1
              do i=Bc%ib,Bc%ie-1   
                p1=(gamma-1.d0)*(B%U(5,i,j,1)-(B%U(2,i,j,1)**2+B%U(3,i,j,1)**2+B%U(4,i,j,1)**2)/B%U(1,i,j,1))
@@ -106,20 +106,20 @@
              enddo
            enddo 
 
-         else if(Bc%face .eq. 4 ) then              ! i+ 面
+         else if(Bc%face .eq. 4 ) then              ! i+ face
            do k=Bc%kb,Bc%ke-1
              do j=Bc%jb,Bc%je-1
- !-----------------------------------------表面压力 ---------------------------------------------------               
+ !-----------------------------------------Surface Pressure---------------------------------------------------               
                p1=(gamma-1.d0)*(B%U(5,nx-1,j,k)-(B%U(2,nx-1,j,k)**2+B%U(3,nx-1,j,k)**2+B%U(4,nx-1,j,k)**2)/B%U(1,nx-1,j,k))
                p2=(gamma-1.d0)*(B%U(5,nx,j,k)-(B%U(2,nx,j,k)**2+B%U(3,nx,j,k)**2+B%U(4,nx,j,k)**2)/B%U(1,nx,j,k))
-               Pw= (0.5d0*(p1+p2)-p_inf )*B%si(nx,j,k)  ! 外法向
-! ------------------------------积分表面压力及表面摩擦阻力------------------------------------------           
+               Pw= (0.5d0*(p1+p2)-p_inf )*B%si(nx,j,k)  ! Outward normal
+! ------------------------------Integrate surface pressure and skin friction------------------------------------------           
                Px1(mB)=Px1(mB)+Pw*B%ni1(nx,j,k) ;   Py1(mB)=Py1(mB)+Pw*B%ni2(nx,j,k) ;  Pz1(mB)=Pz1(mB)+Pw*B%ni3(nx,j,k)   
-!            粘性力 （i+, j+, k+ 面为负， 壁面所受力）
+!            Viscous force (i+, j+, k+ faces are negative, force on the wall)
 !               Cfx1(mB)=Cfx1(mB)+B%Surf4(j,k,1) ;  Cfy1(mB)=Cfy1(mB)+B%Surf4(j,k,2) ;  Cfz1(mB)=Cfz1(mB)+B%Surf4(j,k,3)         ! Bug removed
                Cfx1(mB)=Cfx1(mB)-B%Surf4(j,k,1) ;  Cfy1(mB)=Cfy1(mB)-B%Surf4(j,k,2) ;  Cfz1(mB)=Cfz1(mB)-B%Surf4(j,k,3)
 
-! -------------------------------计算力矩 (以坐标原点为中心) --------------------------------------           
+! -------------------------------Compute moment (centered at coordinate origin)--------------------------------------           
                fx0=Pw*B%ni1(nx,j,k)-B%Surf4(j,k,1)              ! Bug removed 
                fy0=Pw*B%ni2(nx,j,k)-B%Surf4(j,k,2)
                fz0=Pw*B%ni3(nx,j,k)-B%Surf4(j,k,3)
@@ -133,7 +133,7 @@
            enddo
 
 
-         else if(Bc%face .eq. 5 ) then       ! j+ 面
+         else if(Bc%face .eq. 5 ) then       ! j+ face
            do k=Bc%kb,Bc%ke-1
              do i=Bc%ib,Bc%ie-1
                p1=(gamma-1.d0)*(B%U(5,i,ny-1,k)-(B%U(2,i,ny-1,k)**2+B%U(3,i,ny-1,k)**2+B%U(4,i,ny-1,k)**2)/B%U(1,i,ny-1,k))
@@ -143,7 +143,7 @@
 !              Cfx1(mB)=Cfx1(mB)+B%Surf5(i,k,1); Cfy1(mB)=Cfy1(mB)+B%Surf5(i,k,2);  Cfz1(mB)=Cfz1(mB)+B%Surf5(i,k,3)
                Cfx1(mB)=Cfx1(mB)-B%Surf5(i,k,1); Cfy1(mB)=Cfy1(mB)-B%Surf5(i,k,2);  Cfz1(mB)=Cfz1(mB)-B%Surf5(i,k,3)
 
-! --------------------------------计算力矩 (以坐标原点为中心)  ---------------------------------------          
+! --------------------------------Compute moment (centered at coordinate origin)---------------------------------------          
                fx0=Pw*B%nj1(i,ny,k)-B%Surf5(i,k,1)                 ! Bug removed
                fy0=Pw*B%nj2(i,ny,k)-B%Surf5(i,k,2)
                fz0=Pw*B%nj3(i,ny,k)-B%Surf5(i,k,3)
@@ -157,7 +157,7 @@
            enddo        
 
 
-         else if(Bc%face .eq. 6 ) then       ! k+ 面
+         else if(Bc%face .eq. 6 ) then       ! k+ face
            do j=Bc%jb,Bc%je-1
              do i=Bc%ib,Bc%ie-1
                p1=(gamma-1.d0)*(B%U(5,i,j,nz-1)-(B%U(2,i,j,nz-1)**2+B%U(3,i,j,nz-1)**2+B%U(4,i,j,nz-1)**2)/B%U(1,i,j,nz-1))
@@ -187,7 +187,7 @@
    Fx=0.d0; Fy=0.d0; Fz=0.d0; Mx=0.d0; My=0.d0; Mz=0.d0
    Px=0.d0; Py=0.d0; Pz=0.d0; Cfx=0.d0; Cfy=0.d0; Cfz=0.d0
  
- !  把各块的气动力、力矩加起来
+ !  Sum up aerodynamic forces and moments of all blocks
    do mB=1,NM
    Px=Px+Px1(mB); Py=Py+Py1(mB); Pz=Pz+Pz1(mB)
    Cfx=Cfx+Cfx1(mB); Cfy=Cfy+Cfy1(mB); Cfz=Cfz+Cfz1(mB)
@@ -198,14 +198,14 @@
    Ft(4)=Cfx; Ft(5)=Cfy; Ft(6)=Cfz
    Ft(7)=Mx;  Ft(8)=My; Ft(9)=Mz
 
-!  各进程归约求和
+!  MPI reduction sum across all processes
    call MPI_ALLREDUCE(Ft,Ft0,9,OCFD_DATA_TYPE,MPI_SUM,MPI_COMM_WORLD,ierr)
 
 !   Fx=Px+Cfx; Fy=Py+Cfy; Fz=Pz+Cfz
     Ft0(1:6)=2.d0*Ft0(1:6)/Ref_S
 	Ft0(7:9)=2.d0*Ft0(7:9)/(Ref_S*Ref_L)
 
-	Fx=Ft0(1)+Ft0(4)              ! 气动力系数
+	Fx=Ft0(1)+Ft0(4)              ! Aerodynamic force coefficients
 	Fy=Ft0(2)+Ft0(5)
 	Fz=Ft0(3)+Ft0(6)
 
@@ -265,10 +265,10 @@
   end  subroutine comput_force   
         
 !-----------------------------------------------------------------------------------
-!  光顺（滤波） 操作， 耗散很大的滤波操作。 用于对初值的光顺，或者计算异常（如负温度）时的光顺
-!  滤波运算可以消除高频振荡，提高计算的稳定性；但也会增加耗散，降低精度
-!  2阶精度滤波耗散非常大，只能在处理初值或异常是使用，不可在常规的计算中使用。
-!  4阶精度滤波也有一定耗散，计算过程中需谨慎使用 
+!  Smoothing (filtering) operation, highly dissipative. Used for smoothing initial values or when computation is abnormal (e.g., negative temperature)
+!  Filtering can eliminate high-frequency oscillations and improve stability; however, it also increases dissipation and reduces accuracy
+!  2nd-order filtering is highly dissipative and should only be used for initial values or abnormal conditions, not in regular computations.
+!  4th-order filtering also has some dissipation; use with caution during computation 
   subroutine smoothing_oneMesh(nMesh,Smooth_method)     
    use Global_Var
    implicit none
@@ -281,12 +281,12 @@
     call   smoothing_oneBlock_4th(nMesh,mBlock)     
    endif
    enddo
-   call Boundary_condition_onemesh(nMesh)             ! 边界条件 （设定Ghost Cell的值）
-   call update_buffer_onemesh(nMesh)                  ! 同步各块的交界区
+   call Boundary_condition_onemesh(nMesh)             ! Boundary conditions (set Ghost Cell values)
+   call update_buffer_onemesh(nMesh)                  ! Synchronize block interfaces
    end subroutine smoothing_oneMesh
 
 !----------------------------------------------------------
-! 低精度滤波（2阶精度）
+! Low-order filtering (2nd order)
   subroutine smoothing_oneBlock_2nd(nMesh,mBlock)     
    use Global_Var
    implicit none
@@ -298,7 +298,7 @@
    B=>Mesh(nMesh)%block(mBlock)
    nx=B%nx; ny=B%ny; nz=B%nz
 !----------------------------------------------------------------------------
-! Warning, allocatable不能作为私有变量 !!!   
+! Warning, allocatable cannot be used as a private variable !!!   
 !$OMP PARALLEL DEFAULT(PRIVATE) SHARED(nx,ny,nz,NVAR1,B)
 
 !$OMP DO   
@@ -351,7 +351,7 @@
    
    
 !------------------------------------------------------------------------------------------------
-! 高精度滤波（4阶精度）
+! High-order filtering (4th order)
   subroutine smoothing_oneBlock_4th(nMesh,mBlock)     
    use Global_Var
    implicit none

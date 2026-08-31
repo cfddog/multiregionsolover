@@ -29,13 +29,13 @@
    flag1=0
 
 !----- get Omiga (vorticity)  omiga=sqrt(omigax**2+omigay**2+omigaz**2) at the cell's center ------
-! ²ÉÓÃÖĞĞÄ²î·ÖÇó½â
+! é‡‡ç”¨ä¸­å¿ƒå·®åˆ†æ±‚è§£
 !$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED (nx,ny,nz,uu,v,w,omiga,B)
    do k=1,nz-1
    do j=1,ny-1
    do i=1,nx-1
 
-! ÎïÀíÁ¿¶ÔÓÚ¼ÆËã×ø±ê£¨ÏÂ±ê£©µÄµ¼Êı
+! ç‰©ç†é‡å¯¹äºè®¡ç®—åæ ‡ï¼ˆä¸‹æ ‡ï¼‰çš„å¯¼æ•°
  
    ui=uu(i+1,j,k)-uu(i-1,j,k)            
    vi=v(i+1,j,k)-v(i-1,j,k)  
@@ -51,7 +51,7 @@
    jx=B%jx0(i,j,k); jy=B%jy0(i,j,k); jz=B%jz0(i,j,k)
    kx=B%kx0(i,j,k); ky=B%ky0(i,j,k); kz=B%kz0(i,j,k)
 
-!----¶ÔÎïÀí×ø±êµÄÆ«µ¼Êı----------------------------------------------
+!----å¯¹ç‰©ç†åæ ‡çš„åå¯¼æ•°----------------------------------------------
    ux=ui*ix+uj*jx+uk*kx
    vx=vi*ix+vj*jx+vk*kx
    wx=wi*ix+wj*jx+wk*kx
@@ -73,10 +73,10 @@ do ksub=1, B%subface
   Bc=> B%bc_msg(ksub)
 
  if(Bc%bc .eq. BC_WALL) then   ! Wall boundary
-  ! ÑØÍø¸ñÏßÒ»Î¬´¦Àí£¨¼ÙÉèÍø¸ñÏß´¹Ö±±ÚÃæ£©---------------------------------------
+  ! æ²¿ç½‘æ ¼çº¿ä¸€ç»´å¤„ç†ï¼ˆå‡è®¾ç½‘æ ¼çº¿å‚ç›´å£é¢ï¼‰---------------------------------------
   if(Bc%face .eq. 1 .or. Bc%face .eq. 4) then   ! i+ or i- 
     allocate(yy(nx),Amu1d(nx),Amut1d(nx),d1d(nx),u1d(nx),omiga1d(nx))
-    Amut1d=0.d0; Amu1d=0.d0  ! ³õÊ¼»¯
+    Amut1d=0.d0; Amu1d=0.d0  ! åˆå§‹åŒ–
    
     
     if(Bc%face .eq. 1) then
@@ -104,11 +104,11 @@ do ksub=1, B%subface
        omiga1d(i0)=omiga(i,j,k)
        Amu1d(i0)=B%mu(i,j,k)
      enddo
- !  BLÄ£ĞÍ£¨Ò»Î¬£©  
+ !  BLæ¨¡å‹ï¼ˆä¸€ç»´ï¼‰  
      call BL_model_1d(nx-1,yy,Amu1d,Amut1d,d1d,u1d,omiga1d)
    
      do i=1,nx-1
-! Èç¹ûÒ»¸öµã´¦ÓÚ¶àÌõÏßÉÏ£¬È¡Õ³ĞÔÏµÊı×îĞ¡µÄÖµ
+! å¦‚æœä¸€ä¸ªç‚¹å¤„äºå¤šæ¡çº¿ä¸Šï¼Œå–ç²˜æ€§ç³»æ•°æœ€å°çš„å€¼
       if(Bc%face .eq. 1) then
        i0=i
       else
@@ -127,9 +127,9 @@ do ksub=1, B%subface
     enddo
     deallocate(yy,Amu1d,Amut1d,d1d,u1d,omiga1d)
 
-! !!! To set Amu_t=0 in the wall      ÉèÖÃĞéÍø¸ñµãÉÏµÄmut(-1)=-mut(1), ÒÔ±£Ö¤±ÚÃæÉÏmut=0 (mut=0.5*(mut(-1)+mut(1))
+! !!! To set Amu_t=0 in the wall      è®¾ç½®è™šç½‘æ ¼ç‚¹ä¸Šçš„mut(-1)=-mut(1), ä»¥ä¿è¯å£é¢ä¸Šmut=0 (mut=0.5*(mut(-1)+mut(1))
 
-!  ÉèÖÃ±ÚÃæµÚ1²ãÍø¸ñÉÏµÄÍÄÁ÷Õ³ĞÔÏµÊıÎª0
+!  è®¾ç½®å£é¢ç¬¬1å±‚ç½‘æ ¼ä¸Šçš„æ¹æµç²˜æ€§ç³»æ•°ä¸º0
     if(Bc%face .eq. 1) then
      B%mu_t(0,Bc%jb:Bc%je-1,Bc%kb:Bc%ke-1)=0.d0
 	 B%mu_t(1,Bc%jb:Bc%je-1,Bc%kb:Bc%ke-1)=0.d0   
@@ -141,7 +141,7 @@ do ksub=1, B%subface
 
  else if(Bc%face .eq. 2 .or. Bc%face .eq. 4) then   ! face of j- or j+ 
     allocate(yy(ny),Amu1d(ny),Amut1d(ny),d1d(ny),u1d(ny),omiga1d(ny))
-     Amut1d=0.d0; Amu1d=0.d0  ! ³õÊ¼»¯
+     Amut1d=0.d0; Amu1d=0.d0  ! åˆå§‹åŒ–
 
     
     if(Bc%face .eq. 2) then
@@ -168,11 +168,11 @@ do ksub=1, B%subface
        omiga1d(j0)=omiga(i,j,k)
        Amu1d(j0)=B%mu(i,j,k)
      enddo
- !  BLÄ£ĞÍ£¨Ò»Î¬£©  
+ !  BLæ¨¡å‹ï¼ˆä¸€ç»´ï¼‰  
      call BL_model_1d(ny-1,yy,Amu1d,Amut1d,d1d,u1d,omiga1d)
    
      do j=1,ny-1
-! Èç¹ûÒ»¸öµã´¦ÓÚ¶àÌõÏßÉÏ£¬È¡Õ³ĞÔÏµÊı×îĞ¡µÄÖµ
+! å¦‚æœä¸€ä¸ªç‚¹å¤„äºå¤šæ¡çº¿ä¸Šï¼Œå–ç²˜æ€§ç³»æ•°æœ€å°çš„å€¼
       if(Bc%face .eq. 2) then
        j0=j
       else
@@ -203,7 +203,7 @@ do ksub=1, B%subface
 
   else if(Bc%face .eq. 3 .or. Bc%face .eq. 6) then   ! face of k- or k+ 
     allocate(yy(nz),Amu1d(nz),Amut1d(nz),d1d(nz),u1d(nz),omiga1d(nz))
-    Amut1d=0.d0; Amu1d=0.d0  ! ³õÊ¼»¯
+    Amut1d=0.d0; Amu1d=0.d0  ! åˆå§‹åŒ–
 
     
     if(Bc%face .eq. 3) then
@@ -230,11 +230,11 @@ do ksub=1, B%subface
        omiga1d(k0)=omiga(i,j,k)
        Amu1d(k0)=B%mu(i,j,k)
      enddo
- !  BLÄ£ĞÍ£¨Ò»Î¬£©  
+ !  BLæ¨¡å‹ï¼ˆä¸€ç»´ï¼‰  
      call BL_model_1d(nz-1,yy,Amu1d,Amut1d,d1d,u1d,omiga1d)
    
      do k=1,nz-1
-! Èç¹ûÒ»¸öµã´¦ÓÚ¶àÌõÏßÉÏ£¬È¡Õ³ĞÔÏµÊı×îĞ¡µÄÖµ
+! å¦‚æœä¸€ä¸ªç‚¹å¤„äºå¤šæ¡çº¿ä¸Šï¼Œå–ç²˜æ€§ç³»æ•°æœ€å°çš„å€¼
       if(Bc%face .eq. 3) then
        k0=k
       else
@@ -309,7 +309,7 @@ end
 !             Fmax=FF
 !             etamax=yy(j)    
 !            else
-!             goto 100    ! Find the first peak of F(y)   ! Ö»ÒªµÚ1¸ö·åÖµ         
+!             goto 100    ! Find the first peak of F(y)   ! åªè¦ç¬¬1ä¸ªå³°å€¼         
 !            endif
 
            enddo

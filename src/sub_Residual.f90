@@ -8,16 +8,16 @@
  !     Ver 0.8  2012-5-5
  !     Ver 0.97a 2013-5-4:  viscous flux code modified, corner points is not used
  !     Ver 1.01  2013-11-13:  boundary scheme can be used 
- !     Ver 1.16  2017-7-11:   ������������ޣ��򱾿齵Ϊ1��ӭ�磬�ҹر�ճ���
+ !     Ver 1.16  2017-7-11:   如果物理量超限，则本块降为1阶迎风，且关闭粘性项；
   
-! ����в�����ȫ���飩: ������ Residual_one_block ����������·��ʹ�ã�
+! 计算残差（网格的全部块）: 逐块调用 Residual_one_block （多重网格路径使用）
   Subroutine Comput_Residual_one_mesh(nMesh)
    use Global_Var
    implicit none
    integer:: nMesh,mBlock
    real(PRE_EC):: Sfac,Sfac1
 
-   call comput_Sfac(Sfac,Sfac1)             ! ˫ʱ�䲽������ϵ�� (�������� Sfac=Sfac1=0)
+   call comput_Sfac(Sfac,Sfac1)             ! 双时间步长法的系数 (其它方法 Sfac=Sfac1=0)
    do mBlock=1,Mesh(nMesh)%Num_Block
      call Residual_one_block(nMesh,mBlock,Sfac,Sfac1)
    enddo
@@ -25,8 +25,8 @@
   end Subroutine Comput_Residual_one_mesh
 
 !-------------------------------------------------------------------------------------
-!  ����˫ʱ�䲽������ʱ�䵼����ϵ�� Sfac,Sfac1 (����ʱ���ƽ����� Sfac=Sfac1=0)
-!  Iflag1 Ϊ��̬���������״ε���ʱȡ1 (��һ�� Un=U(n-1), ʱ�侫��1��)
+!  计算双时间步长法的时间导数项系数 Sfac,Sfac1 (其它时间推进方法 Sfac=Sfac1=0)
+!  Iflag1 为静态变量，仅首次调用时取1 (第一步 Un=U(n-1), 时间精度1阶)
   subroutine comput_Sfac(Sfac,Sfac1)
    use Global_Var
    implicit none
@@ -36,7 +36,7 @@
    if(Time_Method .eq. Time_Dual_LU_SGS) then
      if(Iflag1 .eq. 0) then
        Iflag1=1
-       Sfac=1.d0/(3.d0*dt_global)  ! ��һ��ʱ�䲽�� Un=U(n-1), ʱ�侫��1��
+       Sfac=1.d0/(3.d0*dt_global)  ! 第一个时间步， Un=U(n-1), 时间精度1阶
        Sfac1=1.d0/dt_global
      else
        Sfac=1.d0/(2.d0*dt_global)
@@ -49,10 +49,10 @@
   end subroutine comput_Sfac
 
 !-------------------------------------------------------------------------------------
-!  ����һ�������Ĳв� (����ĺ���ģ��)
-!  ����: ��ʱ�������� -> limit_vt -> �غ������� -> �в�(Residual) -> FDM���� ->
-!        Ҷ�ֻ�Դ�� -> ˫ʱ�䲽������ -> �װ뾶 -> �в��˳ -> dt -> LU-SGS��DU -> �ͷ�
-!  ��������ʱ��������Ŀ�ѭ��ֱ�ӵ���; ��������ʱ�� Comput_Residual_one_mesh ����
+!  计算一个网格块的残差 (按块的核心模块)
+!  包括: 临时数组申请 -> limit_vt -> 守恒量解析 -> 残差(Residual) -> FDM补丁 ->
+!        叶轮机源项 -> 双时间步附加项 -> 谱半径 -> 残差光顺 -> dt -> LU-SGS的DU -> 释放
+!  单重网格时由主程序的块循环直接调用; 多重网格时由 Comput_Residual_one_mesh 调用
   Subroutine Residual_one_block(nMesh,mBlock,Sfac,Sfac1)
    use Global_Var
    use Flow_Var
@@ -61,7 +61,7 @@
    real(PRE_EC):: Sfac,Sfac1
    Type (Block_TYPE),pointer:: B
 
-   B => Mesh(nMesh)%Block(mBlock)           ! ��nMesh ������ĵ�mBlock��
+   B => Mesh(nMesh)%Block(mBlock)           ! 第nMesh 重网格的第mBlock块
    nx=B%nx; ny=B%ny; nz=B%nz
    NVAR1=Mesh(nMesh)%NVAR
    KL=1-LAP
@@ -72,24 +72,24 @@
             w(KL:IR,KL:JR,KL:KR), T(KL:IR,KL:JR,KL:KR), &
             cc(KL:IR,KL:JR,KL:KR),p(KL:IR,KL:JR,KL:KR))
 
-   allocate(Flux(NVAR1,nx,ny,nz))                            ! ͨ��(���巽��)
-   allocate(Lci(nx,ny,nz),Lcj(nx,ny,nz),Lck(nx,ny,nz),Lvi(nx,ny,nz),Lvj(nx,ny,nz),Lvk(nx,ny,nz))  ! �װ뾶����ճ��ճ�ԣ�
+   allocate(Flux(NVAR1,nx,ny,nz))                            ! 通量(流体方程)
+   allocate(Lci(nx,ny,nz),Lcj(nx,ny,nz),Lck(nx,ny,nz),Lvi(nx,ny,nz),Lvj(nx,ny,nz),Lvk(nx,ny,nz))  ! 谱半径（无粘、粘性）
 
 !------------------------------------------------------------------------------------
-   call limit_vt(nMesh,mBlock)    ! ��SA��SST���̵�������(vt,Kt,Wt)��������
+   call limit_vt(nMesh,mBlock)    ! 对SA，SST方程的物理量(vt,Kt,Wt)进行限制
 
-   call comput_duvtpc(nMesh,mBlock)                      ! ��������� d,u,v,T,p,cc , vt,kt,Wt
+   call comput_duvtpc(nMesh,mBlock)                      ! 计算基本量 d,u,v,T,p,cc , vt,kt,Wt
 
 !---------------------------------------------------------------------------------------
-!  ���N-S���̵ĺ���ģ�飺 ����в�Ҷ��
-   call Residual (nMesh,mBlock)                          ! ����һ�������Ĳв�Ҷ�� ; ��nMesh ������ĵ�mBlock��
+!  求解N-S方程的核心模块： 计算残差（右端项）
+   call Residual (nMesh,mBlock)                          ! 计算一个网格块的残差（右端项） ; 第nMesh 重网格的第mBlock块
 !----------------------------------------------
-!  OpenCFD-SEC�� ���ò�ַ�����ÿ�Ĳв�
+!  OpenCFD-SEC： 采用差分法计算该块的残差
 ! !!! FVM-FDM --------------
-   if(B%IFLAG_FVM_FDM  .eq. Method_FDM) call Residual_FDM(nMesh,mBlock)  ! ���������������в��������   !!!SEC!!!
+   if(B%IFLAG_FVM_FDM  .eq. Method_FDM) call Residual_FDM(nMesh,mBlock)  ! 用有限体积法计算残差（补丁程序）   !!!SEC!!!
 !---FVM-FDM-------------
 
-! ����Ҷ�ֻ������������Դ�� ���������
+! 对于叶轮机求解器，添加源项 （惯性力项）
    if(IF_TurboMachinary .eq. 1) then
 
 !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,k)
@@ -106,7 +106,7 @@
    endif
 
 
-!  ˫ʱ�䲽���������Ӹ��Ӳв�
+!  双时间步长法，添加附加残差
    if(Time_Method .eq. Time_Dual_LU_SGS) then
 !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,k,m)
      do k=1,nz-1
@@ -122,14 +122,14 @@
    endif
 
 
-   call comput_Lijk(nMesh,mBlock)                        ! �����װ뾶  (Blazek's book, p189-190), �в��˳���ֲ�ʱ�䲽����LU-SGS�о�ʹ�ø�ֵ
+   call comput_Lijk(nMesh,mBlock)                        ! 计算谱半径  (Blazek's book, p189-190), 残差光顺，局部时间步长及LU-SGS中均使用该值
    if(If_Residual_smoothing .eq. 1 ) then
-       call Residual_smoothing(nMesh,mBlock)             ! �в��˳
+       call Residual_smoothing(nMesh,mBlock)             ! 残差光顺
    endif
-   call comput_dt(nMesh,mBlock)                          ! ����(����) ʱ�䲽��
+   call comput_dt(nMesh,mBlock)                          ! 计算(当地) 时间步长
 
    if(Time_Method .eq. Time_LU_SGS .or. Time_Method .eq. Time_Dual_LU_SGS) then
-      call du_LU_SGS(nMesh,mBlock,Sfac1)                      ! ����LU_SGS��������DU=U(n+1)-U(n)
+      call du_LU_SGS(nMesh,mBlock,Sfac1)                      ! 采用LU_SGS方法计算DU=U(n+1)-U(n)
    endif
 
    deallocate(d,uu,v,w,T,cc,p,Flux)
@@ -139,7 +139,7 @@
 
 
 !------------------------------------------------------------------------------
-! ����в� (�в�=�Ҷ���=������); �����N-S���̵ĺ���ģ��; 
+! 计算残差 (残差=右端项=净流量); 是求解N-S方程的核心模块; 
 ! Flux (= inviscous flux + viscous flux )
 
     subroutine Residual(nMesh,mBlock)
@@ -153,33 +153,33 @@
      B => MP%Block(mBlock)
      
      if(If_viscous .eq. 1 ) then
-      call get_viscous(nMesh,mBlock)                   ! �������ճ��ϵ��  
-!  ����ģ��
+      call get_viscous(nMesh,mBlock)                   ! 计算层流粘性系数  
+!  湍流模型
      if(MP%Iflag_turbulence_model .eq. Turbulence_BL) then
-       call  turbulence_model_BL(nMesh,mBlock)               !  BLģ��
+       call  turbulence_model_BL(nMesh,mBlock)               !  BL模型
      else if(MP%Iflag_turbulence_model .eq. Turbulence_SA) then
-       call Turbulence_model_SA(nMesh,mBlock)                  ! SAģ��
+       call Turbulence_model_SA(nMesh,mBlock)                  ! SA模型
      else if(MP%Iflag_turbulence_model .eq. Turbulence_NewSA) then
-       call Turbulence_model_NewSA(nMesh,mBlock)                  ! New SAģ�� (By Li XL, He ZW and Li L)
+       call Turbulence_model_NewSA(nMesh,mBlock)                  ! New SA模型 (By Li XL, He ZW and Li L)
    
      else if(MP%Iflag_turbulence_model .eq. Turbulence_SST) then
 	   call  Turbulence_model_SST(nMesh,mBlock)
 
      else
-       B%mu_t(:,:,:)=0.d0                                ! ����
+       B%mu_t(:,:,:)=0.d0                                ! 层流
      endif 
 
-!    ������ճ��ϵ����������	 
+!    对湍流粘性系数进行限制	 
  	 call limit_mut(nMesh,mBlock)
 
      endif
      
-!-----------------��ճ��-------------------------------------
+!-----------------无粘项-------------------------------------
      call flux_inviscous_i(nMesh,mBlock)
      call flux_inviscous_j(nMesh,mBlock)
      call flux_inviscous_k(nMesh,mBlock)
     
-! ���������ճ��ͨ��
+! 三个方向的粘性通量
     if(If_viscous .eq. 1) then
      call flux_viscous_i(nMesh,mBlock)
      call flux_viscous_j(nMesh,mBlock)
@@ -188,8 +188,8 @@
  
     end  
 !---------------------------------------------------------------------------------------------------------
-!  i�������ճͨ��, ��������(i,j+1/2,k+1/2) (��(I-1/2,J,K)) Ϊ���Ĳ����ͨ�� 
-!  ֧��OpenMP, since ver0.71 
+!  i方向的无粘通量, 即穿过以(i,j+1/2,k+1/2) (即(I-1/2,J,K)) 为中心侧面的通量 
+!  支持OpenMP, since ver0.71 
    subroutine flux_inviscous_i(nMesh,mBlock)
     Use Global_Var
     Use Flow_Var
@@ -198,7 +198,7 @@
     real(PRE_EC):: U0(1-LAP:LAP,5)
     integer:: mBlock,NVAR1,i,j,k,m,nx1,ny1,nz1,ksub,nMesh
     integer:: Scheme,IFlux,Reconstruction
-    real(PRE_EC):: s1x,s1y,s1z,s2x,s2y,s2z,s3x,s3y,s3z,s0,t10,t1x,t1y,t1z  ! ������(s1)���з���(s2,s3)
+    real(PRE_EC):: s1x,s1y,s1z,s2x,s2y,s2z,s3x,s3y,s3z,s0,t10,t1x,t1y,t1z  ! 法方向(s1)及切方向(s2,s3)
     real(PRE_EC):: d0,uu0,v0,w0,p0,E0,un
     Type (Block_TYPE),pointer:: B
     TYPE (Mesh_TYPE),pointer:: MP
@@ -208,21 +208,21 @@
     B => MP%Block(mBlock)
     NVAR1=MP%NVAR
 	
-!	Scheme=MP%Iflag_Scheme         ! ��ֵ��ʽ ����ͬ�����ϲ��ò�ͬ��ʽ��
+!	Scheme=MP%Iflag_Scheme         ! 数值格式 （不同网格上采用不同格式）
     
-	IFlux=MP%Iflag_Flux            ! ͨ������
-    Reconstruction=MP%IFlag_Reconstruction  ! �ع���ʽ
+	IFlux=MP%Iflag_Flux            ! 通量技术
+    Reconstruction=MP%IFlag_Reconstruction  ! 重构方式
     nx1=B%nx ; ny1=B%ny ; nz1=B%nz
 
 
-! OpenMP�ı���ָʾ��������ע�ͣ��� ָ��Do ѭ������ִ�У� ָ��һЩ������˽�еı���
+! OpenMP的编译指示符（不是注释）， 指定Do 循环并行执行； 指定一些各进程私有的变量
 !$OMP PARALLEL DEFAULT(FIRSTPRIVATE) SHARED (MP,B,NVAR1,IFlux,Reconstruction,nx1,ny1,nz1,gamma,Flux,d,uu,v,w,p)
 !$OMP DO   
 	do k=1,nz1
       do j=1,ny1
         do i=1,nx1
           do m=1,NVAR1
-            Flux(m,i,j,k)=0.d0            ! ��ʼ��
+            Flux(m,i,j,k)=0.d0            ! 初始化
           enddo
         enddo
       enddo
@@ -234,66 +234,66 @@
       do j=1,ny1-1
         do i=1,nx1
 
-!      �趨�߽��ʽ (�����ڵ��ʽ���߽���ʽ)
+!      设定边界格式 (区分内点格式及边界点格式)
 		    Scheme=MP%Iflag_Scheme
 		   
-		   if(B%BcI(j,k,1)==1) then            ! �Ƿ�Ϊ�����߽�
+		   if(B%BcI(j,k,1)==1) then            ! 是否为物理边界
 		     if(i .eq. 1) then
-			   Scheme=Scheme_CD2    ! ��1���������2�����ĸ�ʽ �����������񣬱���ͨ���غ㣩  
+			   Scheme=Scheme_CD2    ! 第1个界面采用2阶中心格式 （利用虚网格，保持通量守恒）  
              else if (i < LAP) then
-		       Scheme=MP%Bound_Scheme            ! �߽��ʽ
+		       Scheme=MP%Bound_Scheme            ! 边界格式
              endif
            endif
 		 
-		   if(B%BcI(j,k,2)==1) then      ! �Ƿ�Ϊ�����߽�
+		   if(B%BcI(j,k,2)==1) then      ! 是否为物理边界
 			if(i .eq. nx1 ) then
-			 Scheme=Scheme_CD2        ! ���ұ߽磬����2������
+			 Scheme=Scheme_CD2        ! 最右边界，采用2阶中心
 			else if (i > nx1-LAP+1) then
-		     Scheme=MP%Bound_Scheme   ! �߽��ʽ
+		     Scheme=MP%Bound_Scheme   ! 边界格式
             endif
            endif
 
-          if(B%IF_OverLimit == 1)  Scheme=Scheme_UD1            ! ���������ޣ�����ָ��¶ȣ��� �ÿ����1��ӭ��
+          if(B%IF_OverLimit == 1)  Scheme=Scheme_UD1            ! 物理量超限（如出现负温度）， 该块采用1阶迎风
 		 		 
 
-!-----����ķ�����������з���-----------------------------------------------------------------------------
-!  Ϊ�˽�ʡ�ڴ棬�����򲻴洢����ķ������з�����ʹ��ʱ���� (������Щ������)
-          s1x=B%ni1(i,j,k); s1y=B%ni2(i,j,k) ; s1z= B%ni3(i,j,k)            ! ��һ���ķ�����
-          t1x=B%x(i,j+1,k)-B%x(i,j,k+1); t1y=B%y(i,j+1,k)-B%y(i,j,k+1); t1z=B%z(i,j+1,k)-B%z(i,j,k+1)   ! �Խ���1
+!-----侧面的法方向和两个切方向-----------------------------------------------------------------------------
+!  为了节省内存，本程序不存储界面的法方向及切方向，在使用时计算 (会增加些计算量)
+          s1x=B%ni1(i,j,k); s1y=B%ni2(i,j,k) ; s1z= B%ni3(i,j,k)            ! 归一化的法方向
+          t1x=B%x(i,j+1,k)-B%x(i,j,k+1); t1y=B%y(i,j+1,k)-B%y(i,j,k+1); t1z=B%z(i,j+1,k)-B%z(i,j,k+1)   ! 对角线1
           t10=1.d0/(sqrt(t1x*t1x+t1y*t1y+t1z*t1z))  
-          s2x=t1x*t10; s2y=t1y*t10; s2z=t1z*t10                             ! ��һ�����з���1 ���Խ���1��
-          s3x=s1y*s2z-s1z*s2y; s3y=s1z*s2x-s1x*s2z ; s3z= s1x*s2y-s1y*s2x   ! �з���2 �����������з���1��
+          s2x=t1x*t10; s2y=t1y*t10; s2z=t1z*t10                             ! 归一化的切方向1 （对角线1）
+          s3x=s1y*s2z-s1z*s2y; s3y=s1z*s2x-s1x*s2z ; s3z= s1x*s2y-s1y*s2x   ! 切方向2 （法方向叉乘切方向1）
 !--------------------------------------------------------------------------------------------
-! �ڵ㣬����2,3�׸�ʽ�ع�  (I-1/2,J,K) ���ֵ��
-! �����ֲἰ�̿����У�ͨ��д�ع���(I+1/2,J,K)���ֵ�� ���������ع�(I-1/2,J,K)���ֵΪ�˷��� 
-! ��Ҫʹ��4�����ֵ�� I-2, I-1, I, I+1; ������ֵ(UL)ʹ��I-2,I-1,I���ֵ�ع��� ��ֵ(UR)ʹ��I-1,I,I+1���ֵ�ع�  
+! 内点，采用2,3阶格式重构  (I-1/2,J,K) 点的值；
+! 理论手册及教科书中，通常写重构出(I+1/2,J,K)点的值。 本程序中重构(I-1/2,J,K)点的值为了方便 
+! 需要使用4个点的值： I-2, I-1, I, I+1; 其中左值(UL)使用I-2,I-1,I点的值重构； 右值(UR)使用I-1,I,I+1点的值重构  
           if(Reconstruction .eq. Reconst_Original) then
-! ʹ��ԭʼ�����ع� U0(:,:) �洢����4�����ϵ��ܶȡ��ٶȡ�ѹ��
+! 使用原始变量重构 U0(:,:) 存储的是4个点上的密度、速度、压力
                 U0(:,1)=d(i-LAP:i+LAP-1,j,k) 
 			    U0(:,2)=uu(i-LAP:i+LAP-1,j,k) 
 			    U0(:,3)=v(i-LAP:i+LAP-1,j,k)
 			    U0(:,4)=w(i-LAP:i+LAP-1,j,k)
 			    U0(:,5)=p(i-LAP:i+LAP-1,j,k)
-            call Reconstuction_original(U0,UL,UR,gamma,Scheme)          ! ��ֵ��ʽ
+            call Reconstuction_original(U0,UL,UR,gamma,Scheme)          ! 数值格式
           else if (Reconstruction .eq. Reconst_Conservative) then
-! ʹ���غ�����ع� U0(:,:) �洢����4�����ϵ��غ�����������ܶȡ������ܶȺ������ܶȣ�
+! 使用守恒变量重构 U0(:,:) 存储的是4个点上的守恒变量（质量密度、动量密度和能量密度）
             do m=1,5
                U0(:,m)=B%U(m,i-LAP:i+LAP-1,j,k)
             enddo
             call Reconstuction_conservative(U0,UL,UR,gamma,Scheme)
           else
-! �������������ع�
+! 采用特征变量重构
             do m=1,5
               U0(:,m)=B%U(m,i-LAP:i+LAP-1,j,k)
             enddo
             call Reconstuction_Characteristic(U0,UL,UR,gamma,Scheme)
           endif   
-!-------�ع��������õ�(I-1/2,J,K)���ϵ�����ֵUL,UR  (������Ϊԭʼ����)------------
-!----��� UL, UR �е��ܶȡ�ѹ���Ƿ�Ϊ�� -------------------------
-! ���Ϊ������ʹ��1��ӭ��        
+!-------重构结束，得到(I-1/2,J,K)点上的左、右值UL,UR  (程序中为原始变量)------------
+!----检查 UL, UR 中的密度、压力是否为负 -------------------------
+! 如果为负，则使用1阶迎风        
 	  if(IF_Scheme_Positivity == 1) then
 		if(UL(1) .le. Lim_Zero  .or. UL(5) .le. Lim_Zero) then      ! Lim_Zero=1.d-20 
-          UL(1)=d(i-1,j,k)            ! 1��ӭ��
+          UL(1)=d(i-1,j,k)            ! 1阶迎风
 		  UL(2)=uu(i-1,j,k)
 		  UL(3)=v(i-1,j,k)
 		  UL(4)=w(i-1,j,k)
@@ -301,7 +301,7 @@
 		endif
 
        if(UR(1) .le. Lim_Zero .or. UR(5) .le. Lim_Zero) then
-          UR(1)=d(i,j,k)         ! 1��ӭ��
+          UR(1)=d(i,j,k)         ! 1阶迎风
 		  UR(2)=uu(i,j,k)
 		  UR(3)=v(i,j,k)
 		  UR(4)=w(i,j,k)
@@ -313,39 +313,39 @@
 
 
 !----------------------------------------------------------------
-!-----��UL,UR����������ת�任���õ�����ϵ(s1,s2,s3) (�������з���1���з���2) �е��غ����QL,QR
-!  �������ܶȡ�ѹ�������ֲ��䣻 �������ٶȣ�ͶӰ���µ������᷽��
-!  ��ֵ
-          QL(1)=UL(1)                           ! �ܶȣ�������������ת���ֲ��䣩
-          QL(2)=UL(2)*s1x+UL(3)*s1y+UL(4)*s1z   ! �����ٶ�
-          QL(3)=UL(2)*s2x+UL(3)*s2y+UL(4)*s2z   ! �з���1���ٶȷ���
-          QL(4)=UL(2)*s3x+UL(3)*s3y+UL(4)*s3z   ! �з���2���ٶȷ���
-          QL(5)=UL(5)                           ! ѹ���������� 
-! ��ֵ ��������������ֵ��ͬ��
+!-----将UL,UR进行坐标旋转变换，得到坐标系(s1,s2,s3) (法方向，切方向1，切方向2) 中的守恒变量QL,QR
+!  标量（密度、压力）保持不变； 向量（速度）投影到新的坐标轴方向
+!  左值
+          QL(1)=UL(1)                           ! 密度（标量，坐标旋转保持不变）
+          QL(2)=UL(2)*s1x+UL(3)*s1y+UL(4)*s1z   ! 法向速度
+          QL(3)=UL(2)*s2x+UL(3)*s2y+UL(4)*s2z   ! 切方向1的速度分量
+          QL(4)=UL(2)*s3x+UL(3)*s3y+UL(4)*s3z   ! 切方向2的速度分量
+          QL(5)=UL(5)                           ! 压力（标量） 
+! 右值 （变量含义与左值相同）
           QR(1)=UR(1)                            
           QR(2)=UR(2)*s1x+UR(3)*s1y+UR(4)*s1z    
           QR(3)=UR(2)*s2x+UR(3)*s2y+UR(4)*s2z    
           QR(4)=UR(2)*s3x+UR(3)*s3y+UR(4)*s3z    
           QR(5)=UR(5)                             
-!---------ͨ������ (FVS��FDS), ��������ֵ���㴩�������ͨ��(��չ1ά���⣩-------------
+!---------通量分裂 (FVS或FDS), 根据左、右值计算穿过界面的通量(扩展1维问题）-------------
           if(IFlux .eq. Flux_Steger_Warming ) then
-            call Flux_steger_warming_1Da(QL,QR,Flux0,gamma)     ! Steger-Warming FVS���� 
+            call Flux_steger_warming_1Da(QL,QR,Flux0,gamma)     ! Steger-Warming FVS方法 
           else  if(IFlux .eq. Flux_Roe ) then
-            call Flux_Roe_1D(QL,QR,Flux0,gamma)                 ! Roe FDS����
+            call Flux_Roe_1D(QL,QR,Flux0,gamma)                 ! Roe FDS方法
           else  if(IFlux .eq. Flux_Van_Leer ) then
-            call Flux_Van_Leer_1Da(QL,QR,Flux0,gamma)           ! Van Leer FVS����
+            call Flux_Van_Leer_1Da(QL,QR,Flux0,gamma)           ! Van Leer FVS方法
           else  if(IFlux .eq. Flux_Ausm ) then          
-            call Flux_Ausmpw_1Da(QL,QR,Flux0,gamma)             ! AUSM + ����
+            call Flux_Ausmpw_1Da(QL,QR,Flux0,gamma)             ! AUSM + 方法
           else
-            call Flux_HLL_HLLC_1D(QL,QR,Flux0,gamma,IFlux)      !HLL/HLLC FDS����������Riemann�⣩
+            call Flux_HLL_HLLC_1D(QL,QR,Flux0,gamma,IFlux)      !HLL/HLLC FDS方法（近似Riemann解）
           endif
-! ---��(s1,s2,s3)����ϵ�µ�ͨ��Flux0 ���б任���õ�(x,y,z)����ϵ�µ�ͨ���� �������ֲ��䣬��������ͶӰ
-! ---�任�󣬳���������͵õ�����(I-1/2,J,K)�� ���� (i,j+1/2,k+1/2)�㣩���ڲ����ͨ��	  
-          Flux(1,i,j,k)=-Flux0(1)*B%Si(i,j,k)                        ! ����ͨ�� ������������������ת���仯��
-          Flux(2,i,j,k)=-(Flux0(2)*s1x+Flux0(3)*s2x+Flux0(4)*s3x)*B%Si(i,j,k)  ! x����Ķ���ͨ��  ��ͶӰ��x����
-          Flux(3,i,j,k)=-(Flux0(2)*s1y+Flux0(3)*s2y+Flux0(4)*s3y)*B%Si(i,j,k)  ! y����Ķ���ͨ��
-          Flux(4,i,j,k)=-(Flux0(2)*s1z+Flux0(3)*s2z+Flux0(4)*s3z)*B%Si(i,j,k)  ! z����Ķ���ͨ��
-          Flux(5,i,j,k)=-Flux0(5)*B%Si(i,j,k)                        ! ����ͨ�� ��������
+! ---将(s1,s2,s3)坐标系下的通量Flux0 进行变换，得到(x,y,z)坐标系下的通量； 标量保持不变，向量进行投影
+! ---变换后，乘以面积，就得到穿过(I-1/2,J,K)点 （即 (i,j+1/2,k+1/2)点）所在侧面的通量	  
+          Flux(1,i,j,k)=-Flux0(1)*B%Si(i,j,k)                        ! 质量通量 （标量，不随坐标旋转而变化）
+          Flux(2,i,j,k)=-(Flux0(2)*s1x+Flux0(3)*s2x+Flux0(4)*s3x)*B%Si(i,j,k)  ! x方向的动量通量  （投影到x方向）
+          Flux(3,i,j,k)=-(Flux0(2)*s1y+Flux0(3)*s2y+Flux0(4)*s3y)*B%Si(i,j,k)  ! y方向的动量通量
+          Flux(4,i,j,k)=-(Flux0(2)*s1z+Flux0(3)*s2z+Flux0(4)*s3z)*B%Si(i,j,k)  ! z方向的动量通量
+          Flux(5,i,j,k)=-Flux0(5)*B%Si(i,j,k)                        ! 能量通量 （标量）
         enddo
       enddo
     enddo
@@ -370,7 +370,7 @@
    end subroutine flux_inviscous_i
 !--------------------------------------------------------------------------------------------------------------------
 !--------------------------------------------------------------------------------------------------------------------
-! ����j�������((I,J-1/2,K)�����ڽ���)����ճͨ�� 
+! 穿过j方向界面((I,J-1/2,K)点所在界面)的无粘通量 
    subroutine flux_inviscous_j(nMesh,mBlock)
     Use Global_Var
     Use Flow_Var
@@ -379,18 +379,18 @@
     real(PRE_EC):: U0(1-LAP:LAP,5)
     integer:: mBlock,i,j,k,m,nx1,ny1,nz1,ksub,nMesh
     integer:: Scheme,IFlux,Reconstruction
-    real(PRE_EC):: s1x,s1y,s1z,s2x,s2y,s2z,s3x,s3y,s3z,s0,t10,t1x,t1y,t1z  ! ������(s1)���з���(s2,s3)
+    real(PRE_EC):: s1x,s1y,s1z,s2x,s2y,s2z,s3x,s3y,s3z,s0,t10,t1x,t1y,t1z  ! 法方向(s1)及切方向(s2,s3)
     real(PRE_EC):: d0,uu0,v0,w0,p0,E0,un
     Type (Block_TYPE),pointer:: B
     TYPE (Mesh_TYPE),pointer:: MP
     Type (BC_MSG_TYPE),pointer:: Bc
     MP=> Mesh(nMesh)
     B => MP%Block(mBlock)
-    Scheme=MP%Iflag_Scheme                  ! ��ֵ��ʽ ����ͬ�����ϲ��ò�ͬ��ʽ��
-    IFlux=MP%Iflag_Flux                     ! ͨ������
-    Reconstruction=MP%IFlag_Reconstruction  ! �ع���ʽ
+    Scheme=MP%Iflag_Scheme                  ! 数值格式 （不同网格上采用不同格式）
+    IFlux=MP%Iflag_Flux                     ! 通量技术
+    Reconstruction=MP%IFlag_Reconstruction  ! 重构方式
     nx1=B%nx ; ny1=B%ny ; nz1=B%nz
-    Flux=0.d0                               ! ��ʼ��
+    Flux=0.d0                               ! 初始化
    
 !$OMP PARALLEL DEFAULT(FIRSTPRIVATE) SHARED(MP,B,IFlux,Reconstruction,nx1,ny1,nz1,gamma,Flux,d,uu,v,w,p)
 
@@ -400,64 +400,64 @@
 		do i=1,nx1-1   
   
   
-  !      �趨�߽��ʽ (�����ڵ��ʽ���߽���ʽ)
+  !      设定边界格式 (区分内点格式及边界点格式)
 
 		   Scheme=MP%Iflag_Scheme
-		    if(B%BcJ(i,k,1)==1) then            ! �Ƿ�Ϊ�����߽�
+		    if(B%BcJ(i,k,1)==1) then            ! 是否为物理边界
              if(j .eq. 1) then
-			   Scheme=Scheme_CD2    ! ��1���������2�����ĸ�ʽ �����������񣬱���ͨ���غ㣩  
-			 else if( j < LAP ) then                  ! ������߽�
-               Scheme=MP%Bound_Scheme            ! �߽��ʽ
+			   Scheme=Scheme_CD2    ! 第1个界面采用2阶中心格式 （利用虚网格，保持通量守恒）  
+			 else if( j < LAP ) then                  ! 靠近左边界
+               Scheme=MP%Bound_Scheme            ! 边界格式
 			 endif
             endif
 		  
 		    if(B%BcJ(i,k,2)==1) then
              if(j .eq. ny1) then
-			   Scheme=Scheme_CD2    ! ��1���������2�����ĸ�ʽ �����������񣬱���ͨ���غ㣩  
-		     else if( j > ny1-LAP+1 ) then      ! �����ұ߽�
-               Scheme=MP%Bound_Scheme            ! �߽��ʽ
+			   Scheme=Scheme_CD2    ! 第1个界面采用2阶中心格式 （利用虚网格，保持通量守恒）  
+		     else if( j > ny1-LAP+1 ) then      ! 靠近右边界
+               Scheme=MP%Bound_Scheme            ! 边界格式
 			 endif
             endif
 
-           if(B%IF_OverLimit == 1)  Scheme=Scheme_UD1            ! ���������ޣ�����ָ��¶ȣ��� �ÿ����1��ӭ��
+           if(B%IF_OverLimit == 1)  Scheme=Scheme_UD1            ! 物理量超限（如出现负温度）， 该块采用1阶迎风
 
 
 
-          s1x=B%nj1(i,j,k); s1y=B%nj2(i,j,k) ; s1z= B%nj3(i,j,k)  ! ��һ���ķ�����
-          t1x=B%x(i+1,j,k+1)-B%x(i,j,k); t1y=B%y(i+1,j,k+1)-B%y(i,j,k) ; t1z=B%z(i+1,j,k+1)-B%z(i,j,k)  ! �Խ���1
+          s1x=B%nj1(i,j,k); s1y=B%nj2(i,j,k) ; s1z= B%nj3(i,j,k)  ! 归一化的法方向
+          t1x=B%x(i+1,j,k+1)-B%x(i,j,k); t1y=B%y(i+1,j,k+1)-B%y(i,j,k) ; t1z=B%z(i+1,j,k+1)-B%z(i,j,k)  ! 对角线1
           t10=1.d0/(sqrt(t1x*t1x+t1y*t1y+t1z*t1z))  
-          s2x=t1x*t10; s2y=t1y*t10; s2z=t1z*t10     ! ��һ�����з���1 ���Խ���1��
-          s3x=s1y*s2z-s1z*s2y; s3y=s1z*s2x-s1x*s2z ; s3z= s1x*s2y-s1y*s2x   ! �з���2 �����������з���1: s1*s2��
+          s2x=t1x*t10; s2y=t1y*t10; s2z=t1z*t10     ! 归一化的切方向1 （对角线1）
+          s3x=s1y*s2z-s1z*s2y; s3y=s1z*s2x-s1x*s2z ; s3z= s1x*s2y-s1y*s2x   ! 切方向2 （法方向叉乘切方向1: s1*s2）
 !--------------------------------------------------------------------------------------------
-! �ڵ㣬����2,3�׸�ʽ�ع�  (I,J-1/2,K) ���ֵ��
+! 内点，采用2,3阶格式重构  (I,J-1/2,K) 点的值；
           if(Reconstruction .eq. Reconst_Original) then
-! ʹ��ԭʼ�����ع� U0(:,:) �洢����4�����ϵ��ܶȡ��ٶȡ�ѹ��
+! 使用原始变量重构 U0(:,:) 存储的是4个点上的密度、速度、压力
              U0(:,1)=d(i,j-LAP:j+LAP-1,k)
 			 U0(:,2)=uu(i,j-LAP:j+LAP-1,k) 
 			 U0(:,3)=v(i,j-LAP:j+LAP-1,k)
 			 U0(:,4)=w(i,j-LAP:j+LAP-1,k)
 			 U0(:,5)=p(i,j-LAP:j+LAP-1,k)
-            call Reconstuction_original(U0,UL,UR,gamma,Scheme)          ! ��ֵ��ʽ
+            call Reconstuction_original(U0,UL,UR,gamma,Scheme)          ! 数值格式
           else if (Reconstruction .eq. Reconst_Conservative) then
-! ʹ���غ�����ع� U0(:,:) �洢����4�����ϵ��غ�����������ܶȡ������ܶȺ������ܶȣ�
+! 使用守恒变量重构 U0(:,:) 存储的是4个点上的守恒变量（质量密度、动量密度和能量密度）
             do m=1,5
               U0(:,m)=B%U(m,i,j-LAP:j+LAP-1,k)
             enddo
             call Reconstuction_conservative(U0,UL,UR,gamma,Scheme)
           else
-! �������������ع�
+! 采用特征变量重构
             do m=1,5
               U0(:,m)=B%U(m,i,j-LAP:j+LAP-1,k)
             enddo
             call Reconstuction_Characteristic(U0,UL,UR,gamma,Scheme)
           endif
-!-------�ع��������õ�(I,J-1/2,K)���ϵ�����ֵUL,UR  ��ԭʼ�������ܶȡ��ٶȡ�ѹ����------------
+!-------重构结束，得到(I,J-1/2,K)点上的左、右值UL,UR  （原始变量：密度、速度、压力）------------
 
-!----��� UL, UR �е��ܶȡ�ѹ���Ƿ�Ϊ�� -------------------------
-! ���Ϊ������ʹ��1��ӭ��        
+!----检查 UL, UR 中的密度、压力是否为负 -------------------------
+! 如果为负，则使用1阶迎风        
 	  if(IF_Scheme_Positivity == 1) then
 		if(UL(1) .le. Lim_Zero  .or. UL(5) .le. Lim_Zero) then      ! Lim_Zero=1.d-20 
-          UL(1)=d(i,j-1,k)            ! 1��ӭ��
+          UL(1)=d(i,j-1,k)            ! 1阶迎风
 		  UL(2)=uu(i,j-1,k)
 		  UL(3)=v(i,j-1,k)
 		  UL(4)=w(i,j-1,k)
@@ -465,7 +465,7 @@
 		endif
 
        if(UR(1) .le. Lim_Zero .or. UR(5) .le. Lim_Zero) then
-          UR(1)=d(i,j,k)         ! 1��ӭ��
+          UR(1)=d(i,j,k)         ! 1阶迎风
 		  UR(2)=uu(i,j,k)
 		  UR(3)=v(i,j,k)
 		  UR(4)=w(i,j,k)
@@ -478,37 +478,37 @@
 
 
 
-!-----��UL,UR����������ת�任���õ�����ϵ(s1,s2,s3) (�������з���1���з���2) �е��غ����QL,QR
-!  ��ֵ
-          QL(1)=UL(1)                           ! �ܶȣ�������������ת���ֲ��䣩
-          QL(2)=UL(2)*s1x+UL(3)*s1y+UL(4)*s1z   ! ��������ٶȷ���  ��ͶӰ��������
-          QL(3)=UL(2)*s2x+UL(3)*s2y+UL(4)*s2z   ! �з���1���ٶȷ���
-          QL(4)=UL(2)*s3x+UL(3)*s3y+UL(4)*s3z   ! �з���2���ٶȷ���
-          QL(5)=UL(5)                           ! ѹ���������� 
-! ��ֵ ������������ͬ�ϣ�
+!-----将UL,UR进行坐标旋转变换，得到坐标系(s1,s2,s3) (法方向，切方向1，切方向2) 中的守恒变量QL,QR
+!  左值
+          QL(1)=UL(1)                           ! 密度（标量，坐标旋转保持不变）
+          QL(2)=UL(2)*s1x+UL(3)*s1y+UL(4)*s1z   ! 法方向的速度分量  （投影到法方向）
+          QL(3)=UL(2)*s2x+UL(3)*s2y+UL(4)*s2z   ! 切方向1的速度分量
+          QL(4)=UL(2)*s3x+UL(3)*s3y+UL(4)*s3z   ! 切方向2的速度分量
+          QL(5)=UL(5)                           ! 压力（标量） 
+! 右值 （各变量含义同上）
           QR(1)=UR(1)                           
           QR(2)=UR(2)*s1x+UR(3)*s1y+UR(4)*s1z   
           QR(3)=UR(2)*s2x+UR(3)*s2y+UR(4)*s2z   
           QR(4)=UR(2)*s3x+UR(3)*s3y+UR(4)*s3z   
           QR(5)=UR(5)                          
-!---------ͨ������ (FVS��FDS), ��������ֵ���㴩�������ͨ��(��չ1ά���⣩-------------
+!---------通量分裂 (FVS或FDS), 根据左、右值计算穿过界面的通量(扩展1维问题）-------------
           if(IFlux .eq. Flux_Steger_Warming ) then
-            call Flux_steger_warming_1Da(QL,QR,Flux0,gamma)     ! Steger-Warming FVS���� 
+            call Flux_steger_warming_1Da(QL,QR,Flux0,gamma)     ! Steger-Warming FVS方法 
           else  if(IFlux .eq. Flux_Roe ) then
-            call Flux_Roe_1D(QL,QR,Flux0,gamma)                 ! Roe FDS����
+            call Flux_Roe_1D(QL,QR,Flux0,gamma)                 ! Roe FDS方法
           else  if(IFlux .eq. Flux_Van_Leer ) then
-            call Flux_Van_Leer_1Da(QL,QR,Flux0,gamma)           ! Van Leer FVS����
+            call Flux_Van_Leer_1Da(QL,QR,Flux0,gamma)           ! Van Leer FVS方法
           else  if(IFlux .eq. Flux_Ausm ) then
             call Flux_Ausmpw_1Da(QL,QR,Flux0,gamma)   
           else 
-            call Flux_HLL_HLLC_1D(QL,QR,Flux0,gamma,IFlux)      !HLL/HLLC FDS����������Riemann�⣩
+            call Flux_HLL_HLLC_1D(QL,QR,Flux0,gamma,IFlux)      !HLL/HLLC FDS方法（近似Riemann解）
           endif
-! ---��(s1,s2,s3)����ϵ�µ�ͨ��Flux0 ���б任���õ�(x,y,z)����ϵ�µ�ͨ���� �������ֲ��䣬��������ͶӰ	  
-          Flux(1,i,j,k)=-Flux0(1)*B%Sj(i,j,k)                                  ! ����ͨ�� ������������������ת���仯��
-          Flux(2,i,j,k)=-(Flux0(2)*s1x+Flux0(3)*s2x+Flux0(4)*s3x)*B%Sj(i,j,k)  ! x����Ķ���ͨ��  ��ͶӰ��x����
-          Flux(3,i,j,k)=-(Flux0(2)*s1y+Flux0(3)*s2y+Flux0(4)*s3y)*B%Sj(i,j,k)  ! y����Ķ���ͨ��
-          Flux(4,i,j,k)=-(Flux0(2)*s1z+Flux0(3)*s2z+Flux0(4)*s3z)*B%Sj(i,j,k)  ! z����Ķ���ͨ��
-          Flux(5,i,j,k)=-Flux0(5)*B%Sj(i,j,k)                                  ! ����ͨ�� �������� 
+! ---将(s1,s2,s3)坐标系下的通量Flux0 进行变换，得到(x,y,z)坐标系下的通量； 标量保持不变，向量进行投影	  
+          Flux(1,i,j,k)=-Flux0(1)*B%Sj(i,j,k)                                  ! 质量通量 （标量，不随坐标旋转而变化）
+          Flux(2,i,j,k)=-(Flux0(2)*s1x+Flux0(3)*s2x+Flux0(4)*s3x)*B%Sj(i,j,k)  ! x方向的动量通量  （投影到x方向）
+          Flux(3,i,j,k)=-(Flux0(2)*s1y+Flux0(3)*s2y+Flux0(4)*s3y)*B%Sj(i,j,k)  ! y方向的动量通量
+          Flux(4,i,j,k)=-(Flux0(2)*s1z+Flux0(3)*s2z+Flux0(4)*s3z)*B%Sj(i,j,k)  ! z方向的动量通量
+          Flux(5,i,j,k)=-Flux0(5)*B%Sj(i,j,k)                                  ! 能量通量 （标量） 
         enddo
       enddo
     enddo
@@ -531,7 +531,7 @@
    end subroutine flux_inviscous_j
 !--------------------------------------------------------------------------------------------------------------------
 !--------------------------------------------------------------------------------------------------------------------
-! ����k�������((I,J,K-1/2)�����ڽ���)����ճͨ�� 
+! 穿过k方向界面((I,J,K-1/2)点所在界面)的无粘通量 
    subroutine flux_inviscous_k(nMesh,mBlock)
     Use Global_Var
     Use Flow_Var
@@ -540,19 +540,19 @@
     real(PRE_EC):: U0(1-LAP:LAP,5)
     integer:: mBlock,i,j,k,m,nx1,ny1,nz1,ksub,nMesh
     integer:: Scheme,IFlux,Reconstruction
-    real(PRE_EC):: s1x,s1y,s1z,s2x,s2y,s2z,s3x,s3y,s3z,s0,t10,t1x,t1y,t1z  ! ������(s1)���з���(s2,s3)
+    real(PRE_EC):: s1x,s1y,s1z,s2x,s2y,s2z,s3x,s3y,s3z,s0,t10,t1x,t1y,t1z  ! 法方向(s1)及切方向(s2,s3)
     real(PRE_EC):: d0,uu0,v0,w0,p0,E0,un
     Type (Block_TYPE),pointer:: B
     TYPE (Mesh_TYPE),pointer:: MP
     Type (BC_MSG_TYPE),pointer:: Bc
     MP=> Mesh(nMesh)
     B => MP%Block(mBlock)
-    Scheme=MP%Iflag_Scheme                  ! ��ֵ��ʽ ����ͬ�����ϲ��ò�ͬ��ʽ��
-    IFlux=MP%Iflag_Flux                     ! ͨ������
-    Reconstruction=MP%IFlag_Reconstruction  ! �ع���ʽ
+    Scheme=MP%Iflag_Scheme                  ! 数值格式 （不同网格上采用不同格式）
+    IFlux=MP%Iflag_Flux                     ! 通量技术
+    Reconstruction=MP%IFlag_Reconstruction  ! 重构方式
     nx1=B%nx ; ny1=B%ny ; nz1=B%nz
     
-	Flux=0.d0                               ! ��ʼ��
+	Flux=0.d0                               ! 初始化
 
 !$OMP PARALLEL DEFAULT(FIRSTPRIVATE) SHARED(MP,B,IFlux,Reconstruction,nx1,ny1,nz1,gamma,Flux,d,uu,v,w,p)
 
@@ -561,63 +561,63 @@
       do j=1,ny1-1
         do i=1,nx1-1
 
- !      �趨�߽��ʽ (�����ڵ��ʽ���߽���ʽ)
+ !      设定边界格式 (区分内点格式及边界点格式)
 
 		   Scheme=MP%Iflag_Scheme
-		   if(B%BcK(i,j,1)==1) then            ! �Ƿ�Ϊ�����߽�
+		   if(B%BcK(i,j,1)==1) then            ! 是否为物理边界
               if(k .eq. 1) then
- 			   Scheme=Scheme_CD2    ! ��1���������2�����ĸ�ʽ �����������񣬱���ͨ���غ㣩  
-			  else if( k < LAP ) then                  ! ������߽�
-               Scheme=MP%Bound_Scheme            ! �߽��ʽ
+ 			   Scheme=Scheme_CD2    ! 第1个界面采用2阶中心格式 （利用虚网格，保持通量守恒）  
+			  else if( k < LAP ) then                  ! 靠近左边界
+               Scheme=MP%Bound_Scheme            ! 边界格式
 			  endif
            endif
 	
 		   if(B%BcK(i,j,2)==1) then
              if(k .eq. nz1) then
-			   Scheme=Scheme_CD2    ! ��1���������2�����ĸ�ʽ �����������񣬱���ͨ���غ㣩  
-		     else if( k > nz1-LAP+1 ) then      ! �����ұ߽�
-               Scheme=MP%Bound_Scheme            ! �߽��ʽ
+			   Scheme=Scheme_CD2    ! 第1个界面采用2阶中心格式 （利用虚网格，保持通量守恒）  
+		     else if( k > nz1-LAP+1 ) then      ! 靠近右边界
+               Scheme=MP%Bound_Scheme            ! 边界格式
 			 endif
            endif
            
-		   if(B%IF_OverLimit == 1)  Scheme=Scheme_UD1            ! ���������ޣ�����ָ��¶ȣ��� �ÿ����1��ӭ��
+		   if(B%IF_OverLimit == 1)  Scheme=Scheme_UD1            ! 物理量超限（如出现负温度）， 该块采用1阶迎风
 
 
-          s1x=B%nk1(i,j,k); s1y=B%nk2(i,j,k) ; s1z= B%nk3(i,j,k)  ! ��һ���ķ�����
-          t1x=B%x(i+1,j+1,k)-B%x(i,j,k); t1y=B%y(i+1,j+1,k)-B%y(i,j,k) ; t1z=B%z(i+1,j+1,k)-B%z(i,j,k)  ! �Խ���1
+          s1x=B%nk1(i,j,k); s1y=B%nk2(i,j,k) ; s1z= B%nk3(i,j,k)  ! 归一化的法方向
+          t1x=B%x(i+1,j+1,k)-B%x(i,j,k); t1y=B%y(i+1,j+1,k)-B%y(i,j,k) ; t1z=B%z(i+1,j+1,k)-B%z(i,j,k)  ! 对角线1
           t10=1.d0/(sqrt(t1x*t1x+t1y*t1y+t1z*t1z))  
-          s2x=t1x*t10; s2y=t1y*t10; s2z=t1z*t10     ! ��һ�����з���1 ���Խ���1��
-          s3x=s1y*s2z-s1z*s2y; s3y=s1z*s2x-s1x*s2z ; s3z= s1x*s2y-s1y*s2x   ! �з���2 �����������з���1: s1*s2��
+          s2x=t1x*t10; s2y=t1y*t10; s2z=t1z*t10     ! 归一化的切方向1 （对角线1）
+          s3x=s1y*s2z-s1z*s2y; s3y=s1z*s2x-s1x*s2z ; s3z= s1x*s2y-s1y*s2x   ! 切方向2 （法方向叉乘切方向1: s1*s2）
 !--------------------------------------------------------------------------------------------
-! �ڵ㣬����2,3�׸�ʽ�ع�  (I,J-1/2,K) ���ֵ��
+! 内点，采用2,3阶格式重构  (I,J-1/2,K) 点的值；
           if(Reconstruction .eq. Reconst_Original) then
-! ʹ��ԭʼ�����ع� U0(:,:) �洢����4�����ϵ��ܶȡ��ٶȡ�ѹ��
+! 使用原始变量重构 U0(:,:) 存储的是4个点上的密度、速度、压力
               U0(:,1)=d(i,j,k-LAP:k+LAP-1) 
 			  U0(:,2)=uu(i,j,k-LAP:k+LAP-1) 
 			  U0(:,3)=v(i,j,k-LAP:k+LAP-1)
 			  U0(:,4)=w(i,j,k-LAP:k+LAP-1)
 			  U0(:,5)=p(i,j,k-LAP:k+LAP-1)
-            call Reconstuction_original(U0,UL,UR,gamma,Scheme)          ! ��ֵ��ʽ
+            call Reconstuction_original(U0,UL,UR,gamma,Scheme)          ! 数值格式
           else if (Reconstruction .eq. Reconst_Conservative) then
-! ʹ���غ�����ع� U0(:,:) �洢����4�����ϵ��غ�����������ܶȡ������ܶȺ������ܶȣ�
+! 使用守恒变量重构 U0(:,:) 存储的是4个点上的守恒变量（质量密度、动量密度和能量密度）
             do m=1,5
               U0(:,m)=B%U(m,i,j,k-LAP:k+LAP-1)
             enddo
             call Reconstuction_conservative(U0,UL,UR,gamma,Scheme)
           else
-! �������������ع�
+! 采用特征变量重构
             do m=1,5
               U0(:,m)=B%U(m,i,j,k-LAP:k+LAP-1)
             enddo
             call Reconstuction_Characteristic(U0,UL,UR,gamma,Scheme)
           endif  
-!-------�ع��������õ�(I,J-1/2,K)���ϵ�����ֵUL,UR  ��ԭʼ�������ܶȡ��ٶȡ�ѹ����------------
+!-------重构结束，得到(I,J-1/2,K)点上的左、右值UL,UR  （原始变量：密度、速度、压力）------------
 
-!----��� UL, UR �е��ܶȡ�ѹ���Ƿ�Ϊ�� -------------------------
-! ���Ϊ������ʹ��1��ӭ��        
+!----检查 UL, UR 中的密度、压力是否为负 -------------------------
+! 如果为负，则使用1阶迎风        
 	  if(IF_Scheme_Positivity == 1) then
 		if(UL(1) .le. Lim_Zero  .or. UL(5) .le. Lim_Zero) then      ! Lim_Zero=1.d-20 
-          UL(1)=d(i,j,k-1)            ! 1��ӭ��
+          UL(1)=d(i,j,k-1)            ! 1阶迎风
 		  UL(2)=uu(i,j,k-1)
 		  UL(3)=v(i,j,k-1)
 		  UL(4)=w(i,j,k-1)
@@ -625,7 +625,7 @@
 		endif
 
        if(UR(1) .le. Lim_Zero .or. UR(5) .le. Lim_Zero) then
-          UR(1)=d(i,j,k)         ! 1��ӭ��
+          UR(1)=d(i,j,k)         ! 1阶迎风
 		  UR(2)=uu(i,j,k)
 		  UR(3)=v(i,j,k)
 		  UR(4)=w(i,j,k)
@@ -635,49 +635,49 @@
 
 
 
-!-----��UL,UR����������ת�任���õ�����ϵ(s1,s2,s3) (�������з���1���з���2) �е��غ����QL,QR
-!  ��ֵ
-          QL(1)=UL(1)                           ! �ܶȣ�������������ת���ֲ��䣩
-          QL(2)=UL(2)*s1x+UL(3)*s1y+UL(4)*s1z   ! ��������ٶȷ���  ��ͶӰ��������
-          QL(3)=UL(2)*s2x+UL(3)*s2y+UL(4)*s2z   ! �з���1���ٶȷ���
-          QL(4)=UL(2)*s3x+UL(3)*s3y+UL(4)*s3z   ! �з���2���ٶȷ���
-          QL(5)=UL(5)                           ! ѹ���������� 
-! ��ֵ ������������ͬ�ϣ�
+!-----将UL,UR进行坐标旋转变换，得到坐标系(s1,s2,s3) (法方向，切方向1，切方向2) 中的守恒变量QL,QR
+!  左值
+          QL(1)=UL(1)                           ! 密度（标量，坐标旋转保持不变）
+          QL(2)=UL(2)*s1x+UL(3)*s1y+UL(4)*s1z   ! 法方向的速度分量  （投影到法方向）
+          QL(3)=UL(2)*s2x+UL(3)*s2y+UL(4)*s2z   ! 切方向1的速度分量
+          QL(4)=UL(2)*s3x+UL(3)*s3y+UL(4)*s3z   ! 切方向2的速度分量
+          QL(5)=UL(5)                           ! 压力（标量） 
+! 右值 （各变量含义同上）
           QR(1)=UR(1)                           
           QR(2)=UR(2)*s1x+UR(3)*s1y+UR(4)*s1z   
           QR(3)=UR(2)*s2x+UR(3)*s2y+UR(4)*s2z   
           QR(4)=UR(2)*s3x+UR(3)*s3y+UR(4)*s3z   
           QR(5)=UR(5)                          
-!---------ͨ������ (FVS��FDS), ��������ֵ���㴩�������ͨ��(��չ1ά���⣩-------------
+!---------通量分裂 (FVS或FDS), 根据左、右值计算穿过界面的通量(扩展1维问题）-------------
           if(IFlux .eq. Flux_Steger_Warming ) then
-            call Flux_steger_warming_1Da(QL,QR,Flux0,gamma)     ! Steger-Warming FVS���� 
+            call Flux_steger_warming_1Da(QL,QR,Flux0,gamma)     ! Steger-Warming FVS方法 
           else  if(IFlux .eq. Flux_Roe ) then
-            call Flux_Roe_1D(QL,QR,Flux0,gamma)                ! Roe FDS����
+            call Flux_Roe_1D(QL,QR,Flux0,gamma)                ! Roe FDS方法
           else  if(IFlux .eq. Flux_Van_Leer ) then
-            call Flux_Van_Leer_1Da(QL,QR,Flux0,gamma)          ! Van Leer FVS����
+            call Flux_Van_Leer_1Da(QL,QR,Flux0,gamma)          ! Van Leer FVS方法
           else  if(IFlux .eq. Flux_Ausm ) then
             call Flux_Ausmpw_1Da(QL,QR,Flux0,gamma)   
           else
-            call Flux_HLL_HLLC_1D(QL,QR,Flux0,gamma,IFlux)    !HLL/HLLC FDS����������Riemann�⣩
+            call Flux_HLL_HLLC_1D(QL,QR,Flux0,gamma,IFlux)    !HLL/HLLC FDS方法（近似Riemann解）
           endif
-! ---��(s1,s2,s3)����ϵ�µ�ͨ��Flux0 ���б任���õ�(x,y,z)����ϵ�µ�ͨ���� �������ֲ��䣬��������ͶӰ
+! ---将(s1,s2,s3)坐标系下的通量Flux0 进行变换，得到(x,y,z)坐标系下的通量； 标量保持不变，向量进行投影
 	  
-          Flux(1,i,j,k)=-Flux0(1)*B%Sk(i,j,k)                                  ! ����ͨ�� ������������������ת���仯��
-          Flux(2,i,j,k)=-(Flux0(2)*s1x+Flux0(3)*s2x+Flux0(4)*s3x)*B%Sk(i,j,k)  ! x����Ķ���ͨ��  ��ͶӰ��x����
-          Flux(3,i,j,k)=-(Flux0(2)*s1y+Flux0(3)*s2y+Flux0(4)*s3y)*B%Sk(i,j,k)  ! y����Ķ���ͨ��
-          Flux(4,i,j,k)=-(Flux0(2)*s1z+Flux0(3)*s2z+Flux0(4)*s3z)*B%Sk(i,j,k)  ! z����Ķ���ͨ��
-          Flux(5,i,j,k)=-Flux0(5)*B%Sk(i,j,k)                                  ! ����ͨ�� ��������
+          Flux(1,i,j,k)=-Flux0(1)*B%Sk(i,j,k)                                  ! 质量通量 （标量，不随坐标旋转而变化）
+          Flux(2,i,j,k)=-(Flux0(2)*s1x+Flux0(3)*s2x+Flux0(4)*s3x)*B%Sk(i,j,k)  ! x方向的动量通量  （投影到x方向）
+          Flux(3,i,j,k)=-(Flux0(2)*s1y+Flux0(3)*s2y+Flux0(4)*s3y)*B%Sk(i,j,k)  ! y方向的动量通量
+          Flux(4,i,j,k)=-(Flux0(2)*s1z+Flux0(3)*s2z+Flux0(4)*s3z)*B%Sk(i,j,k)  ! z方向的动量通量
+          Flux(5,i,j,k)=-Flux0(5)*B%Sk(i,j,k)                                  ! 能量通量 （标量）
         enddo
       enddo
     enddo
 !$OMP END DO  
 
 !---------------------------------------------------------------
-!  �߽紦��
+!  边界处理
 !$OMP  DO  
     do  ksub=1,B%subface
       Bc=> B%bc_msg(ksub)
-      if(Bc%bc .gt. 0  .and. (Bc%face .eq. 3 .or. Bc%face .eq. 6)) then   ! ���ڱ߽磬��Ϊk-��k+�߽�
+      if(Bc%bc .gt. 0  .and. (Bc%face .eq. 3 .or. Bc%face .eq. 6)) then   ! 非内边界，且为k-或k+边界
         k=Bc%kb
         do j= Bc%jb, Bc%je-1
           do i= Bc%ib, Bc%ie-1
@@ -687,7 +687,7 @@
             w0=(w(i,j,k)+w(i,j,k-1))*0.5d0
             p0=(p(i,j,k)+p(i,j,k-1))*0.5d0
             E0=p0/(gamma-1.d0)+d0*(uu0*uu0+v0*v0+w0*w0)*0.5d0
-            un=uu0*B%nk1(i,j,k)+v0*B%nk2(i,j,k)+w0*B%nk3(i,j,k)          ! �����ٶ�       
+            un=uu0*B%nk1(i,j,k)+v0*B%nk2(i,j,k)+w0*B%nk3(i,j,k)          ! 法向速度       
             Flux(1,i,j,k)=-d0*un*B%Sk(i,j,k)
             Flux(2,i,j,k)=-(d0*un*uu0+p0*B%nk1(i,j,k))*B%Sk(i,j,k)
             Flux(3,i,j,k)=-(d0*un*v0+p0*B%nk2(i,j,k))*B%Sk(i,j,k)
@@ -715,10 +715,10 @@
 
    end subroutine flux_inviscous_k
 
-!----------------ճ��ͨ��---------------------------------------------------------------------------------------------- 
+!----------------粘性通量---------------------------------------------------------------------------------------------- 
 !--------------------------------------------------------------------------------------------------------------------
-!-----------i-�����ճ��ͨ��-----------------------------------------------------------------  
-! Ϊ�˱�֤�ȶ��ԣ�����ʹ�ü�����ǲ�������㣨�� (0,0,k), (0,j,0) ������㴦��ֵ��
+!-----------i-方向的粘性通量-----------------------------------------------------------------  
+! 为了保证稳定性，避免使用计算域角部的网格点（如 (0,0,k), (0,j,0) 等网格点处的值）
 
    subroutine flux_viscous_i(nMesh,mBlock)
     Use Global_Var
@@ -742,7 +742,7 @@
 
 
 ! revised 2017-7-11
-if(B%IF_OverLimit == 1 ) then     ! ���������ޣ� ����1��ӭ�������ճ�ԣ� ������ճ����
+if(B%IF_OverLimit == 1 ) then     ! 物理量超限， 采用1阶迎风计算无粘性， 不计算粘性项
 
 !$OMP  PARALLEL DO  
    do k=1,nz-1 
@@ -757,7 +757,7 @@ if(B%IF_OverLimit == 1 ) then     ! ���������ޣ� ����1��ӭ�������ճ�ԣ� �������
    enddo
 !$OMP END  PARALLEL DO  
 
-	return             ! ����ճ�������
+	return             ! 跳过粘性项计算
 endif
 
 !$OMP PARALLEL DEFAULT(FIRSTPRIVATE) SHARED(MP,B,nx,ny,nz,tmp1,tmp2,Cp,PrL,PrT,uu,v,w,T,flux)
@@ -766,17 +766,17 @@ endif
     do k=1,nz-1 
       do j=1,ny-1
         do i=1,nx
-          s1x=B%ni1(i,j,k); s1y=B%ni2(i,j,k) ; s1z= B%ni3(i,j,k)  ! ��һ���ķ�����
-! ���������ڼ������꣨�±꣩�ĵ���;  (I-1/2,J,K)��
-! ע�⣬�������洢���������ģ������꣨�洢������ڵ㣩������
-! ���������ö������Ĳ�ּ��㣬��������Χ����㵼����ƽ��
+          s1x=B%ni1(i,j,k); s1y=B%ni2(i,j,k) ; s1z= B%ni3(i,j,k)  ! 归一化的法方向
+! 物理量对于计算坐标（下标）的导数;  (I-1/2,J,K)点
+! 注意，物理量存储在网格中心，与坐标（存储在网格节点）有区别
+! 导数均采用二阶中心差分计算，并利用周围网格点导数的平均
 ! e.g. uj(I-1/2,J,K)=0.5*(uj(I,J,K)+uj(I-1,J,K));  uj(I,J,K)=(uu(I,J+1,k)-uu(I,J-1,K))*0.5
           ui=uu(i,j,k)-uu(i-1,j,k)              ! du/di (I-1/2,J,K)= u(I,J,K)-u(I-1,J,K)
           vi=v(i,j,k)-v(i-1,j,k)
           wi=w(i,j,k)-w(i-1,j,k)
           Ti=T(i,j,k)-T(i-1,j,k)
   
-  ! Ϊ�˱�֤�ȶ��ԣ�����ʹ�ü�����ǲ�������㣨�� (0,0,k), (0,j,0) ������㴦��ֵ��
+  ! 为了保证稳定性，避免使用计算域角部的网格点（如 (0,0,k), (0,j,0) 等网格点处的值）
       
 		  if( (i==1 .or. i==B%nx) .and. (j==1 .or. j==B%ny-1) ) then
            
@@ -822,7 +822,7 @@ endif
           jx=B%jx1(i,j,k); jy=B%jy1(i,j,k); jz=B%jz1(i,j,k)
           kx=B%kx1(i,j,k); ky=B%ky1(i,j,k); kz=B%kz1(i,j,k)
 
-!----�����������ƫ����----------------------------------------------
+!----对物理坐标的偏导数----------------------------------------------
           ux=ui*ix+uj*jx+uk*kx
           vx=vi*ix+vj*jx+vk*kx
           wx=wi*ix+wj*jx+wk*kx
@@ -838,10 +838,10 @@ endif
           wz=wi*iz+wj*jz+wk*kz
           Tz=Ti*iz+Tj*jz+Tk*kz
 
-!---ճ��Ӧ��----------------------------------------------------------
-    ! (I-1/2,J,k)��, �� (i,j+1/2,k+1/2)�� ����ճ��ϵ��
+!---粘性应力----------------------------------------------------------
+    ! (I-1/2,J,k)点, 即 (i,j+1/2,k+1/2)点 处的粘性系数
          mu0=0.5d0*(B%mu(i,j,k)+B%mu_t(i,j,k) + B%mu(i-1,j,k)+B%mu_t(i-1,j,k))  
-         k0=0.5d0*Cp*(B%mu(i,j,k)/PrL + B%mu_t(i,j,k)/PrT + B%mu(i-1,j,k)/PrL +B%mu_t(i-1,j,k)/PrT)   ! (I-1/2,J,K) ����ȴ���ϵ��
+         k0=0.5d0*Cp*(B%mu(i,j,k)/PrL + B%mu_t(i,j,k)/PrT + B%mu(i-1,j,k)/PrL +B%mu_t(i-1,j,k)/PrT)   ! (I-1/2,J,K) 点的热传导系数
 !-----------------------------------------------------------
          s11=mu0*(tmp1*ux-tmp2*(vy+wz))    ! tmp1=4.d0/3.d0; tmp2=2.d0/3.d0
          s12=mu0*(uy+vx)
@@ -849,16 +849,16 @@ endif
          s22=mu0*(tmp1*vy-tmp2*(ux+wz))
          s23=mu0*(vz+wy)
          s33=mu0*(tmp1*wz-tmp2*(ux+vy))
-!---(I-1/2,J,K)���ϵ��ٶ�--------------------------------------------   
+!---(I-1/2,J,K)点上的速度--------------------------------------------   
          u1=(uu(i,j,k)+uu(i-1,j,k))*0.5d0
          v1=(v(i,j,k)+v(i-1,j,k))*0.5d0
          w1=(w(i,j,k)+w(i-1,j,k))*0.5d0
-!--������ճ��ͨ��-------------------------------
+!--能量的粘性通量-------------------------------
          E1=u1*s11+v1*s12+w1*s13+k0*Tx
          E2=u1*s12+v1*s22+w1*s23+k0*Ty
          E3=u1*s13+v1*s23+w1*s33+k0*Tz
-!-------ͨ��=��ճͨ��+ճ��ͨ��---------------------------------------
-! ճ��ͨ��=Fv.n=Fv1*s1x+Fv2*s1y+Fv3*s1z---------------
+!-------通量=无粘通量+粘性通量---------------------------------------
+! 粘性通量=Fv.n=Fv1*s1x+Fv2*s1y+Fv3*s1z---------------
          Flux(2,i,j,k)= (s11*s1x+s12*s1y+s13*s1z)* B%Si(i,j,k)  
          Flux(3,i,j,k)= (s12*s1x+s22*s1y+s23*s1z)* B%Si(i,j,k)
          Flux(4,i,j,k)= (s13*s1x+s23*s1y+s33*s1z)* B%Si(i,j,k)
@@ -883,7 +883,7 @@ endif
      enddo
 !$OMP END DO  
 
-!---��¼�߽紦��ճ����-------------------------------------
+!---记录边界处的粘性力-------------------------------------
 !$OMP  DO  
    do k=1,nz-1 
    do j=1,ny-1
@@ -902,7 +902,7 @@ endif
 
 !----------------------------------------------------------------------------------------------------
 !----------------------------------------------------------------------------------------------------
-! j�����ճ��ͨ��   
+! j方向的粘性通量   
    subroutine flux_viscous_j(nMesh,mBlock)
    Use Global_Var
    Use Flow_Var
@@ -925,7 +925,7 @@ endif
 
    tmp1=4.d0/3.d0; tmp2=2.d0/3.d0
 
-  if(B%IF_OverLimit == 1 ) then     ! ���������ޣ� ����1��ӭ�������ճ�ԣ� ������ճ����
+  if(B%IF_OverLimit == 1 ) then     ! 物理量超限， 采用1阶迎风计算无粘性， 不计算粘性项
  !$OMP Parallel DO
    do k=1,nz-1 
    do i=1,nx-1
@@ -947,9 +947,9 @@ endif
    do k=1,nz-1 
    do j=1,ny
    do i=1,nx-1
-    s1x=B%nj1(i,j,k); s1y=B%nj2(i,j,k) ; s1z= B%nj3(i,j,k)  ! ��һ���ķ�����
+    s1x=B%nj1(i,j,k); s1y=B%nj2(i,j,k) ; s1z= B%nj3(i,j,k)  ! 归一化的法方向
 
-! ���������ڼ������꣨�±꣩�ĵ���;  (I,J-1/2,K)��
+! 物理量对于计算坐标（下标）的导数;  (I,J-1/2,K)点
    uj=uu(i,j,k)-uu(i,j-1,k)
    vj=v(i,j,k)-v(i,j-1,k)
    wj=w(i,j,k)-w(i,j-1,k)
@@ -1000,7 +1000,7 @@ endif
       jx=B%jx2(i,j,k); jy=B%jy2(i,j,k); jz=B%jz2(i,j,k)
       kx=B%kx2(i,j,k); ky=B%ky2(i,j,k); kz=B%kz2(i,j,k)
 
-!----�����������ƫ����----------------------------------------------
+!----对物理坐标的偏导数----------------------------------------------
    ux=ui*ix+uj*jx+uk*kx
    vx=vi*ix+vj*jx+vk*kx
    wx=wi*ix+wj*jx+wk*kx
@@ -1016,9 +1016,9 @@ endif
    wz=wi*iz+wj*jz+wk*kz
    Tz=Ti*iz+Tj*jz+Tk*kz
 
-!---ճ��Ӧ��----------------------------------------------------------
+!---粘性应力----------------------------------------------------------
    mu0=0.5d0*(B%mu(i,j,k)+B%mu_t(i,j,k) + B%mu(i,j-1,k)+B%mu_t(i,j-1,k))  
-   k0=0.5d0*Cp*(B%mu(i,j,k)/PrL + B%mu_t(i,j,k)/PrT + B%mu(i,j-1,k)/PrL +B%mu_t(i,j-1,k)/PrT)   ! (I-1/2,J,K) ����ȴ���ϵ��
+   k0=0.5d0*Cp*(B%mu(i,j,k)/PrL + B%mu_t(i,j,k)/PrT + B%mu(i,j-1,k)/PrL +B%mu_t(i,j-1,k)/PrT)   ! (I-1/2,J,K) 点的热传导系数
    
    s11=mu0*(tmp1*ux-tmp2*(vy+wz))    ! tmp1=4.d0/3.d0; tmp2=2.d0/3.d0
    s12=mu0*(uy+vx)
@@ -1026,17 +1026,17 @@ endif
    s22=mu0*(tmp1*vy-tmp2*(ux+wz))
    s23=mu0*(vz+wy)
    s33=mu0*(tmp1*wz-tmp2*(ux+vy))
-!---(I,J-1/2,K)���ϵ��ٶ�--------------------------------------------   
+!---(I,J-1/2,K)点上的速度--------------------------------------------   
    u1=(uu(i,j,k)+uu(i,j-1,k))*0.5d0
    v1=(v(i,j,k)+v(i,j-1,k))*0.5d0
    w1=(w(i,j,k)+w(i,j-1,k))*0.5d0
-!--������ճ��ͨ��-------------------------------
+!--能量的粘性通量-------------------------------
    E1=u1*s11+v1*s12+w1*s13+k0*Tx
    E2=u1*s12+v1*s22+w1*s23+k0*Ty
    E3=u1*s13+v1*s23+w1*s33+k0*Tz
 
-!-------ͨ��=��ճͨ��+ճ��ͨ��---------------------------------------
-! ճ��ͨ��=Fv.n=Fv1*s1x+Fv2*s1y+Fv3*s1z---------------
+!-------通量=无粘通量+粘性通量---------------------------------------
+! 粘性通量=Fv.n=Fv1*s1x+Fv2*s1y+Fv3*s1z---------------
     Flux(2,i,j,k)=(s11*s1x+s12*s1y+s13*s1z)* B%Sj(i,j,k)  
     Flux(3,i,j,k)=(s12*s1x+s22*s1y+s23*s1z)* B%Sj(i,j,k)
     Flux(4,i,j,k)=(s13*s1x+s23*s1y+s33*s1z)* B%Sj(i,j,k)
@@ -1059,7 +1059,7 @@ endif
      enddo
 !$OMP END DO
 
-!---��¼�߽紦��ճ����-------------------------------------
+!---记录边界处的粘性力-------------------------------------
 
 !$OMP  DO
    do k=1,nz-1 
@@ -1080,7 +1080,7 @@ endif
  
 !------------------------------------------------------------------------------------------------------------- 
 !------------------------------------------------------------------------------------------------------------- 
-! k�����ճ��ͨ��   
+! k方向的粘性通量   
    subroutine flux_viscous_k(nMesh,mBlock)
    Use Global_Var
    Use Flow_Var
@@ -1103,7 +1103,7 @@ endif
 
    tmp1=4.d0/3.d0; tmp2=2.d0/3.d0
 
- if(B%IF_OverLimit == 1 ) then     ! ���������ޣ� ����1��ӭ�������ճ�ԣ� ������ճ����
+ if(B%IF_OverLimit == 1 ) then     ! 物理量超限， 采用1阶迎风计算无粘性， 不计算粘性项
 !$OMP  Parallel DO
    do j=1,ny-1 
    do i=1,nx-1
@@ -1127,9 +1127,9 @@ endif
    do k=1,nz 
    do j=1,ny-1
    do i=1,nx-1
-    s1x=B%nk1(i,j,k); s1y=B%nk2(i,j,k) ; s1z= B%nk3(i,j,k)  ! ��һ���ķ�����
+    s1x=B%nk1(i,j,k); s1y=B%nk2(i,j,k) ; s1z= B%nk3(i,j,k)  ! 归一化的法方向
 
-! ���������ڼ������꣨�±꣩�ĵ���;  (I,J,K-1/2)��
+! 物理量对于计算坐标（下标）的导数;  (I,J,K-1/2)点
 
    uk=uu(i,j,k)-uu(i,j,k-1)
    vk=v(i,j,k)-v(i,j,k-1)
@@ -1180,7 +1180,7 @@ endif
       jx=B%jx3(i,j,k); jy=B%jy3(i,j,k); jz=B%jz3(i,j,k)
       kx=B%kx3(i,j,k); ky=B%ky3(i,j,k); kz=B%kz3(i,j,k)
 
-!----�����������ƫ����----------------------------------------------
+!----对物理坐标的偏导数----------------------------------------------
    ux=ui*ix+uj*jx+uk*kx
    vx=vi*ix+vj*jx+vk*kx
    wx=wi*ix+wj*jx+wk*kx
@@ -1196,9 +1196,9 @@ endif
    wz=wi*iz+wj*jz+wk*kz
    Tz=Ti*iz+Tj*jz+Tk*kz
 
-!---ճ��Ӧ��----------------------------------------------------------
-   mu0=0.5d0*(B%mu(i,j,k)+B%mu_t(i,j,k) + B%mu(i,j,k-1)+B%mu_t(i,j,k-1))          ! (I,J,k-1/2)���ճ��ϵ�� ������+������  
-   k0=0.5d0*Cp*(B%mu(i,j,k)/PrL + B%mu_t(i,j,k)/PrT + B%mu(i,j,k-1)/PrL +B%mu_t(i,j,k-1)/PrT)   ! (I,J,K-1/2) ����ȴ���ϵ��
+!---粘性应力----------------------------------------------------------
+   mu0=0.5d0*(B%mu(i,j,k)+B%mu_t(i,j,k) + B%mu(i,j,k-1)+B%mu_t(i,j,k-1))          ! (I,J,k-1/2)点的粘性系数 （层流+湍流）  
+   k0=0.5d0*Cp*(B%mu(i,j,k)/PrL + B%mu_t(i,j,k)/PrT + B%mu(i,j,k-1)/PrL +B%mu_t(i,j,k-1)/PrT)   ! (I,J,K-1/2) 点的热传导系数
 
    s11=mu0*(tmp1*ux-tmp2*(vy+wz))    ! tmp1=4.d0/3.d0; tmp2=2.d0/3.d0
    s12=mu0*(uy+vx)
@@ -1207,16 +1207,16 @@ endif
    s23=mu0*(vz+wy)
    s33=mu0*(tmp1*wz-tmp2*(ux+vy))
 
-!---(I,J,K-1/2)���ϵ��ٶ�--------------------------------------------   
+!---(I,J,K-1/2)点上的速度--------------------------------------------   
    u1=(uu(i,j,k)+uu(i,j,k-1))*0.5d0
    v1=(v(i,j,k)+v(i,j,k-1))*0.5d0
    w1=(w(i,j,k)+w(i,j,k-1))*0.5d0
-!--������ճ��ͨ��-------------------------------
+!--能量的粘性通量-------------------------------
    E1=u1*s11+v1*s12+w1*s13+k0*Tx
    E2=u1*s12+v1*s22+w1*s23+k0*Ty
    E3=u1*s13+v1*s23+w1*s33+k0*Tz
-!-------ͨ��=��ճͨ��+ճ��ͨ��---------------------------------------
-! ճ��ͨ��=Fv.n=Fv1*s1x+Fv2*s1y+Fv3*s1z---------------
+!-------通量=无粘通量+粘性通量---------------------------------------
+! 粘性通量=Fv.n=Fv1*s1x+Fv2*s1y+Fv3*s1z---------------
     Flux(2,i,j,k)=(s11*s1x+s12*s1y+s13*s1z)* B%Sk(i,j,k)  
     Flux(3,i,j,k)=(s12*s1x+s22*s1y+s23*s1z)* B%Sk(i,j,k)
     Flux(4,i,j,k)=(s13*s1x+s23*s1y+s33*s1z)* B%Sk(i,j,k)
@@ -1239,7 +1239,7 @@ endif
      enddo
 !$OMP END DO
 
-!---��¼�߽紦��ճ����-------------------------------------
+!---记录边界处的粘性力-------------------------------------
 !$OMP  DO
    do j=1,ny-1 
    do i=1,nx-1
@@ -1265,7 +1265,7 @@ endif
 
 
 !--------------------------------------------------------------------------
-! ԭʼ�����ع�  
+! 原始变量重构  
    subroutine Reconstuction_original(U0,UL,UR,gamma,Iflag_Scheme)
      use  const_var
   	 implicit none
@@ -1278,7 +1278,7 @@ endif
      enddo
    end subroutine Reconstuction_original
 
-! �غ�����ع�
+! 守恒变量重构
    subroutine Reconstuction_conservative(U0,UL,UR,gamma,Iflag_Scheme)
      use  const_var
    	 implicit none
@@ -1297,8 +1297,8 @@ endif
    end subroutine Reconstuction_conservative
 
 
-!------------------------------ ���������ع� --------------------------------------------------
-! ���������ҿ���
+!------------------------------ 特征变量重构 --------------------------------------------------
+! 代码由冷岩开发
    subroutine Reconstuction_Characteristic(U0,UL,UR,gamma,Iflag_Scheme)
    use  const_var
    implicit none
@@ -1316,7 +1316,7 @@ endif
    tmp5=1.d0/(2.d0*c1)
    tmp0=1.d0/tmp3
 
-! A=S(-1)*LAMDA*S    see �������������ѧ�� 158-159ҳ   (with alfa1=1, alfa2=0, alfa3=0)
+! A=S(-1)*LAMDA*S    see 《计算空气动力学》 158-159页   (with alfa1=1, alfa2=0, alfa3=0)
    S(1,1)=V2-tmp0;       S(1,2)=-u1 ;   S(1,3)=-v1 ;        S(1,4)=-w1;                  S(1,5)=1.d0
    S(2,1)=-v1 ;          S(2,2)=0.d0 ;  S(2,3)=1.d0 ;       S(2,4)=0.d0;                 S(2,5)=0.d0 
    S(3,1)=-w1 ;          S(3,2)=0.d0 ;  S(3,3)=0.d0 ;       S(3,4)=1.d0 ;                S(3,5)=0.d0 
@@ -1362,7 +1362,7 @@ endif
 
 
 
-!----------����ճ��ϵ�� (Surthland��ʽ)------------------------
+!----------计算粘性系数 (Surthland公式)------------------------
    subroutine get_viscous(nMesh,mBlock)
    Use Global_Var
    Use Flow_Var
@@ -1384,7 +1384,7 @@ endif
      enddo
 !$OMP END PARALLEL DO
 
-!  ճ��ϵ���������ϵ�ֵ �������ٽ����ֵ��
+!  粘性系数虚网格上的值 （复制临近面的值）
     B%mu(0,1:ny-1,1:nz-1)=B%mu(1,1:ny-1,1:nz-1)
 	B%mu(nx,1:ny-1,1:nz-1)=B%mu(nx-1,1:ny-1,1:nz-1)
 	B%mu(1:nx-1,0,1:nz-1)=B%mu(1:nx-1,1,1:nz-1)
@@ -1394,7 +1394,7 @@ endif
   end subroutine get_viscous
 
 !----------------------------------------------------
-!  ������ճ��ϵ���������� (���ܳ��ָ�ֵ�����ܳ�������ճ��ϵ����MUT_MAX����
+!  对湍流粘性系数进行限制 (不能出现负值，不能超过层流粘性系数的MUT_MAX倍）
   subroutine limit_mut(nMesh,mBlock)
    Use Global_Var
    Use Flow_Var
@@ -1422,8 +1422,8 @@ endif
 
 
 !---------------------------------------------------------
-!  �����غ��������������� (d,u,v,T,p,c) 
-!  ���������쳣 (���� �¶�Ϊ��ֵ)
+!  利用守恒变量，计算基本量 (d,u,v,T,p,c) 
+!  处理计算异常 (例如 温度为负值)
 !----------------------------------------------------------
   subroutine comput_duvtpc(nMesh,mBlock)
    use Global_Var
@@ -1434,7 +1434,7 @@ endif
    real(PRE_EC) p00  
    
    p00=1.d0/(gamma*Ma*Ma)
-   B => Mesh(nMesh)%Block(mBlock)                 !��nMesh ������ĵ�mBlock��
+   B => Mesh(nMesh)%Block(mBlock)                 !第nMesh 重网格的第mBlock块
    nx=B%nx; ny=B%ny; nz=B%nz
 
 
@@ -1448,7 +1448,7 @@ endif
          w(i,j,k)= B%U(4,i,j,k)/d(i,j,k)
          T(i,j,k)=(B%U(5,i,j,k)-0.5d0*d(i,j,k)*(uu(i,j,k)*uu(i,j,k)+v(i,j,k)*v(i,j,k)+w(i,j,k)*w(i,j,k)))/(Cv*d(i,j,k))
          p(i,j,k)= p00*d(i,j,k)*T(i,j,k)
-		 cc(i,j,k)=sqrt(T(i,j,k))/Ma                   ! ����
+		 cc(i,j,k)=sqrt(T(i,j,k))/Ma                   ! 声速
        enddo
      enddo
    enddo

@@ -8,11 +8,11 @@
      B => Mesh(nMesh)%Block(mBlock)
      Bc => B%bc_msg(ksub)
    Select case  (Bc%bc)
-     case ( BC_USER_FixedInlet )    ! 901, ¸ø¶¨Èë¿ÚÁ÷¶¯
+     case ( BC_USER_FixedInlet )    ! 901, ç»™å®šå…¥å£æµåŠ¨
        call boundary_user_Inlet(nMesh,mBlock,ksub)
-     case ( BC_USER_Inlet_time )    ! 902, ¸ø¶¨Èë¿ÚÁ÷¶¯Ê±¼äÐòÁÐ
+     case ( BC_USER_Inlet_time )    ! 902, ç»™å®šå…¥å£æµåŠ¨æ—¶é—´åºåˆ—
        call  boundary_user_Inlet_time(nMesh,mBlock,ksub)
-     case ( BC_USER_Blow_Suction_Wall )    ! 903, ´µÎü±ÚÃæ
+     case ( BC_USER_Blow_Suction_Wall )    ! 903, å¹å¸å£é¢
        call boundary_user_blow_suction_Wall(nMesh,mBlock,ksub)
 
 	 case default
@@ -26,9 +26,9 @@
 
 
 
-!------------------ÓÃ»§×Ô¶¨ÒåµÄ±ß½çÌõ¼þ-----------------------------------
-! ¸ø¶¨Èë¿Ú·Ö²¼£¬ÎÄ¼þÃû inlet.xxx  (xxxÎª¿éºÅ)
-! ½öÊ¹ÓÃ1²ãÐéÍø¸ñ
+!------------------ç”¨æˆ·è‡ªå®šä¹‰çš„è¾¹ç•Œæ¡ä»¶-----------------------------------
+! ç»™å®šå…¥å£åˆ†å¸ƒï¼Œæ–‡ä»¶å inlet.xxx  (xxxä¸ºå—å·)
+! ä»…ä½¿ç”¨1å±‚è™šç½‘æ ¼
 
     subroutine boundary_user_Inlet(nMesh,mBlock,ksub)
      Use Global_Var
@@ -39,7 +39,7 @@
      integer:: mBlock,ksub,ib,ie,jb,je,kb,ke,i,j,k,m,nMesh,NVAR1
      integer:: n1,n2,n3
 	 integer,save:: read_flag=0
-     real(PRE_EC),allocatable,save,dimension(:,:,:,:):: uc,fc       ! ±ß½çÖµ 
+     real(PRE_EC),allocatable,save,dimension(:,:,:,:):: uc,fc       ! è¾¹ç•Œå€¼ 
      character(len=30):: fname
 
      NVAR1=Mesh(nMesh)%NVAR
@@ -50,7 +50,7 @@
 	 n2=max(je-jb,1)
 	 n3=max(ke-kb,1)
 
- !-----¶ÁÈ¡Êý¾Ý--------------------------------------   
+ !-----è¯»å–æ•°æ®--------------------------------------   
 	 if(read_flag==0) then
 	  read_flag=1
       allocate(uc(n1,n2,n3,5),fc(5,n1,n2,n3))
@@ -78,8 +78,8 @@
 
 !-----------------------------------------------------------------
 
- ! ½öÊ¹ÓÃ1²ãGhost Cell    
-             if(Bc%face .eq. 1) then                 ! i- Ãæ
+ ! ä»…ä½¿ç”¨1å±‚Ghost Cell    
+             if(Bc%face .eq. 1) then                 ! i- é¢
  				 do k=kb,ke-1
 				 do j=jb,je-1
                  do m=1,5 
@@ -135,9 +135,9 @@
      end 
 !----------------------------------------------------------------------------------------
 
-!------------------ÓÃ»§×Ô¶¨ÒåµÄ±ß½çÌõ¼þ-----------------------------------
-! ¸ø¶¨Èë¿ÚÊ±¼äÐòÁÐ£¬ÎÄ¼þÃû inlet-time.xxx  (xxxÎª¿éºÅ)
-! ½öÊ¹ÓÃ1²ãÐéÍø¸ñ
+!------------------ç”¨æˆ·è‡ªå®šä¹‰çš„è¾¹ç•Œæ¡ä»¶-----------------------------------
+! ç»™å®šå…¥å£æ—¶é—´åºåˆ—ï¼Œæ–‡ä»¶å inlet-time.xxx  (xxxä¸ºå—å·)
+! ä»…ä½¿ç”¨1å±‚è™šç½‘æ ¼
 
     subroutine boundary_user_Inlet_time(nMesh,mBlock,ksub)
      Use Global_Var
@@ -148,7 +148,7 @@
      integer:: mBlock,ksub,ib,ie,jb,je,kb,ke,i,j,k,m,nMesh,NVAR1
      integer:: n1,n2,n3,Istep_inlet
 	 integer,save:: read_flag=0
-     real(PRE_EC),allocatable,save,dimension(:,:,:,:):: uc,fc       ! ±ß½çÖµ 
+     real(PRE_EC),allocatable,save,dimension(:,:,:,:):: uc,fc       ! è¾¹ç•Œå€¼ 
      real(PRE_EC):: tt_inlet
 	 character(len=30):: fname
 
@@ -160,7 +160,7 @@
 	 n2=max(je-jb,1)
 	 n3=max(ke-kb,1)
 
- !-----¶ÁÈ¡Êý¾Ý--------------------------------------   
+ !-----è¯»å–æ•°æ®--------------------------------------   
 	 if(read_flag==0) then
 	  read_flag=1
       allocate(uc(n1,n2,n3,5),fc(5,n1,n2,n3))
@@ -170,8 +170,8 @@
 	  print*, "n1,n2,n3=",n1,n2,n3
     endif
 
-! ³õÊ¼Ê±¿Ì (KRK=0) ÒÔ¼° ¸üÐÂÊ±¼ä²½  (KRK=3) Ê±£¬ ¶ÁÈ¡ ucÊý¾Ý
-! Èç²ÉÓÃ1²½ Euler·¨£¬ ÔòKRK±£³Ö0
+! åˆå§‹æ—¶åˆ» (KRK=0) ä»¥åŠ æ›´æ–°æ—¶é—´æ­¥  (KRK=3) æ—¶ï¼Œ è¯»å– ucæ•°æ®
+! å¦‚é‡‡ç”¨1æ­¥ Euleræ³•ï¼Œ åˆ™KRKä¿æŒ0
 
    if(KRK ==0 .or. KRK==3) then
       read(999) Istep_inlet,tt_inlet
@@ -195,8 +195,8 @@
 
 !-----------------------------------------------------------------
 
- ! ½öÊ¹ÓÃ1²ãGhost Cell    
-             if(Bc%face .eq. 1) then                 ! i- Ãæ
+ ! ä»…ä½¿ç”¨1å±‚Ghost Cell    
+             if(Bc%face .eq. 1) then                 ! i- é¢
  				 do k=kb,ke-1
 				 do j=jb,je-1
                  do m=1,5 
@@ -254,8 +254,8 @@
 
 
 !-------------------------------------------------------------------  
-! °üº¬´µÎüÈÅ¶¯µÄ±ÚÃæ £¨ÈÅ¶¯·¶Î§x-z·½Ïò£©
-! ½öÊ¹ÓÃ1²ãÐéÍø¸ñ
+! åŒ…å«å¹å¸æ‰°åŠ¨çš„å£é¢ ï¼ˆæ‰°åŠ¨èŒƒå›´x-zæ–¹å‘ï¼‰
+! ä»…ä½¿ç”¨1å±‚è™šç½‘æ ¼
 
 
     subroutine boundary_user_blow_suction_Wall(nMesh,mBlock,ksub)
@@ -268,8 +268,8 @@
 	 integer,save:: Iflag=0
      real(PRE_EC):: d1,u1,v1,w1,T1,p1,d2,u2,v2,w2,T2,p2,xb,xe,zb,ze,wx,wz,Aw
      real(PRE_EC),save:: rpara(100)
-! --------- ½öÔÚµÚ1´Îµ÷ÓÃ±¾×Ó³ÌÐòÊ±Ö´ÐÐ ------------- 
-!   ¶ÁÈ¡¸¨Öú²ÎÊý (¹©×Ô¶¨Òå±ß½çÌõ¼þÊ¹ÓÃ)
+! --------- ä»…åœ¨ç¬¬1æ¬¡è°ƒç”¨æœ¬å­ç¨‹åºæ—¶æ‰§è¡Œ ------------- 
+!   è¯»å–è¾…åŠ©å‚æ•° (ä¾›è‡ªå®šä¹‰è¾¹ç•Œæ¡ä»¶ä½¿ç”¨)
    if(Iflag==0) then
      Iflag=1
         open(99,file="bc_user.ec")
@@ -293,7 +293,7 @@
 	  print*, "if you using blow-and-suction wall, you should not use Turbulence model"
 	endif
 
-! ±ÚÃæ´µÎüÈÅ¶¯ÇøÓò¡¢²¨Êý¼°Õñ·ù    
+! å£é¢å¹å¸æ‰°åŠ¨åŒºåŸŸã€æ³¢æ•°åŠæŒ¯å¹…    
 	xb=rpara(1)
 	xe=rpara(2)
 	zb=rpara(3)
@@ -303,8 +303,8 @@
 	Aw=rpara(7)
 !-------------------------
 
-!   ½öÊ¹ÓÃ1²ãGhost Cell
-!   i2 Ghost Cell;  i1 ÄÚµã
+!   ä»…ä½¿ç”¨1å±‚Ghost Cell
+!   i2 Ghost Cell;  i1 å†…ç‚¹
      if(Bc%face .eq. 1 .or. Bc%face .eq. 4) then   ! i- or i+
        if(Bc%face .eq. 1) then
          i=ib; i1=ib; i2=ib-1
@@ -319,10 +319,10 @@
 		    d1=B%U(1,i1,j,k); u1=B%U(2,i1,j,k)/d1; v1=B%U(3,i1,j,k)/d1; w1=B%U(4,i1,j,k)/d1
             p1=(B%U(5,i1,j,k)-0.5d0*d1*(u1*u1+v1*v1+w1*w1))*(gamma-1.d0)      
             T1=gamma*Ma*Ma*p1/d1 
-			p2=p1               ! ±ß½ç²ã¼ÙÉè£¬±ÚÃæ´¦·¨ÏòÑ¹Á¦ÌÝ¶ÈÎª0
+			p2=p1               ! è¾¹ç•Œå±‚å‡è®¾ï¼Œå£é¢å¤„æ³•å‘åŽ‹åŠ›æ¢¯åº¦ä¸º0
             
 			if(Twall >0) then
-		       T2=2.d0*Twall-T1    ! µÈÎÂ±Ú£¬ÎÂ¶ÈÍâ²å    0.5*(T1+T2)=Twall
+		       T2=2.d0*Twall-T1    ! ç­‰æ¸©å£ï¼Œæ¸©åº¦å¤–æ’    0.5*(T1+T2)=Twall
 		    else
 			   T2=T1
 		    endif
@@ -334,7 +334,7 @@
 		     Vn=0.d0
 		   endif
 
-		    n1=B%ni1(i,j,k) ; n2=B%ni2(i,j,k); n3=B%ni3(i,j,k)   ! ¹éÒ»»¯·¨·½Ïò  
+		    n1=B%ni1(i,j,k) ; n2=B%ni2(i,j,k); n3=B%ni3(i,j,k)   ! å½’ä¸€åŒ–æ³•æ–¹å‘  
             u2= 2.d0*Vn*n1-u1
             v2= 2.d0*Vn*n2-v1
 			w2= 2.d0*Vn*n3-w1
@@ -361,10 +361,10 @@
  		    d1=B%U(1,i,j1,k); u1=B%U(2,i,j1,k)/d1; v1=B%U(3,i,j1,k)/d1; w1=B%U(4,i,j1,k)/d1
             p1=(B%U(5,i,j1,k)-0.5d0*d1*(u1*u1+v1*v1+w1*w1))*(gamma-1.d0)      
             T1=gamma*Ma*Ma*p1/d1 
-    		p2=p1               ! ±ß½ç²ã¼ÙÉè£¬±ÚÃæ´¦·¨ÏòÑ¹Á¦ÌÝ¶ÈÎª0
+    		p2=p1               ! è¾¹ç•Œå±‚å‡è®¾ï¼Œå£é¢å¤„æ³•å‘åŽ‹åŠ›æ¢¯åº¦ä¸º0
             
 			if(Twall >0) then
-		       T2=2.d0*Twall-T1    ! µÈÎÂ±Ú£¬ÎÂ¶ÈÍâ²å    0.5*(T1+T2)=Twall
+		       T2=2.d0*Twall-T1    ! ç­‰æ¸©å£ï¼Œæ¸©åº¦å¤–æ’    0.5*(T1+T2)=Twall
 		    else
 			   T2=T1
 		    endif
@@ -403,10 +403,10 @@
  		    d1=B%U(1,i,j,k1); u1=B%U(2,i,j,k1)/d1; v1=B%U(3,i,j,k1)/d1; w1=B%U(4,i,j,k1)/d1
             p1=(B%U(5,i,j,k1)-0.5d0*d1*(u1*u1+v1*v1+w1*w1))*(gamma-1.d0)      
             T1=gamma*Ma*Ma*p1/d1 
-    		p2=p1               ! ±ß½ç²ã¼ÙÉè£¬±ÚÃæ´¦·¨ÏòÑ¹Á¦ÌÝ¶ÈÎª0
+    		p2=p1               ! è¾¹ç•Œå±‚å‡è®¾ï¼Œå£é¢å¤„æ³•å‘åŽ‹åŠ›æ¢¯åº¦ä¸º0
             
 			if(Twall >0) then
-		       T2=2.d0*Twall-T1    ! µÈÎÂ±Ú£¬ÎÂ¶ÈÍâ²å    0.5*(T1+T2)=Twall
+		       T2=2.d0*Twall-T1    ! ç­‰æ¸©å£ï¼Œæ¸©åº¦å¤–æ’    0.5*(T1+T2)=Twall
 		    else
 			   T2=T1
 		    endif
