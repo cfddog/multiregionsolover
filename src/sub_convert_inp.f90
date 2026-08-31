@@ -260,7 +260,7 @@
    Type (Block_TYPE1),pointer:: B,B1
    TYPE (BC_MSG_TYPE),pointer:: Bc,Bc1
    Interface
-     subroutine Convert_bc_interface(Bc,kb,ke,kb1,ke1)
+     subroutine Convert_bc(Bc,kb,ke,kb1,ke1)
        use Type_Def1
        implicit none
        TYPE (BC_MSG_TYPE),pointer:: Bc
@@ -282,9 +282,12 @@
       Bc => B%bc_msg(ksub)
       Bc%f_no=ksub
       read(88,*)  kb(1),ke(1),kb(2),ke(2),kb(3),ke(3),Bc%bc
-!     Keep ALL connections: always read connection block info
-      read(88,*) kb1(1),ke1(1),kb1(2),ke1(2),kb1(3),ke1(3),Bc%nb1
-      call Convert_bc_interface(Bc,kb,ke,kb1,ke1)
+      if(Bc%bc .lt. 0) then
+        read(88,*) kb1(1),ke1(1),kb1(2),ke1(2),kb1(3),ke1(3),Bc%nb1
+      else
+        kb1(:)=0; ke1(:)=0; Bc%nb1=0
+      endif
+      call Convert_bc(Bc,kb,ke,kb1,ke1)
     enddo
    enddo
    close(88)
@@ -293,7 +296,7 @@
      B => Block(m)
      do ksub=1, B%subface
        Bc => B%bc_msg(ksub)
-       if(Bc%bc .lt. 0) then
+       if(Bc%bc .lt. 0 .and. Bc%nb1 .gt. 0) then
          Bc%f_no1=0
          B1=>Block(Bc%nb1)
          do ksub1=1,B1%subface
@@ -329,96 +332,3 @@
    close(99)
    print*, "Convert bc3d_interface.inp to bc3d_interface.inc OK"
   end
-
-!----------------------------------------------------------------------
-      subroutine Convert_bc_interface(Bc,kb,ke,kb1,ke1)
-       use Type_Def1
-       implicit none
-       TYPE (BC_MSG_TYPE),pointer:: Bc
-       integer,dimension(3):: kb,ke,kb1,ke1,s,p,LP
-       integer:: k,j,k1
-!      For interface connections, always set bc to negative (inner boundary)
-       if(Bc%bc .ge. 0) then
-!        Convert physical boundary to connection by setting bc negative
-         Bc%bc = -abs(Bc%bc) - 1000
-       endif
-       Bc%ib1=abs(kb1(1)); Bc%ie1=abs(ke1(1)); Bc%jb1=abs(kb1(2)); Bc%je1=abs(ke1(2))
-       Bc%kb1=abs(kb1(3)); Bc%ke1=abs(ke1(3))
-!    Determine face type (i-, i+, j-,j+, k-,k+)
-       do k=1,3
-         if(kb(k) .eq. ke(k) ) then
-           s(k)=0
-         else if (kb(k) .gt. 0) then
-           s(k)=1
-         else
-           s(k)=-1
-         endif
-       enddo
-       Bc%ib=min(abs(kb(1)),abs(ke(1))) ;  Bc%ie=max(abs(kb(1)),abs(ke(1)))
-       Bc%jb=min(abs(kb(2)),abs(ke(2))) ;  Bc%je=max(abs(kb(2)),abs(ke(2)))
-       Bc%kb=min(abs(kb(3)),abs(ke(3))) ;  Bc%ke=max(abs(kb(3)),abs(ke(3)))
-      if(s(1) .eq. 0) then
-         if (Bc%ib .eq. 1) then
-           Bc%face=1
-         else
-           Bc%face=4
-         endif
-      else if(s(2) .eq. 0) then
-         if(Bc%jb .eq. 1) then
-           Bc%face=2
-         else
-           Bc%face=5
-         endif
-      else
-         if(Bc%kb .eq. 1) then
-           Bc%face=3
-         else
-           Bc%face=6
-         endif
-      endif
-!    Determine connection face type
-      do k=1,3
-        if(kb1(k) .eq. ke1(k) ) then
-          p(k)=0
-        else if (kb1(k) .gt. 0) then
-          p(k)=1
-        else
-          p(k)=-1
-        endif
-      enddo
-      if(p(1) .eq. 0) then
-         if (Bc%ib1 .eq. 1) then
-           Bc%face1=1
-         else
-           Bc%face1=4
-         endif
-      else if(p(2) .eq. 0) then
-         if(Bc%jb1 .eq. 1) then
-           Bc%face1=2
-         else
-           Bc%face1=5
-         endif
-      else
-         if(Bc%kb1 .eq. 1) then
-           Bc%face1=3
-         else
-           Bc%face1=6
-         endif
-      endif
-!    Compute L1, L2, L3
-      do k=1,3
-        do j=1,3
-          if(s(k) .eq. p(j)) Lp(k)=j
-        enddo
-      enddo
-      do k=1,3
-        if(s(k) .ne. 0) then
-          k1=Lp(k)
-          if( (ke(k)-kb(k))*(ke1(k1)-kb1(k1)) .lt. 0) Lp(k)=-Lp(k)
-        else
-          k1=Lp(k)
-          if( (Bc%face-1)/3 .eq. (Bc%face1-1)/3 ) Lp(k)=-Lp(k)
-        endif
-      enddo
-      Bc%L1=Lp(1); Bc%L2=Lp(2); Bc%L3=Lp(3)
-      end
