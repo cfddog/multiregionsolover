@@ -419,24 +419,38 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
       mt=B_n(m) !
 	  B=>MP%Block(mt)
 	 
-	  do k=0,nz
-	  do j=0,ny
-	  do i=0,nx
-		 U(i,j,k,1)=B%U(1,i,j,k)                     ! d
-         U(i,j,k,2)=B%U(2,i,j,k)/B%U(1,i,j,k)        ! u
-         U(i,j,k,3)=B%U(3,i,j,k)/B%U(1,i,j,k)        ! v
-         U(i,j,k,4)=B%U(4,i,j,k)/B%U(1,i,j,k)        ! w
-         U(i,j,k,5)=(B%U(5,i,j,k)-0.5d0*U(i,j,k,1)*(U(i,j,k,2)**2+U(i,j,k,3)**2+U(i,j,k,4)**2) )/(Cv*U(i,j,k,1))    ! T
-        if(NVAR1 .eq. 6) then
-		 U(i,j,k,6)=B%U(6,i,j,k)
-		endif
-		if(NVAR1 .eq. 7) then
-		 U(i,j,k,6)=B%U(6,i,j,k)
-		 U(i,j,k,7)=B%U(7,i,j,k)
-		endif 
-	  enddo
-	  enddo
- 	  enddo
+	  if(B%Block_type == BLOCK_LOWSPEED) then
+	    do k=0,nz
+	    do j=0,ny
+	    do i=0,nx
+		  U(i,j,k,1)=B%U(1,i,j,k)        ! rho
+          U(i,j,k,2)=B%U(2,i,j,k)        ! u
+          U(i,j,k,3)=B%U(3,i,j,k)        ! v
+          U(i,j,k,4)=B%U(4,i,j,k)        ! w
+          U(i,j,k,5)=B%U(5,i,j,k)        ! T
+	    enddo
+	    enddo
+ 	    enddo
+	  else
+	    do k=0,nz
+	    do j=0,ny
+	    do i=0,nx
+		  U(i,j,k,1)=B%U(1,i,j,k)                     ! d
+          U(i,j,k,2)=B%U(2,i,j,k)/B%U(1,i,j,k)        ! u
+          U(i,j,k,3)=B%U(3,i,j,k)/B%U(1,i,j,k)        ! v
+          U(i,j,k,4)=B%U(4,i,j,k)/B%U(1,i,j,k)        ! w
+          U(i,j,k,5)=(B%U(5,i,j,k)-0.5d0*U(i,j,k,1)*(U(i,j,k,2)**2+U(i,j,k,3)**2+U(i,j,k,4)**2) )/(Cv*U(i,j,k,1))    ! T
+         if(NVAR1 .eq. 6) then
+		  U(i,j,k,6)=B%U(6,i,j,k)
+		  endif
+		  if(NVAR1 .eq. 7) then
+		  U(i,j,k,6)=B%U(6,i,j,k)
+		  U(i,j,k,7)=B%U(7,i,j,k)
+		  endif 
+	    enddo
+	    enddo
+ 	    enddo
+	  endif
 
     else !
 	   Num_data=NVAR1*(nx+1)*(ny+1)*(nz+1)
@@ -471,24 +485,38 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 	  Num_data=(nx+1)*(ny+1)*(nz+1)*NVAR1
  	  tag=m
 	 
-	   do k=0,nz
-	   do j=0,ny
-	   do i=0,nx
-		 U(i,j,k,1)=B%U(1,i,j,k)
-         U(i,j,k,2)=B%U(2,i,j,k)/B%U(1,i,j,k)
-         U(i,j,k,3)=B%U(3,i,j,k)/B%U(1,i,j,k)
-         U(i,j,k,4)=B%U(4,i,j,k)/B%U(1,i,j,k)
-         U(i,j,k,5)=(B%U(5,i,j,k)-0.5d0*U(i,j,k,1)*(U(i,j,k,2)**2+U(i,j,k,3)**2+U(i,j,k,4)**2) )/(Cv*U(i,j,k,1))
-        if(NVAR1 .eq. 6) then
-		 U(i,j,k,6)=B%U(6,i,j,k)
-		endif
-		if(NVAR1 .eq. 7) then
-		 U(i,j,k,6)=B%U(6,i,j,k)
-		 U(i,j,k,7)=B%U(7,i,j,k)
-		endif 
-	   enddo
-	   enddo
- 	   enddo
+	   if(B%Block_type == BLOCK_LOWSPEED) then
+	     do k=0,nz
+	     do j=0,ny
+	     do i=0,nx
+		   U(i,j,k,1)=B%U(1,i,j,k)
+           U(i,j,k,2)=B%U(2,i,j,k)
+           U(i,j,k,3)=B%U(3,i,j,k)
+           U(i,j,k,4)=B%U(4,i,j,k)
+           U(i,j,k,5)=B%U(5,i,j,k)
+	     enddo
+	     enddo
+ 	     enddo
+	   else
+	     do k=0,nz
+	     do j=0,ny
+	     do i=0,nx
+		   U(i,j,k,1)=B%U(1,i,j,k)
+           U(i,j,k,2)=B%U(2,i,j,k)/B%U(1,i,j,k)
+           U(i,j,k,3)=B%U(3,i,j,k)/B%U(1,i,j,k)
+           U(i,j,k,4)=B%U(4,i,j,k)/B%U(1,i,j,k)
+           U(i,j,k,5)=(B%U(5,i,j,k)-0.5d0*U(i,j,k,1)*(U(i,j,k,2)**2+U(i,j,k,3)**2+U(i,j,k,4)**2) )/(Cv*U(i,j,k,1))
+          if(NVAR1 .eq. 6) then
+		   U(i,j,k,6)=B%U(6,i,j,k)
+		  endif
+		  if(NVAR1 .eq. 7) then
+		   U(i,j,k,6)=B%U(6,i,j,k)
+		   U(i,j,k,7)=B%U(7,i,j,k)
+		  endif 
+	     enddo
+	     enddo
+ 	     enddo
+	   endif
 	   call MPI_Send(U,Num_data,OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD,ierr )
       deallocate(U)
     enddo
@@ -546,20 +574,31 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
            G(i,j,k,3)=B%z(i,j,k)
          enddo; enddo; enddo
 !        Flow data (cell-centered primitive variables)
-         do k=0,nz; do j=0,ny; do i=0,nx
-           d1 = B%U(1,i,j,k)
-           u1 = B%U(2,i,j,k)/max(d1, 1.d-20)
-           v1 = B%U(3,i,j,k)/max(d1, 1.d-20)
-           w1 = B%U(4,i,j,k)/max(d1, 1.d-20)
-           p1 = (B%U(5,i,j,k) - 0.5d0*d1*(u1*u1+v1*v1+w1*w1)) * (gamma-1.d0)
-           T1 = gamma * Ma * Ma * p1 / max(d1, 1.d-20)
-           U(i,j,k,1) = d1
-           U(i,j,k,2) = u1
-           U(i,j,k,3) = v1
-           U(i,j,k,4) = w1
-           U(i,j,k,5) = T1
-           U(i,j,k,6) = p1
-         enddo; enddo; enddo
+          if(Block_Type_List(m) == BLOCK_LOWSPEED) then
+            do k=0,nz; do j=0,ny; do i=0,nx
+              U(i,j,k,1) = B%U(1,i,j,k)      ! rho
+              U(i,j,k,2) = B%U(2,i,j,k)      ! u
+              U(i,j,k,3) = B%U(3,i,j,k)      ! v
+              U(i,j,k,4) = B%U(4,i,j,k)      ! w
+              U(i,j,k,5) = B%U(5,i,j,k)      ! T
+              U(i,j,k,6) = B%p(i,j,k)        ! p
+            enddo; enddo; enddo
+          else
+            do k=0,nz; do j=0,ny; do i=0,nx
+              d1 = B%U(1,i,j,k)
+              u1 = B%U(2,i,j,k)/max(d1, 1.d-20)
+              v1 = B%U(3,i,j,k)/max(d1, 1.d-20)
+              w1 = B%U(4,i,j,k)/max(d1, 1.d-20)
+              p1 = (B%U(5,i,j,k) - 0.5d0*d1*(u1*u1+v1*v1+w1*w1)) * (gamma-1.d0)
+              T1 = gamma * Ma * Ma * p1 / max(d1, 1.d-20)
+              U(i,j,k,1) = d1
+              U(i,j,k,2) = u1
+              U(i,j,k,3) = v1
+              U(i,j,k,4) = w1
+              U(i,j,k,5) = T1
+              U(i,j,k,6) = p1
+            enddo; enddo; enddo
+          endif
        else
          grid_size = nx*ny*nz*3
          flow_size = 6*(nx+1)*(ny+1)*(nz+1)
@@ -694,20 +733,31 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 !      Send flow data (cell-centered primitive variables)
        allocate(U(0:nx,0:ny,0:nz,6))
-       do k=0,nz; do j=0,ny; do i=0,nx
-         d1 = B%U(1,i,j,k)
-         u1 = B%U(2,i,j,k)/max(d1, 1.d-20)
-         v1 = B%U(3,i,j,k)/max(d1, 1.d-20)
-         w1 = B%U(4,i,j,k)/max(d1, 1.d-20)
-         p1 = (B%U(5,i,j,k) - 0.5d0*d1*(u1*u1+v1*v1+w1*w1)) * (gamma-1.d0)
-         T1 = gamma * Ma * Ma * p1 / max(d1, 1.d-20)
-         U(i,j,k,1) = d1
-         U(i,j,k,2) = u1
-         U(i,j,k,3) = v1
-         U(i,j,k,4) = w1
-         U(i,j,k,5) = T1
-         U(i,j,k,6) = p1
-       enddo; enddo; enddo
+       if(Block_Type_List(m1) == BLOCK_LOWSPEED) then
+         do k=0,nz; do j=0,ny; do i=0,nx
+           U(i,j,k,1) = B%U(1,i,j,k)
+           U(i,j,k,2) = B%U(2,i,j,k)
+           U(i,j,k,3) = B%U(3,i,j,k)
+           U(i,j,k,4) = B%U(4,i,j,k)
+           U(i,j,k,5) = B%U(5,i,j,k)
+           U(i,j,k,6) = B%p(i,j,k)
+         enddo; enddo; enddo
+       else
+         do k=0,nz; do j=0,ny; do i=0,nx
+           d1 = B%U(1,i,j,k)
+           u1 = B%U(2,i,j,k)/max(d1, 1.d-20)
+           v1 = B%U(3,i,j,k)/max(d1, 1.d-20)
+           w1 = B%U(4,i,j,k)/max(d1, 1.d-20)
+           p1 = (B%U(5,i,j,k) - 0.5d0*d1*(u1*u1+v1*v1+w1*w1)) * (gamma-1.d0)
+           T1 = gamma * Ma * Ma * p1 / max(d1, 1.d-20)
+           U(i,j,k,1) = d1
+           U(i,j,k,2) = u1
+           U(i,j,k,3) = v1
+           U(i,j,k,4) = w1
+           U(i,j,k,5) = T1
+           U(i,j,k,6) = p1
+         enddo; enddo; enddo
+       endif
        flow_size = 6*(nx+1)*(ny+1)*(nz+1)
        tag = m*2+1
        call MPI_Send(U, flow_size, OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
@@ -1097,4 +1147,3 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    call MPI_Barrier(MPI_COMM_WORLD,ierr)
    if(my_id .eq. 0) print*, "read bc3d_interface.inc OK"
   end subroutine read_inc_interface 
-

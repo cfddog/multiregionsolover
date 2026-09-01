@@ -4,7 +4,7 @@
    implicit none
    logical ext1
 !-----------------------------------------------------------------------------
-   call set_default_parameter ! ???¨°???????
+   call set_default_parameter ! ???ï¿½ï¿½???????
 
    if(my_id .eq. 0) then
      inquire(file="control.ec",exist=ext1)
@@ -26,7 +26,7 @@
   end subroutine read_parameter
    
 !--------------------------------------------------------------------    
-! ???¨°?????????  
+! ???ï¿½ï¿½?????????  
   subroutine set_default_parameter 
    use Global_var
    implicit none
@@ -92,18 +92,36 @@
 	Periodic_dY=0.d0 
 	Periodic_dZ=0.d0
 
-    Iflag_savefile=0       ! ???§Õ??flow3d.dat
+    Iflag_savefile=0       ! ???ï¿½ï¿½??flow3d.dat
 !----for Turbomachinary solver------------
     IF_TurboMachinary=0    ! ??????????????
 	Ref_medium_usrdef=0    ! ???????????? ???????????
-    IF_Scheme_Positivity=1     ! ?????????????????????????????????1????´‘
+    IF_Scheme_Positivity=1     ! ?????????????????????????????????1????ï¿½ï¿½
     Turbo_P0= 101330.d0    ! ??? ??????1?????????
 	Turbo_T0= 288.15d0     ! ???? ?????288.15K)
-    Turbo_L0= 1.d0         ! ?¦Ï????? ??????1m)
+    Turbo_L0= 1.d0         ! ?ï¿½ï¿½????? ??????1m)
     Turbo_w=0.d0           ! ???  ( ?/?? ?? ???0)
     Turbo_Periodic_seta=0.d0   ! ?????????????
 !-------------------------------------
     IF_InnerFlow=0   ! ??????
+
+!---- Low-speed (incompressible) solver parameters (SI units) -------------
+    LS_rho=1.2d0        ! density [kg/m3]
+    LS_mu=1.8d-5        ! dynamic viscosity [Pa.s]
+    LS_k=0.025d0        ! thermal conductivity [W/(m.K)]
+    LS_Cp=1005.d0       ! specific heat [J/(kg.K)]
+    LS_T_ref=288.15d0   ! reference/inlet temperature [K]
+    LS_Inlet_Type=1     ! 1=velocity inlet, 2=mass-flow inlet, 3=pressure inlet
+    LS_U_in=1.d0; LS_V_in=0.d0; LS_W_in=0.d0   ! inlet velocity [m/s]
+    LS_Mdot_in=0.d0     ! inlet mass flow rate [kg/s] (type 2)
+    LS_P_in=101325.d0   ! inlet total pressure [Pa] (type 3)
+    LS_P_out=101325.d0  ! outlet static pressure [Pa]
+    LS_T_wall=-1.d0     ! wall temperature [K] (<0 adiabatic)
+    LS_U_lid=0.d0       ! lid-driven cavity: tangential wall velocity on j+ face [m/s]
+    LS_alpha_p=0.3d0; LS_alpha_u=0.7d0; LS_alpha_T=0.7d0   ! under-relaxation
+    LS_Max_Iter=5000    ! SIMPLE inner iterations per solver call
+    LS_Tol=1.d-8        ! SIMPLE convergence tolerance (pressure correction residual)
+    LS_Scheme=1         ! convection scheme: 1=1st-order upwind, 2=2nd-order upwind, 3=MUSCL(Van Leer)
 end
 
 !------read parameter (Namelist type)---------------- 
@@ -127,7 +145,11 @@ end
         IF_TurboMachinary, Ref_medium_usrdef, IF_Scheme_Positivity, &
 		Turbo_P0,Turbo_T0, Turbo_L0,Turbo_w, Turbo_Periodic_seta, &
 		Periodic_dX, Periodic_dY, Periodic_dZ, &
-		IF_Innerflow, Iflag_savefile
+		IF_Innerflow, Iflag_savefile, &
+		LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref, LS_Inlet_Type, &
+		LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, &
+		LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, &
+		LS_Max_Iter, LS_Tol, LS_Scheme
 
 
 	open(99,file="control.ec")
@@ -141,17 +163,17 @@ end
     if( (IF_TurboMachinary ==1 .or. IF_Innerflow==1 )    &  
 	  .and.  Ref_medium_usrdef == 0) then   ! ???????????????Mach???? Reynolds??
       
-	  T_inf=Turbo_T0  ! ?¦Ï???? ???????????
+	  T_inf=Turbo_T0  ! ?ï¿½ï¿½???? ???????????
       gamma=1.4d0    ! 
 	  PrL=0.7d0   ! Prandtl??
 	  PrT=0.9d0
-      R0= 287.06d0   ! ?????????i??R
-	  a0= sqrt(gamma*R0*Turbo_T0)    ! ?¦Ï??????????? 
+      R0= 287.06d0   ! ?????????ï¿½i??R
+	  a0= sqrt(gamma*R0*Turbo_T0)    ! ?ï¿½ï¿½??????????? 
 	  mu0=1.179d-5     ! ?????????? (288.15K)  
-      mu1=mu0* sqrt((Turbo_T0/288.15d0)**3)*(288.15d0+110.4d0)/(Turbo_T0+110.4d0)  ! ?¦Ï????????????????
+      mu1=mu0* sqrt((Turbo_T0/288.15d0)**3)*(288.15d0+110.4d0)/(Turbo_T0+110.4d0)  ! ?ï¿½ï¿½????????????????
       d0=Turbo_P0/(R0*Turbo_T0)
-	  Re=d0*a0*Turbo_L0/mu1    ! ?¦Ï??????????????????Reynolds??
-	  Ma=1.d0     ! Mach??    ????????????¦Ï?????????¦Ï?Mach???1??
+	  Re=d0*a0*Turbo_L0/mu1    ! ?ï¿½ï¿½??????????????????Reynolds??
+	  Ma=1.d0     ! Mach??    ????????????ï¿½ï¿½?????????ï¿½ï¿½?Mach???1??
       Turbo_w= 2.d0*PI*Turbo_w/(a0/Turbo_L0)   ! ?????????? Turbo_W???/??
 !	  P_outlet=P_outlet/Turbo_P0    ! ???,  Bug !!
 	  P_outlet=P_outlet/(d0*a0*a0)    ! ??? ?????? ???????
@@ -261,6 +283,24 @@ end
 	rpara(37)=Periodic_dY
 	rpara(38)=Periodic_dZ
 
+    rpara(40)=LS_rho
+    rpara(41)=LS_mu
+    rpara(42)=LS_k
+    rpara(43)=LS_Cp
+    rpara(44)=LS_T_ref
+    rpara(45)=LS_U_in
+    rpara(46)=LS_V_in
+    rpara(47)=LS_W_in
+    rpara(48)=LS_Mdot_in
+    rpara(49)=LS_P_in
+    rpara(50)=LS_P_out
+    rpara(51)=LS_T_wall
+    rpara(52)=LS_U_lid
+    rpara(53)=LS_alpha_p
+    rpara(54)=LS_alpha_u
+    rpara(55)=LS_alpha_T
+    rpara(56)=LS_Tol
+
 
 
 
@@ -292,6 +332,9 @@ end
    	Ipara(29)=IF_Innerflow
    	Ipara(30)=Kstep_average
     Ipara(31)=Iflag_savefile
+    Ipara(32)=LS_Inlet_Type
+    Ipara(33)=LS_Max_Iter
+    Ipara(34)=LS_Scheme
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -333,6 +376,23 @@ end
     Periodic_dX=rpara(36)
 	Periodic_dY=rpara(37)
 	Periodic_dZ=rpara(38)
+    LS_rho=rpara(40)
+    LS_mu=rpara(41)
+    LS_k=rpara(42)
+    LS_Cp=rpara(43)
+    LS_T_ref=rpara(44)
+    LS_U_in=rpara(45)
+    LS_V_in=rpara(46)
+    LS_W_in=rpara(47)
+    LS_Mdot_in=rpara(48)
+    LS_P_in=rpara(49)
+    LS_P_out=rpara(50)
+    LS_T_wall=rpara(51)
+    LS_U_lid=rpara(52)
+    LS_alpha_p=rpara(53)
+    LS_alpha_u=rpara(54)
+    LS_alpha_T=rpara(55)
+    LS_Tol=rpara(56)
 
 
 
@@ -364,6 +424,9 @@ end
    	IF_Innerflow=Ipara(29)
    	Kstep_average=Ipara(30)
     Iflag_savefile=Ipara(31)
+    LS_Inlet_Type=Ipara(32)
+    LS_Max_Iter=Ipara(33)
+    LS_Scheme=Ipara(34)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -382,7 +445,7 @@ end
 
 
 
-   if(Bound_Scheme== Scheme_none)  Bound_Scheme=Iflag_Scheme    ! ?» ?????????????????????   
+   if(Bound_Scheme== Scheme_none)  Bound_Scheme=Iflag_Scheme    ! ?ï¿½ï¿½?????????????????????   
    if(If_viscous .eq. 0) Iflag_turbulence_model=Turbulence_NONE !    ????????????????????????
     
    if(Iflag_turbulence_model .eq. Turbulence_SA .or. & 
@@ -545,6 +608,3 @@ end
 
    deallocate(nface_global, face_global, Tw_global, Qw_global)
   end subroutine read_solid_bc
-
-
-

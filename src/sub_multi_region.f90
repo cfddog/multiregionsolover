@@ -87,8 +87,8 @@
 
 !    Determine BC type and apply to ghost cells
 !    Note: bc3d.inp uses node indices. Cell-center arrays (Ts) use cell indices.
-!    For face 1 (i-): node ib=1 �� first cell center at i=ib, ghost cells at i=ib-1..ib-LAP
-!    For face 4 (i+): node ie=nx �� last cell center at i=ie-1, ghost cells at i=ie..ie+LAP-1
+!    For face 1 (i-): node ib=1 �1�71�1�77�1�71�1�77 first cell center at i=ib, ghost cells at i=ib-1..ib-LAP
+!    For face 4 (i+): node ie=nx �1�71�1�77�1�71�1�77 last cell center at i=ie-1, ghost cells at i=ie..ie+LAP-1
      select case(face_s)
      case(1)  ! i- face: ghost i=ib-1..ib-LAP, interior i=ib..ib+LAP-1
        do n=1, LAP
@@ -855,17 +855,6 @@
      enddo
    enddo
   end subroutine couple_solid_solid_interfaces
-
-!----------------------------------------------------------------------
-! Low-speed flow solver stub
-!----------------------------------------------------------------------
-  subroutine lowspeed_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
-   use Global_Var
-   implicit none
-   integer:: nMesh, mBlock
-   real(PRE_EC):: Sfac, Sfac1
-!  TODO: implement low-speed flow solver
-  end subroutine lowspeed_solver_one_block
 
 !----------------------------------------------------------------------
 ! Porous media solver stub

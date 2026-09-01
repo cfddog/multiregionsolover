@@ -30,6 +30,7 @@
    
    do mB=1,NM
      B => Mesh(1)%Block(mB)                                        
+      if(B%Block_type == BLOCK_LOWSPEED) cycle   ! low-speed forces not yet implemented
      nx=B%nx; ny=B%ny; nz=B%nz
      do nf=1,B%subface  
        Bc=> B%bc_msg(nf)
@@ -211,11 +212,11 @@
 
 
 !------   
- if(Cood_Y_UP ==1) then   ! Y 轴垂直向上 
+ if(Cood_Y_UP ==1) then   ! Y 锟结垂直锟斤拷锟斤拷 
 	CL=Fy*cos(AoA)-Fx*sin(AoA)
 	CD=Fx*cos(AoA)+Fy*sin(AoA)
     Cs=Fz
- else                      ! Z轴垂直向上 
+ else                      ! Z锟结垂直锟斤拷锟斤拷 
 	CL=Fz*cos(AoA)-Fx*sin(AoA)
 	CD=Fx*cos(AoA)+Fz*sin(AoA)
     Cs=Fy
@@ -421,6 +422,5 @@
 !$OMP END PARALLEL
 !-----------------------------------------------------------------------
    end  subroutine smoothing_oneBlock_4th
-
 
 

@@ -105,6 +105,7 @@
 	 integer:: IF_OverLimit !
 	integer:: Block_type                            ! block attribute: 0=fluid, 1=solid, 2=low-speed, 3=porous
 	 real(PRE_EC),pointer,dimension(:,:,:):: Ts,Tsn  ! solid temperature (current/previous time step, cell-centered, LAP ghost layers)
+	 real(PRE_EC),pointer,dimension(:,:,:):: p       ! pressure (low-speed solver, cell-centered, LAP ghost layers)
 	 TYPE(BC_MSG_TYPE),pointer,dimension(:):: bc_msg2  ! interface connection info (from bc3d_interface.inp)
 	 real(PRE_EC):: solid_rho, solid_Cp, solid_k     ! solid material properties (density, specific heat, thermal conductivity)
 !     Solid thermal boundary condition data (from solid_bc.inp)
@@ -173,6 +174,9 @@
    integer,save:: IF_TurboMachinary , Ref_medium_usrdef !
    integer,save:: IF_InnerFlow !
 
+   integer,save:: LS_Inlet_Type, LS_Max_Iter    ! low-speed solver: inlet type (1=velocity,2=mass flow,3=pressure), SIMPLE inner iterations
+   integer,save:: LS_Scheme=1    ! low-speed convection scheme: 1=1st-order upwind, 2=2nd-order upwind, 3=MUSCL(Van Leer)
+
    integer,save:: FD_Flux,FD_scheme !
    integer,save:: KRK=0 !
    integer,save:: Istep_average=0 !
@@ -195,6 +199,9 @@
    real(PRE_EC),save:: Lscale ! Length scale: 1=m, 0.001=mm, etc.
    real(PRE_EC),save:: Ldmin,Ldmax,Lpmin,Lpmax,Lumax,LSAmax !
    real(PRE_EC),save:: CP1_NSA,CP2_NSA       ! parameters in New SA model
+   real(PRE_EC),save:: LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref    ! low-speed fluid properties (SI units)
+   real(PRE_EC),save:: LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, LS_T_wall, LS_U_lid ! low-speed BC parameters
+   real(PRE_EC),save:: LS_alpha_p, LS_alpha_u, LS_alpha_T, LS_Tol  ! low-speed under-relaxation + tolerance
  !-----------mpi data ----------------------------------------------------------- 
    integer:: my_id,Total_proc !
    integer,pointer,dimension(:):: B_Proc, B_n !

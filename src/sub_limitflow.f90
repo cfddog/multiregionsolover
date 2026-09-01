@@ -36,6 +36,7 @@
 
    do mBlock=1,Mesh(nMesh)%Num_Block
      B => Mesh(nMesh)%Block(mBlock)
+      if(B%Block_type == BLOCK_LOWSPEED) cycle   ! low-speed uses primitive variables
      nx=B%nx; ny=B%ny; nz=B%nz
 
      allocate(d1(nx-1,ny-1,nz-1),u1(nx-1,ny-1,nz-1),v1(nx-1,ny-1,nz-1), &
