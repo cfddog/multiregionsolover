@@ -109,19 +109,19 @@
 !Ver 1.16a: 2018-9-29:  A bug in SST model is removed;
 !-------------------------------------------------------------------------------------------------------------------------------------------------
 
-! æµåœºç‰©ç†é‡ ï¼ˆè®¡ç®—æ¯å—æ—¶ç”³è¯·å†…å­˜ï¼Œè¯¥å—è®¡ç®—ç»“æŸåé‡Šæ”¾ï¼›å±äºä¸´æ—¶å˜é‡ï¼‰ 
+! Á÷³¡ÎïÀíÁ¿ £¨¼ÆËãÃ¿¿éÊ±ÉêÇëÄÚ´æ£¬¸Ã¿é¼ÆËã½áÊøºóÊÍ·Å£»ÊôÓÚÁÙÊ±±äÁ¿£© 
 !  include "sub_modules.f90"
 
   module Flow_Var
    use precision_EC
-   real(PRE_EC), save,pointer,dimension(:,:,:)::  d,uu,v,w,T,p,cc ! å¯†åº¦ã€x-é€Ÿåº¦ã€y-é€Ÿåº¦ã€z-é€Ÿåº¦ã€å‹åŠ›ã€å£°é€Ÿ
-   real(PRE_EC), save,pointer,dimension(:,:,:,:):: Flux                 ! i- ,j-åŠk-æ–¹å‘çš„é€šé‡
-   real(PRE_EC), save,pointer,dimension(:,:,:):: Lvi,Lvj,Lvk,Lci,Lcj,Lck   ! æ— ç²˜é¡¹åŠç²˜æ€§é¡¹Jocabiançš„è°±åŠå¾„ 
+   real(PRE_EC), save,pointer,dimension(:,:,:)::  d,uu,v,w,T,p,cc ! ÃÜ¶È¡¢x-ËÙ¶È¡¢y-ËÙ¶È¡¢z-ËÙ¶È¡¢Ñ¹Á¦¡¢ÉùËÙ
+   real(PRE_EC), save,pointer,dimension(:,:,:,:):: Flux                 ! i- ,j-¼°k-·½ÏòµÄÍ¨Á¿
+   real(PRE_EC), save,pointer,dimension(:,:,:):: Lvi,Lvj,Lvk,Lci,Lcj,Lck   ! ÎŞÕ³Ïî¼°Õ³ĞÔÏîJocabianµÄÆ×°ë¾¶ 
 
   end module Flow_Var
 
 !------------------------------------------------------------------------------------------
-! ä¸»ç¨‹åº ä¸»ç¨‹åº ä¸»ç¨‹åº
+! Ö÷³ÌĞò Ö÷³ÌĞò Ö÷³ÌĞò
 !-----------------------------------------------------------------------------------------
   program main
    use Global_Var
@@ -137,69 +137,73 @@
     print*,  "----------------------------------------------------------------------------- " 
    endif
 
-   call read_parameter                     ! è¯»å–æµåŠ¨å‚æ•°åŠæ§åˆ¶ä¿¡æ¯
-!$ call omp_set_num_threads(NUM_THREADS)   ! è®¾ç½®OpenMPçš„è¿è¡Œçº¿ç¨‹æ•° ï¼ˆå¹¶è¡Œæ•°ç›®ï¼‰ï¼Œ æœ¬è¯­å¥å¯¹openmpç¼–è¯‘å™¨ä¸æ˜¯æ³¨é‡Š!
+   call read_parameter                     ! ¶ÁÈ¡Á÷¶¯²ÎÊı¼°¿ØÖÆĞÅÏ¢
+!$ call omp_set_num_threads(NUM_THREADS)   ! ÉèÖÃOpenMPµÄÔËĞĞÏß³ÌÊı £¨²¢ĞĞÊıÄ¿£©£¬ ±¾Óï¾ä¶Ôopenmp±àÒëÆ÷²»ÊÇ×¢ÊÍ!
 
-!$ if(my_id ==0) then         ! æµ‹è¯•ä¸€ä¸‹è¿è¡Œçš„è¿›ç¨‹ ï¼ˆopenmpç¼–è¯‘æ—¶ï¼Œä¸æ˜¯æ³¨é‡Šï¼‰
+!$ if(my_id ==0) then         ! ²âÊÔÒ»ÏÂÔËĞĞµÄ½ø³Ì £¨openmp±àÒëÊ±£¬²»ÊÇ×¢ÊÍ£©
 !$OMP Parallel
 !$  print*, "omp run ..."
 !$OMP END parallel
 !$ endif 
 
-   allocate( Mesh(Num_Mesh) )                                 ! ä¸»æ•°æ®ç»“æ„ï¼š â€œç½‘æ ¼â€ ï¼ˆå…¶æˆå‘˜æ˜¯â€œç½‘æ ¼å—â€ï¼‰
+   allocate( Mesh(Num_Mesh) )                                 ! Ö÷Êı¾İ½á¹¹£º ¡°Íø¸ñ¡± £¨Æä³ÉÔ±ÊÇ¡°Íø¸ñ¿é¡±£©
    
-   if(my_id .eq. 0)  call check_mesh_multigrid               ! æ£€æŸ¥ç½‘æ ¼é…ç½®æ‰€å…è®¸çš„æœ€å¤§é‡æ•°,å¹¶è®¾å®šå¤šé‡ç½‘æ ¼çš„é‡æ•°
+   if(my_id .eq. 0)  call check_mesh_multigrid               ! ¼ì²éÍø¸ñÅäÖÃËùÔÊĞíµÄ×î´óÖØÊı,²¢Éè¶¨¶àÖØÍø¸ñµÄÖØÊı
    
-   call Init                               ! åˆå§‹åŒ–å˜é‡ï¼ˆåˆ†é…å†…å­˜ï¼Œè¯»å–ç½‘æ ¼ï¼‰
-   call set_control_para                   ! è®¾å®šå„é‡ç½‘æ ¼ä¸Šçš„æ§åˆ¶ä¿¡æ¯ï¼ˆæ•°å€¼æ–¹æ³•ã€é€šé‡æŠ€æœ¯ã€æ¹æµæ¨¡å‹ã€æ—¶é—´æ¨è¿›æ–¹å¼ï¼‰
-   call check_mesh_quality                 ! æ£€æŸ¥ç½‘æ ¼è´¨é‡,åœ¨ç½‘æ ¼è´¨é‡å·®çš„åŒºåŸŸé™ä½å±€éƒ¨æ—¶é—´æ­¥é•¿
-   call Init_flow                          ! åˆå§‹åŒ–æµåœº ï¼ˆåˆå€¼ï¼‰
+   call Init                               ! ³õÊ¼»¯±äÁ¿£¨·ÖÅäÄÚ´æ£¬¶ÁÈ¡Íø¸ñ£©
+   call set_control_para                   ! Éè¶¨¸÷ÖØÍø¸ñÉÏµÄ¿ØÖÆĞÅÏ¢£¨ÊıÖµ·½·¨¡¢Í¨Á¿¼¼Êõ¡¢ÍÄÁ÷Ä£ĞÍ¡¢Ê±¼äÍÆ½ø·½Ê½£©
+   call check_mesh_quality                 ! ¼ì²éÍø¸ñÖÊÁ¿,ÔÚÍø¸ñÖÊÁ¿²îµÄÇøÓò½µµÍ¾Ö²¿Ê±¼ä²½³¤
+   call Init_flow                          ! ³õÊ¼»¯Á÷³¡ £¨³õÖµ£©
    
 
    if(my_id .eq. 0) print*, " Start ......"
 
 !------------------------------------------------------------------------
-! æ—¶é—´æ¨è¿›ï¼Œé‡‡ç”¨å•é‡ç½‘æ ¼ã€äºŒé‡ç½‘æ ¼æˆ–ä¸‰é‡ç½‘æ ¼ï¼› é‡‡ç”¨1é˜¶Euleræˆ–3é˜¶RK
+! Ê±¼äÍÆ½ø£¬²ÉÓÃµ¥ÖØÍø¸ñ¡¢¶şÖØÍø¸ñ»òÈıÖØÍø¸ñ£» ²ÉÓÃ1½×Euler»ò3½×RK
    do while(Mesh(1)%tt .lt. t_end )
     
      call show_Wall_time()
-     if(Num_Mesh .eq. 1) then                          ! å•é‡ç½‘æ ¼æ¨è¿›1ä¸ªæ—¶é—´æ­¥
+     if(Num_Mesh .eq. 1) then                          ! µ¥ÖØÍø¸ñÍÆ½ø1¸öÊ±¼ä²½
 !==========================================================================================
-!   é‡æ„åçš„ä¸»æ—¶é—´å¾ªç¯: å—å¾ªç¯æåˆ°æœ€å¤–å±‚
-!   æ¯ä¸ªæ—¶é—´æ­¥: å…ˆéå†æ¯ä¸ª block å®Œæˆ æ®‹å·®è®¡ç®—+æ•°æ®æ›´æ–°(æ—¶é—´æ¨è¿›),
-!   ä¹‹åå†ç»Ÿä¸€æ–½åŠ è¾¹ç•Œæ¡ä»¶å¹¶è¿›è¡Œå—é—´é€šä¿¡ã€‚æ·»åŠ æ–°åŠŸèƒ½æ—¶å¯åœ¨å—çº§ç›´æ¥æ‰©å±•ã€‚
+!   ÖØ¹¹ºóµÄÖ÷Ê±¼äÑ­»·: ¿éÑ­»·Ìáµ½×îÍâ²ã
+!   Ã¿¸öÊ±¼ä²½: ÏÈ±éÀúÃ¿¸ö block Íê³É ²Ğ²î¼ÆËã+Êı¾İ¸üĞÂ(Ê±¼äÍÆ½ø),
+!   Ö®ºóÔÙÍ³Ò»Ê©¼Ó±ß½çÌõ¼ş²¢½øĞĞ¿é¼äÍ¨ĞÅ¡£Ìí¼ÓĞÂ¹¦ÄÜÊ±¿ÉÔÚ¿é¼¶Ö±½ÓÀ©Õ¹¡£
        select case(Time_Method)
-       case(Time_RK3)                                  ! 3é˜¶RK: æ¯æ­¥3ä¸ªå­æ­¥(stage)
+       case(Time_RK3)                                  ! 3½×RK: Ã¿²½3¸ö×Ó²½(stage)
          call comput_Sfac(Sfac,Sfac1)                  ! =0
          do mBlock=1,Mesh(1)%Num_Block
            call Set_Un_oneblock(1,mBlock)              ! Un=U
          enddo
          do KRK=1,3
-           do mBlock=1,Mesh(1)%Num_Block               ! éå†æ¯ä¸ª block
-             call Residual_one_block(1,mBlock,Sfac,Sfac1)   ! æ®‹å·®è®¡ç®— (å«dtä¸LU-SGSçš„DU)
-             call Uupdate_one_block(1,mBlock)               ! æ•°æ®æ›´æ–° (æ—¶é—´æ¨è¿›)
+           do mBlock=1,Mesh(1)%Num_Block               ! ±éÀúÃ¿¸ö block, °´ÀàĞÍµ÷¶È
+             call solver_one_block(1,mBlock,Sfac,Sfac1)
            enddo
+           call couple_fluid_solid_interfaces(1)       ! Á÷Ìå-¹ÌÌå½»½çÃæñîºÏ
+           call couple_solid_solid_interfaces(1)       ! ¹ÌÌå-¹ÌÌå½»½çÃæÎÂ¶È½»»»
            if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
-           call Boundary_condition_onemesh(1)          ! è¾¹ç•Œæ¡ä»¶ (è®¾å®šGhost Cellçš„å€¼)
-           call update_buffer_onemesh(1)               ! åŒæ­¥å„å—çš„äº¤ç•ŒåŒº
+           call Boundary_condition_onemesh(1)          ! ±ß½çÌõ¼ş (Éè¶¨Ghost CellµÄÖµ)
+           call update_buffer_onemesh(1)               ! Í¬²½¸÷¿éµÄ½»½çÇø
+           call update_Ts_buffer_onemesh(1)            ! Í¬²½¹ÌÌåÎÂ¶È»º³åÇø
          enddo
 
-       case(Time_Dual_LU_SGS)                          ! åŒæ—¶é—´æ­¥é•¿æ³•: å†…è¿­ä»£
+       case(Time_Dual_LU_SGS)                          ! Ë«Ê±¼ä²½³¤·¨: ÄÚµü´ú
          do kt_in=1, step_inner_Limit
-           call comput_Sfac(Sfac,Sfac1)                ! åŒæ—¶é—´æ­¥é•¿æ³•ç³»æ•° (æ¯æ¬¡å†…è¿­ä»£è°ƒç”¨, ä¸åŸé€»è¾‘ä¸€è‡´)
-           do mBlock=1,Mesh(1)%Num_Block               ! éå†æ¯ä¸ª block
-             call Residual_one_block(1,mBlock,Sfac,Sfac1)   ! æ®‹å·®è®¡ç®— (å«dtä¸LU-SGSçš„DU)
-             call Uupdate_one_block(1,mBlock)               ! æ•°æ®æ›´æ–° (U=U+DU)
+           call comput_Sfac(Sfac,Sfac1)                ! Ë«Ê±¼ä²½³¤·¨ÏµÊı (Ã¿´ÎÄÚµü´úµ÷ÓÃ, ÓëÔ­Âß¼­Ò»ÖÂ)
+           do mBlock=1,Mesh(1)%Num_Block               ! ±éÀúÃ¿¸ö block, °´ÀàĞÍµ÷¶È
+             call solver_one_block(1,mBlock,Sfac,Sfac1)
            enddo
+           call couple_fluid_solid_interfaces(1)       ! Á÷Ìå-¹ÌÌå½»½çÃæñîºÏ
+           call couple_solid_solid_interfaces(1)       ! ¹ÌÌå-¹ÌÌå½»½çÃæÎÂ¶È½»»»
            if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
-           call Boundary_condition_onemesh(1)          ! è¾¹ç•Œæ¡ä»¶ (è®¾å®šGhost Cellçš„å€¼)
-           call update_buffer_onemesh(1)               ! åŒæ­¥å„å—çš„äº¤ç•ŒåŒº
-           call comput_max_Res_onemesh(1)              ! è®¡ç®—æœ€å¤§/å‡æ–¹æ ¹æ®‹å·®
+           call Boundary_condition_onemesh(1)          ! ±ß½çÌõ¼ş (Éè¶¨Ghost CellµÄÖµ)
+           call update_buffer_onemesh(1)               ! Í¬²½¸÷¿éµÄ½»½çÇø
+           call update_Ts_buffer_onemesh(1)            ! Í¬²½¹ÌÌåÎÂ¶È»º³åÇø
+           call comput_max_Res_onemesh(1)              ! ¼ÆËã×î´ó/¾ù·½¸ù²Ğ²î
            max_res=Mesh(1)%Res_rms(1)
            do m=1,Mesh(1)%NVAR
              max_res=max(max_res,Mesh(1)%Res_rms(m))
            enddo
-           if( max_res .le. Res_Inner_Limit) exit      ! è¾¾åˆ°æ®‹å·®æ ‡å‡†ï¼Œè·³å‡ºå†…è¿­ä»£
+           if( max_res .le. Res_Inner_Limit) exit      ! ´ïµ½²Ğ²î±ê×¼£¬Ìø³öÄÚµü´ú
          enddo
          if(my_id .eq. 0) then
            print*, "Inner step ... ", kt_in
@@ -209,52 +213,56 @@
            call Set_Un1_Un_oneblock(1,mBlock)          ! Un1=Un; Un=U
          enddo
 
-       case default                                    ! LU_SGS ä¸ 1é˜¶Euler: å•éå—å¾ªç¯
+       case default                                    ! LU_SGS Óë 1½×Euler: µ¥±é¿éÑ­»·
          call comput_Sfac(Sfac,Sfac1)                  ! =0
          call Set_Un(1)                                ! Un=U
-         do mBlock=1,Mesh(1)%Num_Block                 ! éå†æ¯ä¸ª block
-           call Residual_one_block(1,mBlock,Sfac,Sfac1)     ! æ®‹å·®è®¡ç®— (å«dtä¸LU-SGSçš„DU)
-           call Uupdate_one_block(1,mBlock)                 ! æ•°æ®æ›´æ–° (æ—¶é—´æ¨è¿›)
+         do mBlock=1,Mesh(1)%Num_Block                 ! ±éÀúÃ¿¸ö block, °´ÀàĞÍµ÷¶È
+           call solver_one_block(1,mBlock,Sfac,Sfac1)
          enddo
+         call couple_fluid_solid_interfaces(1)       ! Á÷Ìå-¹ÌÌå½»½çÃæñîºÏ
+         call couple_solid_solid_interfaces(1)       ! ¹ÌÌå-¹ÌÌå½»½çÃæÎÂ¶È½»»»
          if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
-         call Boundary_condition_onemesh(1)            ! è¾¹ç•Œæ¡ä»¶ (è®¾å®šGhost Cellçš„å€¼)
-         call update_buffer_onemesh(1)                 ! åŒæ­¥å„å—çš„äº¤ç•ŒåŒº
+         call Boundary_condition_onemesh(1)            ! ±ß½çÌõ¼ş (Éè¶¨Ghost CellµÄÖµ)
+         call update_buffer_onemesh(1)                 ! Í¬²½¸÷¿éµÄ½»½çÇø
+         call update_Ts_buffer_onemesh(1)            ! Í¬²½¹ÌÌåÎÂ¶È»º³åÇø
        end select
 
-       call force_vt_kw(1)                             ! é™åˆ¶vt,Kt,Wtéè´Ÿ
-       Mesh(1)%tt=Mesh(1)%tt+dt_global                 ! æ—¶é—´
-       Mesh(1)%Kstep=Mesh(1)%Kstep+1                   ! è®¡ç®—æ­¥æ•°
-	 else  if(Num_Mesh .eq. 2)  then                    ! 2é‡ç½‘æ ¼æ¨è¿›1ä¸ªæ—¶é—´æ­¥
+       call force_vt_kw(1)                             ! ÏŞÖÆvt,Kt,Wt·Ç¸º
+       Mesh(1)%tt=Mesh(1)%tt+dt_global                 ! Ê±¼ä
+       Mesh(1)%Kstep=Mesh(1)%Kstep+1                   ! ¼ÆËã²½Êı
+	 else  if(Num_Mesh .eq. 2)  then                    ! 2ÖØÍø¸ñÍÆ½ø1¸öÊ±¼ä²½
   	  call NS_2stge_multigrid
-     else                                               ! 3é‡ç½‘æ ¼æ¨è¿›1ä¸ªæ—¶é—´æ­¥
+     else                                               ! 3ÖØÍø¸ñÍÆ½ø1¸öÊ±¼ä²½
   	  call NS_3stge_multigrid
      endif
  
- !  æ»¤æ³¢ ,å¯ä»¥å¢å¼ºç¨³å®šæ€§. å¦‚Kstep_Filter=0åˆ™ä¸ä½¿ç”¨æ»¤æ³¢   
+ !  ÂË²¨ ,¿ÉÒÔÔöÇ¿ÎÈ¶¨ĞÔ. ÈçKstep_Filter=0Ôò²»Ê¹ÓÃÂË²¨   
 	if(Kstep_smooth .gt. 0) then
- 	  if(mod(Mesh(1)%Kstep, Kstep_smooth).eq.0)   call Filtering_oneMesh(1)                      ! æ»¤æ³¢            
+ 	  if(mod(Mesh(1)%Kstep, Kstep_smooth).eq.0)   call Filtering_oneMesh(1)                      ! ÂË²¨            
     endif
 
 
-!  æ¯éš”ä¸€å®šæ­¥æ•°è¾“å‡ºæ°”åŠ¨åŠ›åŠæ®‹å·®ï¼ˆè¾“å‡ºåˆ°å±å¹•åŠæ–‡ä»¶: force.log, Residual.datï¼‰
+!  Ã¿¸ôÒ»¶¨²½ÊıÊä³öÆø¶¯Á¦¼°²Ğ²î£¨Êä³öµ½ÆÁÄ»¼°ÎÄ¼ş: force.log, Residual.dat£©
      if(mod(Mesh(1)%Kstep, Kstep_show).eq.0) then
       call comput_force
       call output_Res(1)
      endif
-! æ¯éš”ä¸€å®šæ­¥æ•°è¾“å‡ºæ•°æ®æ–‡ä»¶(flow3d.dat, PLOT3D æ ¼å¼)
+! Ã¿¸ôÒ»¶¨²½ÊıÊä³öÊı¾İÎÄ¼ş(flow3d.dat, PLOT3D ¸ñÊ½)
       if(mod(Mesh(1)%Kstep, Kstep_Save).eq.0) then
 	     call output_flow 
-!         if(If_debug == 1 ) call output_vt                ! è¾“å‡ºæ¹æµç²˜æ€§ç³»æ•°ï¼Œä¾›debugä½¿ç”¨   ! Bug 2017-5-11
-          if(If_debug == 1 .and.  If_viscous==1 .and.  Iflag_turbulence_model .ne. 0) call output_vt                ! è¾“å‡ºæ¹æµç²˜æ€§ç³»æ•°ï¼Œä¾›debugä½¿ç”¨
+!         if(If_debug == 1 ) call output_vt                ! Êä³öÍÄÁ÷Õ³ĞÔÏµÊı£¬¹©debugÊ¹ÓÃ   ! Bug 2017-5-11
+          if(If_debug == 1 .and.  If_viscous==1 .and.  Iflag_turbulence_model .ne. 0) call output_vt                ! Êä³öÍÄÁ÷Õ³ĞÔÏµÊı£¬¹©debugÊ¹ÓÃ
+          call output_Ts                                    ! Êä³ö¹ÌÌåÎÂ¶È³¡
+          call output_vtk                                   ! Êä³öVTK¸ñÊ½(Paraview¿ÉÖ±½Ó²é¿´)
 	  endif
  
- ! è¿›è¡Œæ—¶é—´å¹³å‡
+ ! ½øĞĞÊ±¼äÆ½¾ù
     if(Kstep_average > 0) then     
       if(mod(Mesh(1)%Kstep, Kstep_average) .eq.0) then
-         call Time_average           ! æ—¶é—´å¹³å‡
+         call Time_average           ! Ê±¼äÆ½¾ù
 	  endif
       if(mod(Mesh(1)%Kstep, Kstep_Save).eq.0) then
-	      call output_flow_average   ! è¾“å‡ºæ—¶å‡åœº,PLOT3Dæ ¼å¼
+	      call output_flow_average   ! Êä³öÊ±¾ù³¡,PLOT3D¸ñÊ½
 	  endif    
     endif 
    
@@ -271,24 +279,24 @@
       integer   ierr, status(MPI_status_size)
 
 !------------------------------------------------
-       call mpi_init(ierr)                                     ! åˆå§‹åŒ–MPI
-       call mpi_comm_rank(MPI_COMM_WORLD,my_id,ierr)           ! è·å–æœ¬è¿›ç¨‹ç¼–å·
+       call mpi_init(ierr)                                     ! ³õÊ¼»¯MPI
+       call mpi_comm_rank(MPI_COMM_WORLD,my_id,ierr)           ! »ñÈ¡±¾½ø³Ì±àºÅ
        call mpi_comm_size(MPI_COMM_WORLD,Total_proc,ierr)      
 !       allocate(Buffer_mpi(IBuffer_Size))
-	   call MPI_BUFFER_ATTACH(Buffer_mpi,8*IBuffer_Size,ierr)   ! åˆ›å»ºæ¶ˆæ¯å‘é€ç¼“å†²åŒºï¼Œä¾›MPI_Bsend()ä½¿ç”¨
+	   call MPI_BUFFER_ATTACH(Buffer_mpi,8*IBuffer_Size,ierr)   ! ´´½¨ÏûÏ¢·¢ËÍ»º³åÇø£¬¹©MPI_Bsend()Ê¹ÓÃ
    end subroutine Init_mpi
 
 
-!  æ˜¾ç¤ºï¼ˆå¢™é’Ÿï¼‰æ—¶é—´ï¼Œç”¨äºç»Ÿè®¡MPIå¹¶è¡Œæ•ˆç‡	  
+!  ÏÔÊ¾£¨Ç½ÖÓ£©Ê±¼ä£¬ÓÃÓÚÍ³¼ÆMPI²¢ĞĞĞ§ÂÊ	  
     subroutine show_Wall_time()
       use Global_var
 	  real*8:: wtime
-	  real*8,save:: wtime0,wtime1    ! åˆå§‹æ—¶é—´ï¼Œä¸Šä¸€æ­¥çš„æ—¶é—´
-	  integer,save:: KP=0  ! è®¡ç®—æ­¥
+	  real*8,save:: wtime0,wtime1    ! ³õÊ¼Ê±¼ä£¬ÉÏÒ»²½µÄÊ±¼ä
+	  integer,save:: KP=0  ! ¼ÆËã²½
       if(my_id .eq. 0) then
 	    wtime=MPI_Wtime()
         if(KP .eq. 0) then   
-		  wtime0=wtime   ! åˆå§‹CPUæ—¶é—´
+		  wtime0=wtime   ! ³õÊ¼CPUÊ±¼ä
 		else
           if(mod(Mesh(1)%Kstep, Kstep_Show).eq.0) then
 		  print*, "CPU wall time in this step:", wtime-wtime1 
@@ -296,7 +304,7 @@
           endif
         endif
 		 wtime1=wtime  
-         KP=KP+1    ! ç»Ÿè®¡è®¡ç®—æ­¥
+         KP=KP+1    ! Í³¼Æ¼ÆËã²½
       endif
 
     end subroutine show_wall_time

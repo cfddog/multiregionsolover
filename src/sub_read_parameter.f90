@@ -1,14 +1,14 @@
-!  -----------------------è¯»å–æµåŠ¨å‚æ•°åŠæŽ§åˆ¶å˜é‡----------------------
+!  -----------------------¶ÁÈ¡Á÷¶¯²ÎÊý¼°¿ØÖÆ±äÁ¿----------------------
   subroutine read_parameter
    use Global_var
    implicit none
    logical ext1
 !-----------------------------------------------------------------------------
-   call set_default_parameter ! è®¾ç½®å‚æ•°é»˜è®¤å€¼
+   call set_default_parameter ! ÉèÖÃ²ÎÊýÄ¬ÈÏÖµ
 
    if(my_id .eq. 0) then
      inquire(file="control.ec",exist=ext1)
-      if(ext1) then           ! ä¼˜å…ˆè¯»å–control.ec (Namelist æ ¼å¼æŽ§åˆ¶æ–‡ä»¶) 
+      if(ext1) then           ! ÓÅÏÈ¶ÁÈ¡control.ec (Namelist ¸ñÊ½¿ØÖÆÎÄ¼þ) 
        call read_parameter_ec
       else
        print*, "Can not find 'control.ec', stop !"
@@ -18,7 +18,7 @@
  
    endif
 
-   call bcast_para      ! å¹¿æ’­è‡³å…¨éƒ¨è¿›ç¨‹
+   call bcast_para      ! ¹ã²¥ÖÁÈ«²¿½ø³Ì
    
    call set_const_para
 !--------------------------------------------------------------------
@@ -26,7 +26,7 @@
   end subroutine read_parameter
    
 !--------------------------------------------------------------------    
-! è®¾ç½®å‚æ•°çš„é»˜è®¤å€¼  
+! ÉèÖÃ²ÎÊýµÄÄ¬ÈÏÖµ  
   subroutine set_default_parameter 
    use Global_var
    implicit none
@@ -40,9 +40,9 @@
 	t_end=100.d0     ! End time (non-dimensional)
 	Kstep_save=1000  ! Save data per xxx steps
     Iflag_turbulence_model=0   ! turbulence model (0 none, 1 BL, 2 SA, 3 SST)
-	Iflag_init=0  ! 0 ä»Žåˆå§‹å€¼ï¼ˆå‡åŒ€æ¥æµï¼‰å¼€å§‹è®¡ç®—ï¼› 1  ç»­ç®—ï¼› -1 ä»Ž0 æµåœºå¼€å§‹è®¡ç®—
-    If_viscous=1  ! 0 æ— ç²˜ï¼› 1 æœ‰ç²˜
-    Iflag_local_dt=1   ! 0 å…¨å±€æ­¥é•¿ï¼›  1 å±€éƒ¨æ—¶é—´æ­¥é•¿
+	Iflag_init=0  ! 0 ´Ó³õÊ¼Öµ£¨¾ùÔÈÀ´Á÷£©¿ªÊ¼¼ÆËã£» 1  ÐøËã£» -1 ´Ó0 Á÷³¡¿ªÊ¼¼ÆËã
+    If_viscous=1  ! 0 ÎÞÕ³£» 1 ÓÐÕ³
+    Iflag_local_dt=1   ! 0 È«¾Ö²½³¤£»  1 ¾Ö²¿Ê±¼ä²½³¤
     dt_global=0.01     ! Global time step
     CFL=1.d0           ! CFL number 
     dtmax=10.d0       !Limit of maximum time step 
@@ -73,9 +73,10 @@
     Pre_Step_Mesh(1:3)=0   ! Pre step for multi-grid
     Ref_S=1.d0             ! Ref. area
 	Ref_L=1.d0             ! Ref. length
+	Lscale=1.d0            ! Length scale: 1=m, 0.001=mm, etc.
 	Centroid(1:3)=0.d0  ! Centroid coordinate  
-    Cood_Y_UP=1   !       é»˜è®¤Yè½´åž‚ç›´å‘ä¸Š
-	  IFLAG_LIMIT_FLOW=1         ! é™åˆ¶æµåœºï¼ˆå¯†åº¦ã€é€Ÿåº¦ã€åŽ‹åŠ›ï¼‰ï¼Œè®¾å®šä¸º1 ï¼Œ 2016-10-21
+    Cood_Y_UP=1   !       Ä¬ÈÏYÖá´¹Ö±ÏòÉÏ
+	  IFLAG_LIMIT_FLOW=1         ! ÏÞÖÆÁ÷³¡£¨ÃÜ¶È¡¢ËÙ¶È¡¢Ñ¹Á¦£©£¬Éè¶¨Îª1 £¬ 2016-10-21
 	Pdebug(1:4)=1
     PrL=0.7d0          ! Linear Prandtl number
 	PrT=0.9d0          ! Turbulent Prandtl number
@@ -87,22 +88,22 @@
 	LSAmax=1000.d0
 	CP1_NSA=0.2d0   ! for New SA
 	CP2_NSA=100.d0
-	Periodic_dX=0.d0   ! å‘¨æœŸè¾¹ç•Œçš„å‡ ä½•å¢žé‡
+	Periodic_dX=0.d0   ! ÖÜÆÚ±ß½çµÄ¼¸ºÎÔöÁ¿
 	Periodic_dY=0.d0 
 	Periodic_dZ=0.d0
 
-    Iflag_savefile=0       ! é»˜è®¤å†™å…¥flow3d.dat
+    Iflag_savefile=0       ! Ä¬ÈÏÐ´Èëflow3d.dat
 !----for Turbomachinary solver------------
-    IF_TurboMachinary=0    ! å¯ç”¨å¶è½®æœºè®¡ç®—æ¨¡å¼
-	Ref_medium_usrdef=0    ! å¯ç”¨è‡ªå®šä¹‰ä»‹è´¨ ï¼ˆä¸ºé»˜è®¤ç©ºæ°”ï¼‰
-    IF_Scheme_Positivity=1     ! æ£€æŸ¥æ’å€¼è¿‡ç¨‹ä¸­åŽ‹åŠ›ã€å¯†åº¦æ˜¯å¦éžè´Ÿï¼Œå¦åˆ™ä½¿ç”¨1é˜¶è¿Žé£Žï¼›
-    Turbo_P0= 101330.d0    ! æ€»åŽ‹ ï¼ˆé»˜è®¤ä¸º1ä¸ªå¤§æ°”åŽ‹ï¼‰
-	Turbo_T0= 288.15d0     ! æ€»æ¸© ï¼ˆé»˜è®¤288.15K)
-    Turbo_L0= 1.d0         ! å‚è€ƒé•¿åº¦ ï¼ˆé»˜è®¤ä¸º1m)
-    Turbo_w=0.d0           ! è½¬é€Ÿ  ( è½¬/ç§’ ï¼Œ é»˜è®¤0)
-    Turbo_Periodic_seta=0.d0   ! å‘¨æœŸæ–¹å‘è®¡ç®—åŸŸï¼Œè§’
+    IF_TurboMachinary=0    ! ÆôÓÃÒ¶ÂÖ»ú¼ÆËãÄ£Ê½
+	Ref_medium_usrdef=0    ! ÆôÓÃ×Ô¶¨Òå½éÖÊ £¨ÎªÄ¬ÈÏ¿ÕÆø£©
+    IF_Scheme_Positivity=1     ! ¼ì²é²åÖµ¹ý³ÌÖÐÑ¹Á¦¡¢ÃÜ¶ÈÊÇ·ñ·Ç¸º£¬·ñÔòÊ¹ÓÃ1½×Ó­·ç£»
+    Turbo_P0= 101330.d0    ! ×ÜÑ¹ £¨Ä¬ÈÏÎª1¸ö´óÆøÑ¹£©
+	Turbo_T0= 288.15d0     ! ×ÜÎÂ £¨Ä¬ÈÏ288.15K)
+    Turbo_L0= 1.d0         ! ²Î¿¼³¤¶È £¨Ä¬ÈÏÎª1m)
+    Turbo_w=0.d0           ! ×ªËÙ  ( ×ª/Ãë £¬ Ä¬ÈÏ0)
+    Turbo_Periodic_seta=0.d0   ! ÖÜÆÚ·½Ïò¼ÆËãÓò£¬½Ç
 !-------------------------------------
-    IF_InnerFlow=0   ! å†…æµæ¨¡å¼
+    IF_InnerFlow=0   ! ÄÚÁ÷Ä£Ê½
 end
 
 !------read parameter (Namelist type)---------------- 
@@ -121,7 +122,7 @@ end
 		Mesh_File_Format,Kstep_show,Kstep_average,Kstep_smooth,Kstep_init_smooth,  &
         Num_Mesh,T_inf,Twall,Kt_inf,Wt_inf,IF_Debug,NUM_THREADS,  &
 		Step_Inner_Limit, Res_Inner_Limit, MUT_MAX, Bound_Scheme, &
-        Pre_Step_Mesh,Ref_S,Ref_L,Centroid,Cood_Y_UP,IFLAG_LIMIT_FLOW,Pdebug, &
+        Pre_Step_Mesh,Ref_S,Ref_L,Lscale,Centroid,Cood_Y_UP,IFLAG_LIMIT_FLOW,Pdebug, &
 		Ldmin,Ldmax,Lpmin,Lpmax,Lumax,LSAmax,CP1_NSA,CP2_NSA, &
         IF_TurboMachinary, Ref_medium_usrdef, IF_Scheme_Positivity, &
 		Turbo_P0,Turbo_T0, Turbo_L0,Turbo_w, Turbo_Periodic_seta, &
@@ -134,28 +135,28 @@ end
     close(99)
  
  !---- convert parameters ----------------------
- ! Ref_medium_usrdef==0 ä½¿ç”¨é»˜è®¤ä»‹è´¨ (Ma=1, æ ¹æ®æ€»æ¸©ã€æ€»åŽ‹è®¡ç®— Re) ï¼› ==1 ä½¿ç”¨è‡ªå®šä¹‰ä»‹è´¨ ï¼ˆäººä¸ºè¾“å…¥Ma, Reç­‰ï¼‰
- ! ä»…é€‚ç”¨äºŽå¶è½®æœºæˆ–å†…æµæ¨¡å¼ï¼›
+ ! Ref_medium_usrdef==0 Ê¹ÓÃÄ¬ÈÏ½éÖÊ (Ma=1, ¸ù¾Ý×ÜÎÂ¡¢×ÜÑ¹¼ÆËã Re) £» ==1 Ê¹ÓÃ×Ô¶¨Òå½éÖÊ £¨ÈËÎªÊäÈëMa, ReµÈ£©
+ ! ½öÊÊÓÃÓÚÒ¶ÂÖ»ú»òÄÚÁ÷Ä£Ê½£»
 
     if( (IF_TurboMachinary ==1 .or. IF_Innerflow==1 )    &  
-	  .and.  Ref_medium_usrdef == 0) then   ! é»˜è®¤ç©ºæ°”ä»‹è´¨ï¼Œè®¡ç®—Machæ•°ï¼Œ Reynoldsæ•°
+	  .and.  Ref_medium_usrdef == 0) then   ! Ä¬ÈÏ¿ÕÆø½éÖÊ£¬¼ÆËãMachÊý£¬ ReynoldsÊý
       
-	  T_inf=Turbo_T0  ! å‚è€ƒæ¸©åº¦ ï¼ˆæ¥æµæ€»æ¸©ï¼‰
+	  T_inf=Turbo_T0  ! ²Î¿¼ÎÂ¶È £¨À´Á÷×ÜÎÂ£©
       gamma=1.4d0    ! 
-	  PrL=0.7d0   ! Prandtlæ•°
+	  PrL=0.7d0   ! PrandtlÊý
 	  PrT=0.9d0
-      R0= 287.06d0   ! ç©ºæ°”çš„æ°”ä½“å¸¸æ•°R
-	  a0= sqrt(gamma*R0*Turbo_T0)    ! å‚è€ƒæ¸©åº¦ä¸‹çš„å£°é€Ÿ 
-	  mu0=1.179d-5     ! ç©ºæ°”ç²˜æ€§ç³»æ•° (288.15K)  
-      mu1=mu0* sqrt((Turbo_T0/288.15d0)**3)*(288.15d0+110.4d0)/(Turbo_T0+110.4d0)  ! å‚è€ƒæ¸©åº¦ä¸‹çš„ç©ºæ°”ç²˜æ€§ç³»æ•°
+      R0= 287.06d0   ! ¿ÕÆøµÄÆøÌå³£ÊýR
+	  a0= sqrt(gamma*R0*Turbo_T0)    ! ²Î¿¼ÎÂ¶ÈÏÂµÄÉùËÙ 
+	  mu0=1.179d-5     ! ¿ÕÆøÕ³ÐÔÏµÊý (288.15K)  
+      mu1=mu0* sqrt((Turbo_T0/288.15d0)**3)*(288.15d0+110.4d0)/(Turbo_T0+110.4d0)  ! ²Î¿¼ÎÂ¶ÈÏÂµÄ¿ÕÆøÕ³ÐÔÏµÊý
       d0=Turbo_P0/(R0*Turbo_T0)
-	  Re=d0*a0*Turbo_L0/mu1    ! å‚è€ƒæ¸©åº¦ä¸‹ï¼Œä»¥å£°é€Ÿè¿åŠ¨çš„Reynoldsæ•°
-	  Ma=1.d0     ! Machæ•°    ï¼ˆä»¥å£°é€Ÿä½œä¸ºå‚è€ƒé€Ÿåº¦ï¼Œå› è€Œå‚è€ƒMachæ•°ä¸º1ï¼‰
-      Turbo_w= 2.d0*PI*Turbo_w/(a0/Turbo_L0)   ! æ— é‡çº²è§’é€Ÿåº¦ Turbo_Wï¼ˆè½¬/ç§’ï¼‰
-!	  P_outlet=P_outlet/Turbo_P0    ! èƒŒåŽ‹,  Bug !!
-	  P_outlet=P_outlet/(d0*a0*a0)    ! èƒŒåŽ‹ ï¼ˆç”¨åŠ¨åŽ‹ æ— é‡çº²ï¼‰
+	  Re=d0*a0*Turbo_L0/mu1    ! ²Î¿¼ÎÂ¶ÈÏÂ£¬ÒÔÉùËÙÔË¶¯µÄReynoldsÊý
+	  Ma=1.d0     ! MachÊý    £¨ÒÔÉùËÙ×÷Îª²Î¿¼ËÙ¶È£¬Òò¶ø²Î¿¼MachÊýÎª1£©
+      Turbo_w= 2.d0*PI*Turbo_w/(a0/Turbo_L0)   ! ÎÞÁ¿¸Ù½ÇËÙ¶È Turbo_W£¨×ª/Ãë£©
+!	  P_outlet=P_outlet/Turbo_P0    ! ±³Ñ¹,  Bug !!
+	  P_outlet=P_outlet/(d0*a0*a0)    ! ±³Ñ¹ £¨ÓÃ¶¯Ñ¹ ÎÞÁ¿¸Ù£©
 	endif
-      Turbo_Periodic_seta=Turbo_Periodic_seta*PI/180.d0                 ! Turbo_Periodic_seta è§’åº¦
+      Turbo_Periodic_seta=Turbo_Periodic_seta*PI/180.d0                 ! Turbo_Periodic_seta ½Ç¶È
 
 
  !---output paramters----------------------------
@@ -186,6 +187,7 @@ end
 	write(99,*) "Pre_Step_Mesh(:)=", Pre_Step_Mesh(1:Num_Mesh)
     write(99,*) "IF_Debug=",IF_Debug
 	write(99,*) "Ref_S=", Ref_S, "Ref_L=", Ref_L
+	write(99,*) "Lscale=", Lscale
 	write(99,*) "Centroid=", Centroid(1:3)
 	write(99,*) "Cood_Y_UP=",Cood_Y_UP
     write(99,*) "Periodic_dX, dY, dZ=", Periodic_dX,Periodic_dY,Periodic_dZ
@@ -241,6 +243,7 @@ end
     rpara(18)=Ref_S
 	rpara(19)=Ref_L
 	rpara(20:22)=Centroid(1:3)
+    rpara(39)=Lscale
 	rpara(23)=Ldmin
 	rpara(24)=Ldmax
 	rpara(25)=Lpmin
@@ -313,6 +316,7 @@ end
     Ref_S=rpara(18)
 	Ref_L=rpara(19)
 	Centroid(1:3)=rpara(20:22)
+    Lscale=rpara(39)
 	Ldmin=rpara(23)
 	Ldmax=rpara(24)
 	Lpmin=rpara(25)
@@ -367,7 +371,7 @@ end
   
   
       
-! è®¾å®šå¸¸æ•°
+! Éè¶¨³£Êý
    subroutine set_const_para 
    use Global_var
    implicit none
@@ -378,20 +382,20 @@ end
 
 
 
-   if(Bound_Scheme== Scheme_none)  Bound_Scheme=Iflag_Scheme    ! å¦‚ä¸ä½¿ç”¨è¾¹ç•Œæ ¼å¼ï¼Œåˆ™ä¸Žå†…ç‚¹æ ¼å¼ä¸€è‡´   
-   if(If_viscous .eq. 0) Iflag_turbulence_model=Turbulence_NONE !    æ±‚è§£æ— ç²˜æ–¹ç¨‹ï¼Œä¸é‡‡ç”¨æ¹æµæ¨¡åž‹
+   if(Bound_Scheme== Scheme_none)  Bound_Scheme=Iflag_Scheme    ! Èç²»Ê¹ÓÃ±ß½ç¸ñÊ½£¬ÔòÓëÄÚµã¸ñÊ½Ò»ÖÂ   
+   if(If_viscous .eq. 0) Iflag_turbulence_model=Turbulence_NONE !    Çó½âÎÞÕ³·½³Ì£¬²»²ÉÓÃÍÄÁ÷Ä£ÐÍ
     
    if(Iflag_turbulence_model .eq. Turbulence_SA .or. & 
       Iflag_turbulence_model .eq. Turbulence_NewSA) then
-     NVAR=6                       ! SAæ¨¡åž‹ï¼Œæ€»å…±6ä¸ªå˜é‡
+     NVAR=6                       ! SAÄ£ÐÍ£¬×Ü¹²6¸ö±äÁ¿
    else if (Iflag_turbulence_model .eq. Turbulence_SST) then
-     NVAR=7                       ! SST æ¨¡åž‹ï¼Œæ€»å…±7ä¸ªå˜é‡
+     NVAR=7                       ! SST Ä£ÐÍ£¬×Ü¹²7¸ö±äÁ¿
    else
-     NVAR=5                       ! 5ä¸ªå˜é‡
+     NVAR=5                       ! 5¸ö±äÁ¿
    endif
 
   if(Iflag_turbulence_model .eq. 0) then
-   IF_Walldist=0                   ! æ— éœ€è¯¥æ•°æ®
+   IF_Walldist=0                   ! ÎÞÐè¸ÃÊý¾Ý
   else
    IF_Walldist=1
   endif
@@ -399,8 +403,8 @@ end
 !--------------------------------------------------------------------------------
   AoA=AoA*PI/180.d0   ! Angle of attack
   AoS=AoS*PI/180.d0   ! Angle of Slide
- if(Cood_Y_UP ==1) then   ! Y è½´åž‚ç›´å‘ä¸Š or Zè½´åž‚ç›´å‘ä¸Š 
-   A_alfa=AoA             ! Yè½´å‘ä¸Šï¼Œ A_alfaä¸ºæ”»è§’
+ if(Cood_Y_UP ==1) then   ! Y Öá´¹Ö±ÏòÉÏ or ZÖá´¹Ö±ÏòÉÏ 
+   A_alfa=AoA             ! YÖáÏòÉÏ£¬ A_alfaÎª¹¥½Ç
    A_beta=AoS
  else
    A_alfa=AoS  
@@ -412,7 +416,7 @@ end
    Cp=Cv*gamma 
 !--------------------------------------------------------------------
 
-!  è®¡ç®—åˆ°å£é¢çš„è·ç¦»
+!  ¼ÆËãµ½±ÚÃæµÄ¾àÀë
 !   if(Iflag_turbulence_model .eq. Turbulence_SA .or. Iflag_turbulence_model .eq. Turbulence_SST) then
 !     inquire(file="wall_dist.dat",exist=file_exist)
 !	 if( .not. file_exist) then
@@ -456,6 +460,91 @@ end
              " rho=", solid_rho_list(m), " Cp=", solid_Cp_list(m), " k=", solid_k_list(m)
    enddo
   end subroutine read_material_in
+
+!----------------------------------------------------------------------
+! Read solid thermal boundary conditions from solid_bc.inp
+! Format:
+!   Total_Solid_Blocks
+!   Block_no
+!   Num_physical_faces
+!   face_no  Tw(K)  Qw(W/m2)
+!   ...
+! Tw>0: isothermal wall at Tw(K); Tw<0: heat flux wall with Qw(W/m2)
+! Called after Mesh is allocated (Mesh(1)%Block pointers exist)
+  subroutine read_solid_bc
+   use Global_var
+   use mod_type_def
+   implicit none
+   integer:: m, n, i, j, nf, unit
+   logical:: ex
+   integer,allocatable:: nface_global(:)
+   integer,allocatable:: face_global(:,:)
+   real(PRE_EC),allocatable:: Tw_global(:,:), Qw_global(:,:)
+   Type (Block_TYPE),pointer:: B
+
+   if(my_id .eq. 0) then
+     inquire(file="solid_bc.inp", exist=ex)
+     if(.not. ex) then
+       print*, "solid_bc.inp not found, no solid thermal BCs"
+       return
+     endif
+     open(newunit=unit, file="solid_bc.inp")
+     read(unit,*) n
+     allocate(nface_global(Total_block))
+     nface_global = 0
+     allocate(face_global(6, Total_block))
+     allocate(Tw_global(6, Total_block))
+     allocate(Qw_global(6, Total_block))
+     face_global = 0; Tw_global = 0.d0; Qw_global = 0.d0
+     do i = 1, n
+       read(unit,*) m
+       read(unit,*) nf
+       if(m .ge. 1 .and. m .le. Total_block) then
+         nface_global(m) = nf
+         do j = 1, nf
+           read(unit,*) face_global(j,m), Tw_global(j,m), Qw_global(j,m)
+         enddo
+       endif
+     enddo
+     close(unit)
+     print*, "Read solid_bc.inp OK"
+   endif
+
+!  Broadcast to all processes
+   if(.not. allocated(nface_global)) allocate(nface_global(Total_block))
+   if(.not. allocated(face_global)) allocate(face_global(6, Total_block))
+   if(.not. allocated(Tw_global)) allocate(Tw_global(6, Total_block))
+   if(.not. allocated(Qw_global)) allocate(Qw_global(6, Total_block))
+   call MPI_Bcast(nface_global, Total_block, MPI_INTEGER, 0, MPI_COMM_WORLD, i)
+   call MPI_Bcast(face_global, 6*Total_block, MPI_INTEGER, 0, MPI_COMM_WORLD, i)
+   call MPI_Bcast(Tw_global, 6*Total_block, OCFD_DATA_TYPE, 0, MPI_COMM_WORLD, i)
+   call MPI_Bcast(Qw_global, 6*Total_block, OCFD_DATA_TYPE, 0, MPI_COMM_WORLD, i)
+
+!  Set per-block data
+   do m = 1, Total_block
+     nf = nface_global(m)
+     if(nf > 0) then
+       B => Mesh(1)%Block(m)
+       B%solid_bc_nface = nf
+       allocate(B%solid_bc_face_no(nf))
+       allocate(B%solid_bc_Tw(nf))
+       allocate(B%solid_bc_Qw(nf))
+       do j = 1, nf
+         B%solid_bc_face_no(j) = face_global(j,m)
+         B%solid_bc_Tw(j) = Tw_global(j,m)
+         B%solid_bc_Qw(j) = Qw_global(j,m)
+       enddo
+       if(my_id .eq. 0) then
+         print*, "  Block", m, " (solid):", nf, " thermal BC faces"
+         do j = 1, nf
+           print*, "    face", B%solid_bc_face_no(j), " Tw=", B%solid_bc_Tw(j), " Qw=", B%solid_bc_Qw(j)
+         enddo
+       endif
+     endif
+   enddo
+
+   deallocate(nface_global, face_global, Tw_global, Qw_global)
+  end subroutine read_solid_bc
 
 
 

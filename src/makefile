@@ -18,7 +18,7 @@ srs=  sub_modules.f90 \
 	  sub_debug.f90 sub_filtering.f90 sub_boundary_user.f90  \
 	  sub_udate_Meshlink_mpi.f90  \
 	  sub_Finite_Difference1.f90  sub_Finite_Difference2.f90 \
-	  sub_Post_timeAverage.f90 sub_limitflow.f90
+	  sub_Post_timeAverage.f90 sub_limitflow.f90 sub_multi_region.f90
 
 
 OBJS=$(srs:.f90=.o)

@@ -559,6 +559,12 @@
      allocate(NI(NB),NJ(NB),NK(NB))
      read(99,*) (NI(m), NJ(m), NK(m), m=1,NB)
      close(99)
+   elseif( Mesh_File_Format .eq. 2) then
+     open(99,file="Mesh3d.x",form="unformatted")
+     read(99) NB
+     allocate(NI(NB),NJ(NB),NK(NB))
+     read(99) (NI(m), NJ(m), NK(m), m=1,NB)
+     close(99)
    else
      open(99,file="Mesh3d.dat",form="unformatted")
      read(99) NB

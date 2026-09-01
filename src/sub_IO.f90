@@ -20,7 +20,13 @@
      read(99,*) NB   ! Block number
      allocate( NI(NB),NJ(NB),NK(NB) )
      read(99,*) (NI(k), NJ(k), NK(k), k=1,NB)
-	else !
+    elseif( Mesh_File_Format .eq. 2) then !
+!    Mesh3d.x format: binary, each block stores x,y,z in one unformatted record
+     open(99,file="Mesh3d.x",form="unformatted")
+     read(99) NB
+     allocate( NI(NB),NJ(NB),NK(NB) )
+     read(99) (NI(k), NJ(k), NK(k), k=1,NB)
+    else !
      open(99,file="Mesh3d.dat",form="unformatted")
      read(99) NB !
      allocate( NI(NB),NJ(NB),NK(NB) )
@@ -37,6 +43,11 @@
        read(99,*) (((Ux(i,j,k,1),i=1,nx),j=1,ny),k=1,nz) , &
                   (((Ux(i,j,k,2),i=1,nx),j=1,ny),k=1,nz) , &
                   (((Ux(i,j,k,3),i=1,nx),j=1,ny),k=1,nz)
+     elseif( Mesh_File_Format .eq. 2) then
+!      Mesh3d.x: each block stores x,y,z in three separate records
+       read(99) (((Ux(i,j,k,1),i=1,nx),j=1,ny),k=1,nz)
+       read(99) (((Ux(i,j,k,2),i=1,nx),j=1,ny),k=1,nz)
+       read(99) (((Ux(i,j,k,3),i=1,nx),j=1,ny),k=1,nz)
 	 else
        read(99)   (((Ux(i,j,k,1),i=1,nx),j=1,ny),k=1,nz) , &
                   (((Ux(i,j,k,2),i=1,nx),j=1,ny),k=1,nz) , &
@@ -89,7 +100,13 @@
    endif
   
    call MPI_Barrier(MPI_COMM_WORLD,ierr)
-   if(my_id .eq. 0)  print*, "read Mesh3d.dat OK"
+   if(my_id .eq. 0) then
+     if(Mesh_File_Format .eq. 2) then
+       print*, "read Mesh3d.x OK"
+     else
+       print*, "read Mesh3d.dat OK"
+     endif
+   endif
  end subroutine read_main_mesh
 
 !-------------------------------------------------------------------------------------
@@ -482,6 +499,244 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    if(my_id .eq. 0)  print*, "write flow3d.dat OK"
 
   end subroutine output_flow
+
+!----------------------------------------------------------------------
+! Output VTK format (legacy STRUCTURED_GRID) for Paraview
+! Writes one file per block:
+!   flow3d_block_NNN.vtk  - fluid blocks (cell-centered d,u,v,w,T,p)
+!   Ts_block_NNN.vtk      - solid blocks (cell-centered temperature)
+!----------------------------------------------------------------------
+  subroutine output_vtk
+   use Global_Var
+   use const_var
+   implicit none
+   
+   Type (Mesh_TYPE),pointer:: MP
+   Type (Block_TYPE),pointer:: B
+   real(PRE_EC),allocatable,dimension(:,:,:,:):: U, G
+   real(PRE_EC),allocatable,dimension(:,:,:):: Ts_buf
+   integer:: NB,NVAR1,m,m1,nx,ny,nz,i,j,k,mt,Num_data
+   integer:: Recv_from_ID,tag,ierr, status(MPI_status_size)
+   integer:: npts, ncells, grid_size, flow_size
+   real(PRE_EC):: d1, u1, v1, w1, p1, T1
+   character(len=50):: filename
+
+   MP=>Mesh(1)
+   NVAR1=MP%NVAR
+
+   if(my_id .eq. 0) then
+     print*, "write VTK files ......"
+     
+!    --- Flow data VTK (all blocks) ---
+     do m=1, Total_block
+       nx=bNi(m); ny=bNj(m); nz=bNk(m)
+       npts = nx*ny*nz
+       ncells = (nx-1)*(ny-1)*(nz-1)
+       allocate(U(0:nx,0:ny,0:nz,6))
+       allocate(G(nx,ny,nz,3))
+
+!      Gather grid coords + flow data to master process
+       if(B_proc(m) .eq. 0) then
+         mt=B_n(m)
+         B=>MP%Block(mt)
+!        Grid coordinates
+         do k=1,nz; do j=1,ny; do i=1,nx
+           G(i,j,k,1)=B%x(i,j,k)
+           G(i,j,k,2)=B%y(i,j,k)
+           G(i,j,k,3)=B%z(i,j,k)
+         enddo; enddo; enddo
+!        Flow data (cell-centered primitive variables)
+         do k=0,nz; do j=0,ny; do i=0,nx
+           d1 = B%U(1,i,j,k)
+           u1 = B%U(2,i,j,k)/max(d1, 1.d-20)
+           v1 = B%U(3,i,j,k)/max(d1, 1.d-20)
+           w1 = B%U(4,i,j,k)/max(d1, 1.d-20)
+           p1 = (B%U(5,i,j,k) - 0.5d0*d1*(u1*u1+v1*v1+w1*w1)) * (gamma-1.d0)
+           T1 = gamma * Ma * Ma * p1 / max(d1, 1.d-20)
+           U(i,j,k,1) = d1
+           U(i,j,k,2) = u1
+           U(i,j,k,3) = v1
+           U(i,j,k,4) = w1
+           U(i,j,k,5) = T1
+           U(i,j,k,6) = p1
+         enddo; enddo; enddo
+       else
+         grid_size = nx*ny*nz*3
+         flow_size = 6*(nx+1)*(ny+1)*(nz+1)
+         Recv_from_ID = B_proc(m)
+         tag = B_n(m)*2
+         call MPI_Recv(G, grid_size, OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, Status, ierr)
+         tag = B_n(m)*2+1
+         call MPI_Recv(U, flow_size, OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, Status, ierr)
+       endif
+
+!      Write VTK file for this block
+       write(filename, '("flow3d_block_",I0,".vtk")') m
+       open(99, file=filename, status='replace')
+       write(99, '(A)') '# vtk DataFile Version 3.0'
+       write(99, '(A)') 'OpenCFD-EC output'
+       write(99, '(A)') 'ASCII'
+       write(99, '(A)') 'DATASET STRUCTURED_GRID'
+       write(99, '(A,3I6)') 'DIMENSIONS ', nx, ny, nz
+       write(99, '(A,I12,A)') 'POINTS ', npts, ' double'
+!      Grid nodes
+       do k=1,nz; do j=1,ny; do i=1,nx
+         write(99, '(3ES25.15)') G(i,j,k,1), G(i,j,k,2), G(i,j,k,3)
+       enddo; enddo; enddo
+!      Cell-centered data
+       write(99, '(A,I12)') 'CELL_DATA ', ncells
+!      Density
+       write(99, '(A)') 'SCALARS density double 1'
+       write(99, '(A)') 'LOOKUP_TABLE default'
+       do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+         write(99, '(ES25.15)') U(i,j,k,1)
+       enddo; enddo; enddo
+!      Velocity (vector)
+       write(99, '(A)') 'VECTORS velocity double'
+       do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+         write(99, '(3ES25.15)') U(i,j,k,2), U(i,j,k,3), U(i,j,k,4)
+       enddo; enddo; enddo
+!      Temperature
+       write(99, '(A)') 'SCALARS temperature double 1'
+       write(99, '(A)') 'LOOKUP_TABLE default'
+       do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+         write(99, '(ES25.15)') U(i,j,k,5)
+       enddo; enddo; enddo
+!      Pressure
+       write(99, '(A)') 'SCALARS pressure double 1'
+       write(99, '(A)') 'LOOKUP_TABLE default'
+       do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+         write(99, '(ES25.15)') U(i,j,k,6)
+       enddo; enddo; enddo
+
+       close(99)
+       deallocate(U, G)
+     enddo
+
+!    --- Solid temperature VTK (all solid blocks) ---
+     do m=1, Total_block
+       nx=bNi(m); ny=bNj(m); nz=bNk(m)
+       npts = nx*ny*nz
+       ncells = (nx-1)*(ny-1)*(nz-1)
+
+!      Determine if this is a solid block (check via Block_Type_List)
+       if(Block_Type_List(m) /= BLOCK_SOLID) cycle
+
+       allocate(G(nx,ny,nz,3))
+       allocate(Ts_buf(nx-1,ny-1,nz-1))
+
+!      Gather grid + Ts data
+       if(B_proc(m) .eq. 0) then
+         mt=B_n(m)
+         B=>MP%Block(mt)
+         do k=1,nz; do j=1,ny; do i=1,nx
+           G(i,j,k,1)=B%x(i,j,k)
+           G(i,j,k,2)=B%y(i,j,k)
+           G(i,j,k,3)=B%z(i,j,k)
+         enddo; enddo; enddo
+         do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+           Ts_buf(i,j,k)=B%Ts(i,j,k)
+         enddo; enddo; enddo
+       else
+         grid_size = nx*ny*nz*3
+         Recv_from_ID = B_proc(m)
+         tag = B_n(m)*4
+         call MPI_Recv(G, grid_size, OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, Status, ierr)
+         tag = B_n(m)*4+1
+         call MPI_Recv(Ts_buf, (nx-1)*(ny-1)*(nz-1), OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, Status, ierr)
+       endif
+
+       write(filename, '("Ts_block_",I0,".vtk")') m
+       open(99, file=filename, status='replace')
+       write(99, '(A)') '# vtk DataFile Version 3.0'
+       write(99, '(A)') 'OpenCFD-EC solid temperature'
+       write(99, '(A)') 'ASCII'
+       write(99, '(A)') 'DATASET STRUCTURED_GRID'
+       write(99, '(A,3I6)') 'DIMENSIONS ', nx, ny, nz
+       write(99, '(A,I12,A)') 'POINTS ', npts, ' double'
+       do k=1,nz; do j=1,ny; do i=1,nx
+         write(99, '(3ES25.15)') G(i,j,k,1), G(i,j,k,2), G(i,j,k,3)
+       enddo; enddo; enddo
+       write(99, '(A,I12)') 'CELL_DATA ', ncells
+       write(99, '(A)') 'SCALARS temperature double 1'
+       write(99, '(A)') 'LOOKUP_TABLE default'
+       do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+         write(99, '(ES25.15)') Ts_buf(i,j,k)
+       enddo; enddo; enddo
+       close(99)
+       deallocate(G, Ts_buf)
+     enddo
+
+   else
+!    --- Non-master processes: send data for local blocks ---
+     do m=1, MP%Num_Block
+       B=>MP%Block(m)
+       nx=B%nx; ny=B%ny; nz=B%nz
+       mt = m  ! local block index = B_n(global_block_index)
+
+!      Find global block index for this local block
+       do m1=1, Total_block
+         if(B_proc(m1) .eq. my_id .and. B_n(m1) .eq. m) exit
+       enddo
+       if(m1 .gt. Total_block) cycle
+
+!      Send grid coordinates
+       allocate(G(nx,ny,nz,3))
+       do k=1,nz; do j=1,ny; do i=1,nx
+         G(i,j,k,1)=B%x(i,j,k)
+         G(i,j,k,2)=B%y(i,j,k)
+         G(i,j,k,3)=B%z(i,j,k)
+       enddo; enddo; enddo
+       grid_size = nx*ny*nz*3
+       tag = m*2
+       call MPI_Send(G, grid_size, OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
+       deallocate(G)
+
+!      Send flow data (cell-centered primitive variables)
+       allocate(U(0:nx,0:ny,0:nz,6))
+       do k=0,nz; do j=0,ny; do i=0,nx
+         d1 = B%U(1,i,j,k)
+         u1 = B%U(2,i,j,k)/max(d1, 1.d-20)
+         v1 = B%U(3,i,j,k)/max(d1, 1.d-20)
+         w1 = B%U(4,i,j,k)/max(d1, 1.d-20)
+         p1 = (B%U(5,i,j,k) - 0.5d0*d1*(u1*u1+v1*v1+w1*w1)) * (gamma-1.d0)
+         T1 = gamma * Ma * Ma * p1 / max(d1, 1.d-20)
+         U(i,j,k,1) = d1
+         U(i,j,k,2) = u1
+         U(i,j,k,3) = v1
+         U(i,j,k,4) = w1
+         U(i,j,k,5) = T1
+         U(i,j,k,6) = p1
+       enddo; enddo; enddo
+       flow_size = 6*(nx+1)*(ny+1)*(nz+1)
+       tag = m*2+1
+       call MPI_Send(U, flow_size, OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
+       deallocate(U)
+
+!      Send solid Ts data if this is a solid block
+       if(B%Block_type == BLOCK_SOLID) then
+         allocate(G(nx,ny,nz,3))
+         do k=1,nz; do j=1,ny; do i=1,nx
+           G(i,j,k,1)=B%x(i,j,k)
+           G(i,j,k,2)=B%y(i,j,k)
+           G(i,j,k,3)=B%z(i,j,k)
+         enddo; enddo; enddo
+         allocate(Ts_buf(nx-1,ny-1,nz-1))
+         do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+           Ts_buf(i,j,k) = B%Ts(i,j,k)
+         enddo; enddo; enddo
+         tag = m*4
+         call MPI_Send(G, grid_size, OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
+         tag = m*4+1
+         call MPI_Send(Ts_buf, (nx-1)*(ny-1)*(nz-1), OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
+         deallocate(G, Ts_buf)
+       endif
+     enddo
+   endif
+   
+   call MPI_Barrier(MPI_COMM_WORLD,ierr)
+   if(my_id .eq. 0) print*, "write VTK files OK"
+  end subroutine output_vtk
 
 
 

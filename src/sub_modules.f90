@@ -107,6 +107,11 @@
 	 real(PRE_EC),pointer,dimension(:,:,:):: Ts,Tsn  ! solid temperature (current/previous time step, cell-centered, LAP ghost layers)
 	 TYPE(BC_MSG_TYPE),pointer,dimension(:):: bc_msg2  ! interface connection info (from bc3d_interface.inp)
 	 real(PRE_EC):: solid_rho, solid_Cp, solid_k     ! solid material properties (density, specific heat, thermal conductivity)
+!     Solid thermal boundary condition data (from solid_bc.inp)
+	 integer:: solid_bc_nface                       ! number of physical faces with thermal BCs
+	 integer,pointer,dimension(:):: solid_bc_face_no ! face number in bc_msg (1-based)
+	 real(PRE_EC),pointer,dimension(:):: solid_bc_Tw ! wall temperature (K, dimensional; >0 isothermal, <0 heat flux)
+	 real(PRE_EC),pointer,dimension(:):: solid_bc_Qw ! heat flux (W/m2, dimensional; used when Tw<0)
 	End TYPE Block_TYPE  
 
  !
@@ -187,6 +192,7 @@
    integer,save:: Cood_Y_UP !
    integer,save:: Pdebug(4) !
    real(PRE_EC),save:: Ref_S,Ref_L, Centroid(3) !
+   real(PRE_EC),save:: Lscale ! Length scale: 1=m, 0.001=mm, etc.
    real(PRE_EC),save:: Ldmin,Ldmax,Lpmin,Lpmax,Lumax,LSAmax !
    real(PRE_EC),save:: CP1_NSA,CP2_NSA       ! parameters in New SA model
  !-----------mpi data ----------------------------------------------------------- 

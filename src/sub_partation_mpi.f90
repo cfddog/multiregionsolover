@@ -94,7 +94,12 @@
 	 integer:: m,m0,m1,m2,G0,mb,mg,mp,n,t1,t2,k,Total_cell,Total_grid
 	 real:: grid_av
      print*, "Partation ......"
-	 if(formt .eq. 0) then
+	 if(formt .eq. 2) then
+       open(99,file="Mesh3d.x",form="unformatted")
+       read(99) Num_Block
+       allocate(NI(Num_Block),NJ(Num_Block),NK(Num_Block))
+       read(99) (NI(k), NJ(k), NK(k), k=1,Num_Block)
+     elseif(formt .eq. 0) then
        open(99,file="Mesh3d.dat",form="unformatted")
        read(99) Num_Block         
        allocate(NI(Num_Block),NJ(Num_Block),NK(Num_Block) )   ! Size of each block

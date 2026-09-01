@@ -14,10 +14,17 @@
  ! ------------------------------------------------------ 
      do mBlock=1,Mesh(nMesh)%Num_Block
        B => Mesh(nMesh)%Block(mBlock)
+       if(B%Block_type == BLOCK_SOLID) cycle   ! Skip solid blocks (handled by solid solver)
        do  ksub=1,B%subface
         Bc=> B%bc_msg(ksub)
         if(Bc%bc <= 0 )  cycle              ! Non-internal boundary
 
+!       Skip interface connections (handled by coupling routines).
+!       bc_msg2 has bc<0 for interface connections, even though bc_msg may
+!       show a physical BC (e.g. bc=2 wall) for the same subface.
+        if(associated(B%bc_msg2)) then
+          if(B%bc_msg2(ksub)%bc < 0) cycle
+        endif
 
           if(IF_TurboMachinary .eq. 0 ) then   ! Non-turbomachinery mode
 
@@ -43,6 +50,8 @@
              call boundary_Symmetry_or_SlideWall(nMesh,mBlock,ksub)        ! Symmetry boundary condition or slip wall
             else if ( Bc%bc .eq. BC_Extrapolate ) then 
              call boundary_Extrapolate(nMesh,mBlock,ksub)
+            else if ( Bc%bc >= 11 .and. Bc%bc <= 13 ) then    ! Interface types (handled by coupling routines)
+             continue
             else if ( Bc%bc >=900 ) then     ! User-defined boundary condition    
              call boundary_USER(nMesh,mBlock,ksub)
 		   else
@@ -65,6 +74,8 @@
              call boundary_Symmetry_or_SlideWall(nMesh,mBlock,ksub)        ! Symmetry boundary condition or slip wall
             else if ( Bc%bc .eq. BC_Extrapolate ) then 
              call boundary_Extrapolate(nMesh,mBlock,ksub)
+            else if ( Bc%bc >= 11 .and. Bc%bc <= 13 ) then    ! Interface types (handled by coupling routines)
+             continue
             else if ( Bc%bc >= 900 ) then      ! User-defined boundary condition 
              call boundary_USER(nMesh,mBlock,ksub)
 		    else
