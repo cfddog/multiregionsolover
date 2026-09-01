@@ -13,6 +13,52 @@
    real(PRE_EC),allocatable,dimension(:,:,:)::Vi,Vj,Vk
    Type (Mesh_TYPE),pointer:: MP
    Type (Block_TYPE),pointer:: B
+!----------------------------------------------------------------------
+!  Extrapolate x/y/z node coordinates into ghost layers.
+!  Array alloc range: x(0:nx+1, 0:ny+1, 0:nz+1), so valid ghost index is i=0,nx+1 / j=0,ny+1 / k=0,nz+1.
+!  Uses linear extrapolation of interior spacing.
+!  Needed so that xc/yc/zc cell-center ghosts (used by FVM solid solver dist + heat flux BC)
+!  have valid node positions.
+!----------------------------------------------------------------------
+   MP=>Mesh(nMesh)
+   do m=1,MP%Num_Block
+     B => MP%Block(m)
+     nx = B%nx; ny = B%ny; nz = B%nz
+!    --- i-direction: i=0 ghost (single layer, since alloc 0:nx+1) ---
+     do k=1,nz
+     do j=1,ny
+       B%x(0,j,k) = 2.d0*B%x(1,j,k) - B%x(2,j,k)
+       B%y(0,j,k) = 2.d0*B%y(1,j,k) - B%y(2,j,k)
+       B%z(0,j,k) = 2.d0*B%z(1,j,k) - B%z(2,j,k)
+       B%x(nx+1,j,k) = 2.d0*B%x(nx,j,k) - B%x(nx-1,j,k)
+       B%y(nx+1,j,k) = 2.d0*B%y(nx,j,k) - B%y(nx-1,j,k)
+       B%z(nx+1,j,k) = 2.d0*B%z(nx,j,k) - B%z(nx-1,j,k)
+     enddo
+     enddo
+!    --- j-direction: j=0 and j=ny+1 ---
+     do k=1,nz
+     do i=0,nx+1
+       B%x(i,0,k) = 2.d0*B%x(i,1,k) - B%x(i,2,k)
+       B%y(i,0,k) = 2.d0*B%y(i,1,k) - B%y(i,2,k)
+       B%z(i,0,k) = 2.d0*B%z(i,1,k) - B%z(i,2,k)
+       B%x(i,ny+1,k) = 2.d0*B%x(i,ny,k) - B%x(i,ny-1,k)
+       B%y(i,ny+1,k) = 2.d0*B%y(i,ny,k) - B%y(i,ny-1,k)
+       B%z(i,ny+1,k) = 2.d0*B%z(i,ny,k) - B%z(i,ny-1,k)
+     enddo
+     enddo
+!    --- k-direction: k=0 and k=nz+1 ---
+     do j=0,ny+1
+     do i=0,nx+1
+       B%x(i,j,0) = 2.d0*B%x(i,j,1) - B%x(i,j,2)
+       B%y(i,j,0) = 2.d0*B%y(i,j,1) - B%y(i,j,2)
+       B%z(i,j,0) = 2.d0*B%z(i,j,1) - B%z(i,j,2)
+       B%x(i,j,nz+1) = 2.d0*B%x(i,j,nz) - B%x(i,j,nz-1)
+       B%y(i,j,nz+1) = 2.d0*B%y(i,j,nz) - B%y(i,j,nz-1)
+       B%z(i,j,nz+1) = 2.d0*B%z(i,j,nz) - B%z(i,j,nz-1)
+     enddo
+     enddo
+   enddo
+
 !  Compute control volume
 !  Compute surface areas of each control volume (to avoid excessive memory usage, normal and tangent directions of surfaces are computed on-the-fly, not stored)
    MP=>Mesh(nMesh)
@@ -24,10 +70,10 @@
        do j=1,B%ny
          do i=1,B%nx
 !-------------------------------------------
-           t1x=B%x(i,j+1,k)-B%x(i,j,k+1); t1y=B%y(i,j+1,k)-B%y(i,j,k+1); t1z=B%z(i,j+1,k)-B%z(i,j,k+1)   ! 对角线1
-           t2x=B%x(i,j+1,k+1)-B%x(i,j,k); t2y=B%y(i,j+1,k+1)-B%y(i,j,k) ; t2z=B%z(i,j+1,k+1)-B%z(i,j,k)  ! 对角线2
-           s1x=t1y*t2z-t1z*t2y ; s1y=t1z*t2x-t1x*t2z ; s1z=t1x*t2y-t1y*t2x   ! 法向量 （对角线向量叉乘得到）
-           ss=sqrt(s1x*s1x+s1y*s1y+s1z*s1z)  ! 长度
+           t1x=B%x(i,j+1,k)-B%x(i,j,k+1); t1y=B%y(i,j+1,k)-B%y(i,j,k+1); t1z=B%z(i,j+1,k)-B%z(i,j,k+1)   ! ?????1
+           t2x=B%x(i,j+1,k+1)-B%x(i,j,k); t2y=B%y(i,j+1,k+1)-B%y(i,j,k) ; t2z=B%z(i,j+1,k+1)-B%z(i,j,k)  ! ?????2
+           s1x=t1y*t2z-t1z*t2y ; s1y=t1z*t2x-t1x*t2z ; s1z=t1x*t2y-t1y*t2x   ! ?????? ??????????????????
+           ss=sqrt(s1x*s1x+s1y*s1y+s1z*s1z)  ! ????
            B%Si(i,j,k)=ss*0.5d0
            
 		   if(ss .ge. Lim_Zero) then
@@ -60,9 +106,9 @@
            za=(B%z(i,j,k)+B%z(i+1,j,k)+B%z(i,j,k+1)+B%z(i+1,j,k+1))*0.25d0
            Vj(i,j,k)=(s1x*xa+s1y*ya+s1z*za)*0.5d0
 !----------------------=----------------------------------------------------
-           t1x=B%x(i+1,j+1,k)-B%x(i,j,k); t1y=B%y(i+1,j+1,k)-B%y(i,j,k) ; t1z=B%z(i+1,j+1,k)-B%z(i,j,k)  ! 对角线1
-           t2x=B%x(i,j+1,k)-B%x(i+1,j,k); t2y=B%y(i,j+1,k)-B%y(i+1,j,k) ; t2z=B%z(i,j+1,k)-B%z(i+1,j,k)   ! 对角线2
-           s1x=t1y*t2z-t1z*t2y ; s1y=t1z*t2x-t1x*t2z ; s1z=t1x*t2y-t1y*t2x   ! 法向量 （对角线向量叉乘得到）
+           t1x=B%x(i+1,j+1,k)-B%x(i,j,k); t1y=B%y(i+1,j+1,k)-B%y(i,j,k) ; t1z=B%z(i+1,j+1,k)-B%z(i,j,k)  ! ?????1
+           t2x=B%x(i,j+1,k)-B%x(i+1,j,k); t2y=B%y(i,j+1,k)-B%y(i+1,j,k) ; t2z=B%z(i,j+1,k)-B%z(i+1,j,k)   ! ?????2
+           s1x=t1y*t2z-t1z*t2y ; s1y=t1z*t2x-t1x*t2z ; s1z=t1x*t2y-t1y*t2x   ! ?????? ??????????????????
            ss=sqrt(s1x*s1x+s1y*s1y+s1z*s1z)
            B%Sk(i,j,k)=ss*0.5d0  
            if(ss .ge. Lim_Zero) then
@@ -80,7 +126,7 @@
        enddo
      enddo
 
-! 控制体 体积    
+! ?????? ???    
      do k=1,B%nz-1
        do j=1,B%ny-1
          do i=1,B%nx-1
@@ -160,7 +206,7 @@
 		   Jac=1.d0/Jac1
 
 !   Jac=B%Jaci(i,j,k)
-!   9个Jocabian变换系数    
+!   9??Jocabian?潩???    
           B%ix1(i,j,k)=Jac*(yj*zk-zj*yk)
           B%iy1(i,j,k)=Jac*(zj*xk-xj*zk)
           B%iz1(i,j,k)=Jac*(xj*yk-yj*xk)
@@ -174,9 +220,9 @@
 	  enddo
 	  enddo
  
- ! (I,J-1/2,K) 点的值， 即 (i+1/2,j,k+1/2)点的值
+ ! (I,J-1/2,K) ?????? ?? (i+1/2,j,k+1/2)????
  
-! Revised, 2013-5-3, 坐标的导数与物理量的导数 计算方法相同
+! Revised, 2013-5-3, ????????????????????? ?????????
       do k=1,B%nz-1 
       do j=1,B%ny
       do i=1,B%nx-1
@@ -184,7 +230,7 @@
        yj=B%yc(i,j,k)-B%yc(i,j-1,k)
        zj=B%zc(i,j,k)-B%zc(i,j-1,k)
       
-! Revised, 2013-5-4, 避免使用角点（棱）坐标
+! Revised, 2013-5-4, ???????????????
 	   if( (j==1 .or. j==B%ny) .and. (i==1 .or. i==B%nx-1) ) then
 		xi1=B%xc(i-1,j,k)
 		yi1=B%yc(i-1,j,k)
@@ -308,7 +354,7 @@
      enddo
 	 enddo
 	 enddo
-!  (I,J,K)点的值, 标量方程的源项需要 (仅最密的网格使用)
+!  (I,J,K)????, ??????????????? (??????????????)
     if(nMesh .eq. 1) then
     do k=1,B%nz-1
     do j=1,B%ny-1
@@ -356,8 +402,8 @@
    end
 
 
-! 检查网格质量
-! 检查方法： 网格的连续性 （体积的连续性、法方向的连续性）
+! ???????????
+! ??潩???? ??????????? ????????????????????????????
   subroutine check_mesh_quality_onemesh(nMesh)
    use   Global_Var
    implicit none
@@ -404,7 +450,7 @@
  	 flmax=1.d0
 	 ftmax=0.d0
 
-!  长度比
+!  ?????
 
 
      do k=1,nz-1
@@ -437,7 +483,7 @@
 		z1=B%zc(i,j,k)-B%zc(i,j,k-1) ; z2= B%zc(i,j,k+1)-B%zc(i,j,k)
         ft3=(x1*x2+y1*y2+z1*z2)/sqrt((x1*x1+y1*y1+z1*z1)*(x2*x2+y2*y2+z2*z2))
         ft=min(1.d0,1.d0*min(ft1,ft2,ft3))
-        ft=acos(ft)           ! 网格线折角 (容易出现NaN)
+        ft=acos(ft)           ! ????????? (???????NaN)
         
         Af=0.9d0*exp(-4.d0*(fl-1.d0)**2)+0.1d0
         Aa=0.9d0*exp(-(4.d0/3.1415926535d0*ft)**2)+0.1d0
@@ -450,7 +496,7 @@
 		 write(*,"(7E30.20)") fl,ft,ft1,ft2,ft3,min(ft1,ft2,ft3),acos(min(ft1,ft2,ft3))
 		endif
 
-!---------找出质量最差的网格，输出-------------------	   
+!---------??????????????????-------------------	   
        if(fl .gt. flmax) then
 	    flmax=fl
 	    i1=i
@@ -522,7 +568,7 @@
    implicit none
    integer nMesh
    TYPE (Mesh_TYPE),pointer:: MP
-   MP=>Mesh(1)            ! 最细的网格
+   MP=>Mesh(1)            ! ?????????
 !  Control parameters on the finest mesh are the same as the main control parameters
    MP%Iflag_turbulence_model=Iflag_turbulence_model
    MP%Iflag_Scheme=Iflag_Scheme
@@ -530,14 +576,14 @@
    MP%IFlag_Reconstruction=IFlag_Reconstruction
    MP%Bound_Scheme=Bound_scheme   !  Boundary scheme
 
-!  设定粗网格上的控制参数
+!  ?????????????????
    do nMesh=2,Num_Mesh
      MP=>Mesh(nMesh)
      MP%Iflag_turbulence_model=Turbulence_NONE    ! Coarse mesh does not use turbulence model
      MP%Iflag_Scheme=Scheme_UD1                   ! Coarse mesh uses 1st order upwind scheme
-     MP%IFlag_flux=IFlag_flux                     ! 粗网格的通量分裂技术、时间推进近似及重构技术与细网格相同
+     MP%IFlag_flux=IFlag_flux                     ! ???????????????????????????????????????????????
      MP%IFlag_Reconstruction=IFlag_Reconstruction
-     MP%Bound_Scheme=Scheme_UD1                   ! 粗网格边界点使用1阶格式
+     MP%Bound_Scheme=Scheme_UD1                   ! ????????????1????
    enddo
   
   end subroutine set_control_para
@@ -553,7 +599,7 @@
    integer:: ib,ie,jb,je,kb,ke,bc,ist,iend,jst,jend,kst,kend
    print*, "Check if Multi-Grid can be used ..."
 
-   if( Mesh_File_Format .eq. 1) then   ! 格式文件
+   if( Mesh_File_Format .eq. 1) then   ! ??????
      open(99,file="Mesh3d.dat")
      read(99,*) NB
      allocate(NI(NB),NJ(NB),NK(NB))
@@ -575,17 +621,17 @@
 
 
    N_Cell=0
-   Km_grid=NI(1)  ! 初始值    
+   Km_grid=NI(1)  ! ????    
    do m=1,NB 
-	 N_Cell=N_Cell+(NI(m)-1)*(NJ(m)-1)*(NK(m)-1)  ! 统计总网格单元数 
-!  判断可使用的网格重数      
+	 N_Cell=N_Cell+(NI(m)-1)*(NJ(m)-1)*(NK(m)-1)  ! ???????????? 
+!  ?潩??????????????      
  	 Km=1
 	 NN=2
-!  判断准则： 网格数-1 能被2**km 整除， 且最稀的网格单元数不小于2
+!  ?潩???? ??????-1 ???2**km ?????? ????????????????潩??2
      do while( mod((NI(m)-1),NN) .eq. 0 .and. (NI(m)-1)/NN .ge. 2     &
 		     .and. mod((NJ(m)-1),NN) .eq. 0 .and. (NJ(m)-1)/NN .ge. 2    &
 		     .and. mod((NK(m)-1),NN) .eq. 0 .and. (NK(m)-1)/NN .ge. 2) 
-       Km=Km+1              ! 所允许的网格重数
+       Km=Km+1              ! ????????????????
 	   NN=NN*2
      enddo
      Km_grid=min(Km_grid,Km)

@@ -112,7 +112,7 @@
      endif
      close(99)
 
- !    读入每块网格数，按从多到少次序排列
+ !    ?????????????????????????????
      allocate(B_grid(Num_Block,2))
 	 allocate(Pgrid(Num_proc),Bproc(Num_Block))
 
@@ -131,7 +131,7 @@
      do m=1,Num_block
 	   G0=B_grid(m,1)     ! Grid points
 	    mg=m
-	    do n=m+1,Num_block   ! 找出数目最大的
+	    do n=m+1,Num_block   ! ??????????
          if(B_grid(n,1) .gt. G0 ) then
 		    G0=B_grid(n,1)
 			mg=n
@@ -149,7 +149,7 @@
       Pgrid(:)=0
 	 do m=1,Num_Block
         mb=B_grid(m,2) 
-  !     寻找网格数目最小的进程
+  !     ????????????С?????
         mg=Pgrid(1)
 		m0=1
 		do mp=1,Num_Proc

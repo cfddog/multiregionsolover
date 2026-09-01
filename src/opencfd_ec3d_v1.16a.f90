@@ -109,19 +109,19 @@
 !Ver 1.16a: 2018-9-29:  A bug in SST model is removed;
 !-------------------------------------------------------------------------------------------------------------------------------------------------
 
-! 流场物理量 （计算每块时申请内存，该块计算结束后释放；属于临时变量） 
+! ?????????? ????????????????棬???????????????????????????? 
 !  include "sub_modules.f90"
 
   module Flow_Var
    use precision_EC
-   real(PRE_EC), save,pointer,dimension(:,:,:)::  d,uu,v,w,T,p,cc ! 密度、x-速度、y-速度、z-速度、压力、声速
-   real(PRE_EC), save,pointer,dimension(:,:,:,:):: Flux                 ! i- ,j-及k-方向的通量
-   real(PRE_EC), save,pointer,dimension(:,:,:):: Lvi,Lvj,Lvk,Lci,Lcj,Lck   ! 无粘项及粘性项Jocabian的谱半径 
+   real(PRE_EC), save,pointer,dimension(:,:,:)::  d,uu,v,w,T,p,cc ! ????x-????y-????z-?????????????
+   real(PRE_EC), save,pointer,dimension(:,:,:,:):: Flux                 ! i- ,j-??k-????????
+   real(PRE_EC), save,pointer,dimension(:,:,:):: Lvi,Lvj,Lvk,Lci,Lcj,Lck   ! ??????????Jocabian????? 
 
   end module Flow_Var
 
 !------------------------------------------------------------------------------------------
-! 主程序 主程序 主程序
+! ?????? ?????? ??????
 !-----------------------------------------------------------------------------------------
   program main
    use Global_Var
@@ -137,73 +137,73 @@
     print*,  "----------------------------------------------------------------------------- " 
    endif
 
-   call read_parameter                     ! 读取流动参数及控制信息
-!$ call omp_set_num_threads(NUM_THREADS)   ! 设置OpenMP的运行线程数 （并行数目）， 本语句对openmp编译器不是注释!
+   call read_parameter                     ! ????????????????????
+!$ call omp_set_num_threads(NUM_THREADS)   ! ????OpenMP??????????? ????????????? ??????openmp?????????????!
 
-!$ if(my_id ==0) then         ! 测试一下运行的进程 （openmp编译时，不是注释）
+!$ if(my_id ==0) then         ! ??????????е???? ??openmp???????????????
 !$OMP Parallel
 !$  print*, "omp run ..."
 !$OMP END parallel
 !$ endif 
 
-   allocate( Mesh(Num_Mesh) )                                 ! 主数据结构： “网格” （其成员是“网格块”）
+   allocate( Mesh(Num_Mesh) )                                 ! ????????? ?????? ?????????????顱??
    
-   if(my_id .eq. 0)  call check_mesh_multigrid               ! 检查网格配置所允许的最大重数,并设定多重网格的重数
+   if(my_id .eq. 0)  call check_mesh_multigrid               ! ??????????????????????????,???趨?????????????
    
-   call Init                               ! 初始化变量（分配内存，读取网格）
-   call set_control_para                   ! 设定各重网格上的控制信息（数值方法、通量技术、湍流模型、时间推进方式）
-   call check_mesh_quality                 ! 检查网格质量,在网格质量差的区域降低局部时间步长
-   call Init_flow                          ! 初始化流场 （初值）
+   call Init                               ! ?????????????????棬???????
+   call set_control_para                   ! ?趨????????????????????????????????????????????????????????
+   call check_mesh_quality                 ! ???????????,?????????????????????????
+   call Init_flow                          ! ????????? ???????
    
 
    if(my_id .eq. 0) print*, " Start ......"
 
 !------------------------------------------------------------------------
-! 时间推进，采用单重网格、二重网格或三重网格； 采用1阶Euler或3阶RK
+! ??????????????????????????????????? ????1??Euler??3??RK
    do while(Mesh(1)%tt .lt. t_end )
     
      call show_Wall_time()
-     if(Num_Mesh .eq. 1) then                          ! 单重网格推进1个时间步
+     if(Num_Mesh .eq. 1) then                          ! ???????????1?????
 !==========================================================================================
-!   重构后的主时间循环: 块循环提到最外层
-!   每个时间步: 先遍历每个 block 完成 残差计算+数据更新(时间推进),
-!   之后再统一施加边界条件并进行块间通信。添加新功能时可在块级直接扩展。
+!   ??????????????: ????????????
+!   ??????: ???????? block ??? ?в????+???????(??????),
+!   ?????????????????????п????????????????????鼶????????
        select case(Time_Method)
-       case(Time_RK3)                                  ! 3阶RK: 每步3个子步(stage)
+       case(Time_RK3)                                  ! 3??RK: ???3?????(stage)
          call comput_Sfac(Sfac,Sfac1)                  ! =0
          do mBlock=1,Mesh(1)%Num_Block
            call Set_Un_oneblock(1,mBlock)              ! Un=U
          enddo
          do KRK=1,3
-           do mBlock=1,Mesh(1)%Num_Block               ! 遍历每个 block, 按类型调度
+           do mBlock=1,Mesh(1)%Num_Block               ! ??????? block, ?????????
              call solver_one_block(1,mBlock,Sfac,Sfac1)
            enddo
-           call couple_fluid_solid_interfaces(1)       ! 流体-固体交界面耦合
-           call couple_solid_solid_interfaces(1)       ! 固体-固体交界面温度交换
+           call couple_fluid_solid_interfaces(1)       ! ????-???彻???????
+           call couple_solid_solid_interfaces(1)       ! ????-???彻??????????
            if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
-           call Boundary_condition_onemesh(1)          ! 边界条件 (设定Ghost Cell的值)
-           call update_buffer_onemesh(1)               ! 同步各块的交界区
-           call update_Ts_buffer_onemesh(1)            ! 同步固体温度缓冲区
+           call Boundary_condition_onemesh(1)          ! ??????? (?趨Ghost Cell???)
+           call update_buffer_onemesh(1)               ! ?????????????
+           call update_Ts_buffer_onemesh(1)            ! ???????????????
          enddo
 
-       case(Time_Dual_LU_SGS)                          ! 双时间步长法: 内迭代
+       case(Time_Dual_LU_SGS)                          ! ????????: ?????
          do kt_in=1, step_inner_Limit
-           call comput_Sfac(Sfac,Sfac1)                ! 双时间步长法系数 (每次内迭代调用, 与原逻辑一致)
-           do mBlock=1,Mesh(1)%Num_Block               ! 遍历每个 block, 按类型调度
+           call comput_Sfac(Sfac,Sfac1)                ! ??????????? (????????????, ?????????)
+           do mBlock=1,Mesh(1)%Num_Block               ! ??????? block, ?????????
              call solver_one_block(1,mBlock,Sfac,Sfac1)
            enddo
-           call couple_fluid_solid_interfaces(1)       ! 流体-固体交界面耦合
-           call couple_solid_solid_interfaces(1)       ! 固体-固体交界面温度交换
+           call couple_fluid_solid_interfaces(1)       ! ????-???彻???????
+           call couple_solid_solid_interfaces(1)       ! ????-???彻??????????
            if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
-           call Boundary_condition_onemesh(1)          ! 边界条件 (设定Ghost Cell的值)
-           call update_buffer_onemesh(1)               ! 同步各块的交界区
-           call update_Ts_buffer_onemesh(1)            ! 同步固体温度缓冲区
-           call comput_max_Res_onemesh(1)              ! 计算最大/均方根残差
+           call Boundary_condition_onemesh(1)          ! ??????? (?趨Ghost Cell???)
+           call update_buffer_onemesh(1)               ! ?????????????
+           call update_Ts_buffer_onemesh(1)            ! ???????????????
+           call comput_max_Res_onemesh(1)              ! ???????/???????в?
            max_res=Mesh(1)%Res_rms(1)
            do m=1,Mesh(1)%NVAR
              max_res=max(max_res,Mesh(1)%Res_rms(m))
            enddo
-           if( max_res .le. Res_Inner_Limit) exit      ! 达到残差标准，跳出内迭代
+           if( max_res .le. Res_Inner_Limit) exit      ! ???в??????????????
          enddo
          if(my_id .eq. 0) then
            print*, "Inner step ... ", kt_in
@@ -213,56 +213,56 @@
            call Set_Un1_Un_oneblock(1,mBlock)          ! Un1=Un; Un=U
          enddo
 
-       case default                                    ! LU_SGS 与 1阶Euler: 单遍块循环
+       case default                                    ! LU_SGS ?? 1??Euler: ????????
          call comput_Sfac(Sfac,Sfac1)                  ! =0
          call Set_Un(1)                                ! Un=U
-         do mBlock=1,Mesh(1)%Num_Block                 ! 遍历每个 block, 按类型调度
+         do mBlock=1,Mesh(1)%Num_Block                 ! ??????? block, ?????????
            call solver_one_block(1,mBlock,Sfac,Sfac1)
          enddo
-         call couple_fluid_solid_interfaces(1)       ! 流体-固体交界面耦合
-         call couple_solid_solid_interfaces(1)       ! 固体-固体交界面温度交换
+         call couple_fluid_solid_interfaces(1)       ! ????-???彻???????
+         call couple_solid_solid_interfaces(1)       ! ????-???彻??????????
          if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
-         call Boundary_condition_onemesh(1)            ! 边界条件 (设定Ghost Cell的值)
-         call update_buffer_onemesh(1)                 ! 同步各块的交界区
-         call update_Ts_buffer_onemesh(1)            ! 同步固体温度缓冲区
+         call Boundary_condition_onemesh(1)            ! ??????? (?趨Ghost Cell???)
+         call update_buffer_onemesh(1)                 ! ?????????????
+         call update_Ts_buffer_onemesh(1)            ! ???????????????
        end select
 
-       call force_vt_kw(1)                             ! 限制vt,Kt,Wt非负
-       Mesh(1)%tt=Mesh(1)%tt+dt_global                 ! 时间
-       Mesh(1)%Kstep=Mesh(1)%Kstep+1                   ! 计算步数
-	 else  if(Num_Mesh .eq. 2)  then                    ! 2重网格推进1个时间步
+       call force_vt_kw(1)                             ! ????vt,Kt,Wt???
+       Mesh(1)%tt=Mesh(1)%tt+dt_global                 ! ???
+       Mesh(1)%Kstep=Mesh(1)%Kstep+1                   ! ??????
+	 else  if(Num_Mesh .eq. 2)  then                    ! 2?????????1?????
   	  call NS_2stge_multigrid
-     else                                               ! 3重网格推进1个时间步
+     else                                               ! 3?????????1?????
   	  call NS_3stge_multigrid
      endif
  
- !  滤波 ,可以增强稳定性. 如Kstep_Filter=0则不使用滤波   
+ !  ??? ,????????????. ??Kstep_Filter=0????????   
 	if(Kstep_smooth .gt. 0) then
- 	  if(mod(Mesh(1)%Kstep, Kstep_smooth).eq.0)   call Filtering_oneMesh(1)                      ! 滤波            
+ 	  if(mod(Mesh(1)%Kstep, Kstep_smooth).eq.0)   call Filtering_oneMesh(1)                      ! ???            
     endif
 
 
-!  每隔一定步数输出气动力及残差（输出到屏幕及文件: force.log, Residual.dat）
+!  ??????????????????????в??????????????: force.log, Residual.dat??
      if(mod(Mesh(1)%Kstep, Kstep_show).eq.0) then
       call comput_force
       call output_Res(1)
      endif
-! 每隔一定步数输出数据文件(flow3d.dat, PLOT3D 格式)
+! ????????????????????(flow3d.dat, PLOT3D ???)
       if(mod(Mesh(1)%Kstep, Kstep_Save).eq.0) then
 	     call output_flow 
-!         if(If_debug == 1 ) call output_vt                ! 输出湍流粘性系数，供debug使用   ! Bug 2017-5-11
-          if(If_debug == 1 .and.  If_viscous==1 .and.  Iflag_turbulence_model .ne. 0) call output_vt                ! 输出湍流粘性系数，供debug使用
-          call output_Ts                                    ! 输出固体温度场
-          call output_vtk                                   ! 输出VTK格式(Paraview可直接查看)
+!         if(If_debug == 1 ) call output_vt                ! ?????????????????debug???   ! Bug 2017-5-11
+          if(If_debug == 1 .and.  If_viscous==1 .and.  Iflag_turbulence_model .ne. 0) call output_vt                ! ?????????????????debug???
+          call output_Ts                                    ! ???????????
+          call output_vtk                                   ! ???VTK???(Paraview??????)
 	  endif
  
- ! 进行时间平均
+ ! ??????????
     if(Kstep_average > 0) then     
       if(mod(Mesh(1)%Kstep, Kstep_average) .eq.0) then
-         call Time_average           ! 时间平均
+         call Time_average           ! ??????
 	  endif
       if(mod(Mesh(1)%Kstep, Kstep_Save).eq.0) then
-	      call output_flow_average   ! 输出时均场,PLOT3D格式
+	      call output_flow_average   ! ????????,PLOT3D???
 	  endif    
     endif 
    
@@ -279,24 +279,24 @@
       integer   ierr, status(MPI_status_size)
 
 !------------------------------------------------
-       call mpi_init(ierr)                                     ! 初始化MPI
-       call mpi_comm_rank(MPI_COMM_WORLD,my_id,ierr)           ! 获取本进程编号
+       call mpi_init(ierr)                                     ! ?????MPI
+       call mpi_comm_rank(MPI_COMM_WORLD,my_id,ierr)           ! ???????????
        call mpi_comm_size(MPI_COMM_WORLD,Total_proc,ierr)      
 !       allocate(Buffer_mpi(IBuffer_Size))
-	   call MPI_BUFFER_ATTACH(Buffer_mpi,8*IBuffer_Size,ierr)   ! 创建消息发送缓冲区，供MPI_Bsend()使用
+	   call MPI_BUFFER_ATTACH(Buffer_mpi,8*IBuffer_Size,ierr)   ! ????????????????????MPI_Bsend()???
    end subroutine Init_mpi
 
 
-!  显示（墙钟）时间，用于统计MPI并行效率	  
+!  ???????????????????MPI????Ч??	  
     subroutine show_Wall_time()
       use Global_var
 	  real*8:: wtime
-	  real*8,save:: wtime0,wtime1    ! 初始时间，上一步的时间
-	  integer,save:: KP=0  ! 计算步
+	  real*8,save:: wtime0,wtime1    ! ????????????????
+	  integer,save:: KP=0  ! ????
       if(my_id .eq. 0) then
 	    wtime=MPI_Wtime()
         if(KP .eq. 0) then   
-		  wtime0=wtime   ! 初始CPU时间
+		  wtime0=wtime   ! ???CPU???
 		else
           if(mod(Mesh(1)%Kstep, Kstep_Show).eq.0) then
 		  print*, "CPU wall time in this step:", wtime-wtime1 
@@ -304,7 +304,7 @@
           endif
         endif
 		 wtime1=wtime  
-         KP=KP+1    ! 统计计算步
+         KP=KP+1    ! ??????
       endif
 
     end subroutine show_wall_time

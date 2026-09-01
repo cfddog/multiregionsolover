@@ -1,14 +1,14 @@
-!  -----------------------读取流动参数及控制变量----------------------
+!  -----------------------????????????????????----------------------
   subroutine read_parameter
    use Global_var
    implicit none
    logical ext1
 !-----------------------------------------------------------------------------
-   call set_default_parameter ! 设置参数默认值
+   call set_default_parameter ! ???ò???????
 
    if(my_id .eq. 0) then
      inquire(file="control.ec",exist=ext1)
-      if(ext1) then           ! 优先读取control.ec (Namelist 格式控制文件) 
+      if(ext1) then           ! ??????control.ec (Namelist ??????????) 
        call read_parameter_ec
       else
        print*, "Can not find 'control.ec', stop !"
@@ -18,7 +18,7 @@
  
    endif
 
-   call bcast_para      ! 广播至全部进程
+   call bcast_para      ! ???????????
    
    call set_const_para
 !--------------------------------------------------------------------
@@ -26,7 +26,7 @@
   end subroutine read_parameter
    
 !--------------------------------------------------------------------    
-! 设置参数的默认值  
+! ???ò?????????  
   subroutine set_default_parameter 
    use Global_var
    implicit none
@@ -40,9 +40,9 @@
 	t_end=100.d0     ! End time (non-dimensional)
 	Kstep_save=1000  ! Save data per xxx steps
     Iflag_turbulence_model=0   ! turbulence model (0 none, 1 BL, 2 SA, 3 SST)
-	Iflag_init=0  ! 0 从初始值（均匀来流）开始计算； 1  续算； -1 从0 流场开始计算
-    If_viscous=1  ! 0 无粘； 1 有粘
-    Iflag_local_dt=1   ! 0 全局步长；  1 局部时间步长
+	Iflag_init=0  ! 0 ???????????????????????? 1  ???? -1 ??0 ???????????
+    If_viscous=1  ! 0 ????? 1 ???
+    Iflag_local_dt=1   ! 0 ????????  1 ????????
     dt_global=0.01     ! Global time step
     CFL=1.d0           ! CFL number 
     dtmax=10.d0       !Limit of maximum time step 
@@ -75,8 +75,8 @@
 	Ref_L=1.d0             ! Ref. length
 	Lscale=1.d0            ! Length scale: 1=m, 0.001=mm, etc.
 	Centroid(1:3)=0.d0  ! Centroid coordinate  
-    Cood_Y_UP=1   !       默认Y轴垂直向上
-	  IFLAG_LIMIT_FLOW=1         ! 限制流场（密度、速度、压力），设定为1 ， 2016-10-21
+    Cood_Y_UP=1   !       ???Y???????
+	  IFLAG_LIMIT_FLOW=1         ! ??????????????????????????趨?1 ?? 2016-10-21
 	Pdebug(1:4)=1
     PrL=0.7d0          ! Linear Prandtl number
 	PrT=0.9d0          ! Turbulent Prandtl number
@@ -88,22 +88,22 @@
 	LSAmax=1000.d0
 	CP1_NSA=0.2d0   ! for New SA
 	CP2_NSA=100.d0
-	Periodic_dX=0.d0   ! 周期边界的几何增量
+	Periodic_dX=0.d0   ! ??????????????
 	Periodic_dY=0.d0 
 	Periodic_dZ=0.d0
 
-    Iflag_savefile=0       ! 默认写入flow3d.dat
+    Iflag_savefile=0       ! ???д??flow3d.dat
 !----for Turbomachinary solver------------
-    IF_TurboMachinary=0    ! 启用叶轮机计算模式
-	Ref_medium_usrdef=0    ! 启用自定义介质 （为默认空气）
-    IF_Scheme_Positivity=1     ! 检查插值过程中压力、密度是否非负，否则使用1阶迎风；
-    Turbo_P0= 101330.d0    ! 总压 （默认为1个大气压）
-	Turbo_T0= 288.15d0     ! 总温 （默认288.15K)
-    Turbo_L0= 1.d0         ! 参考长度 （默认为1m)
-    Turbo_w=0.d0           ! 转速  ( 转/秒 ， 默认0)
-    Turbo_Periodic_seta=0.d0   ! 周期方向计算域，角
+    IF_TurboMachinary=0    ! ??????????????
+	Ref_medium_usrdef=0    ! ???????????? ???????????
+    IF_Scheme_Positivity=1     ! ?????????????????????????????????1????磻
+    Turbo_P0= 101330.d0    ! ??? ??????1?????????
+	Turbo_T0= 288.15d0     ! ???? ?????288.15K)
+    Turbo_L0= 1.d0         ! ?ο????? ??????1m)
+    Turbo_w=0.d0           ! ???  ( ?/?? ?? ???0)
+    Turbo_Periodic_seta=0.d0   ! ?????????????
 !-------------------------------------
-    IF_InnerFlow=0   ! 内流模式
+    IF_InnerFlow=0   ! ??????
 end
 
 !------read parameter (Namelist type)---------------- 
@@ -135,28 +135,28 @@ end
     close(99)
  
  !---- convert parameters ----------------------
- ! Ref_medium_usrdef==0 使用默认介质 (Ma=1, 根据总温、总压计算 Re) ； ==1 使用自定义介质 （人为输入Ma, Re等）
- ! 仅适用于叶轮机或内流模式；
+ ! Ref_medium_usrdef==0 ????????? (Ma=1, ???????????????? Re) ?? ==1 ??????????? ?????????Ma, Re???
+ ! ??????????????????????
 
     if( (IF_TurboMachinary ==1 .or. IF_Innerflow==1 )    &  
-	  .and.  Ref_medium_usrdef == 0) then   ! 默认空气介质，计算Mach数， Reynolds数
+	  .and.  Ref_medium_usrdef == 0) then   ! ???????????????Mach???? Reynolds??
       
-	  T_inf=Turbo_T0  ! 参考温度 （来流总温）
+	  T_inf=Turbo_T0  ! ?ο???? ???????????
       gamma=1.4d0    ! 
-	  PrL=0.7d0   ! Prandtl数
+	  PrL=0.7d0   ! Prandtl??
 	  PrT=0.9d0
-      R0= 287.06d0   ! 空气的气体常数R
-	  a0= sqrt(gamma*R0*Turbo_T0)    ! 参考温度下的声速 
-	  mu0=1.179d-5     ! 空气粘性系数 (288.15K)  
-      mu1=mu0* sqrt((Turbo_T0/288.15d0)**3)*(288.15d0+110.4d0)/(Turbo_T0+110.4d0)  ! 参考温度下的空气粘性系数
+      R0= 287.06d0   ! ?????????峣??R
+	  a0= sqrt(gamma*R0*Turbo_T0)    ! ?ο??????????? 
+	  mu0=1.179d-5     ! ?????????? (288.15K)  
+      mu1=mu0* sqrt((Turbo_T0/288.15d0)**3)*(288.15d0+110.4d0)/(Turbo_T0+110.4d0)  ! ?ο????????????????
       d0=Turbo_P0/(R0*Turbo_T0)
-	  Re=d0*a0*Turbo_L0/mu1    ! 参考温度下，以声速运动的Reynolds数
-	  Ma=1.d0     ! Mach数    （以声速作为参考速度，因而参考Mach数为1）
-      Turbo_w= 2.d0*PI*Turbo_w/(a0/Turbo_L0)   ! 无量纲角速度 Turbo_W（转/秒）
-!	  P_outlet=P_outlet/Turbo_P0    ! 背压,  Bug !!
-	  P_outlet=P_outlet/(d0*a0*a0)    ! 背压 （用动压 无量纲）
+	  Re=d0*a0*Turbo_L0/mu1    ! ?ο??????????????????Reynolds??
+	  Ma=1.d0     ! Mach??    ????????????ο?????????ο?Mach???1??
+      Turbo_w= 2.d0*PI*Turbo_w/(a0/Turbo_L0)   ! ?????????? Turbo_W???/??
+!	  P_outlet=P_outlet/Turbo_P0    ! ???,  Bug !!
+	  P_outlet=P_outlet/(d0*a0*a0)    ! ??? ?????? ???????
 	endif
-      Turbo_Periodic_seta=Turbo_Periodic_seta*PI/180.d0                 ! Turbo_Periodic_seta 角度
+      Turbo_Periodic_seta=Turbo_Periodic_seta*PI/180.d0                 ! Turbo_Periodic_seta ???
 
 
  !---output paramters----------------------------
@@ -371,7 +371,7 @@ end
   
   
       
-! 设定常数
+! ?趨????
    subroutine set_const_para 
    use Global_var
    implicit none
@@ -382,20 +382,20 @@ end
 
 
 
-   if(Bound_Scheme== Scheme_none)  Bound_Scheme=Iflag_Scheme    ! 如不使用边界格式，则与内点格式一致   
-   if(If_viscous .eq. 0) Iflag_turbulence_model=Turbulence_NONE !    求解无粘方程，不采用湍流模型
+   if(Bound_Scheme== Scheme_none)  Bound_Scheme=Iflag_Scheme    ! ?粻?????????????????????   
+   if(If_viscous .eq. 0) Iflag_turbulence_model=Turbulence_NONE !    ????????????????????????
     
    if(Iflag_turbulence_model .eq. Turbulence_SA .or. & 
       Iflag_turbulence_model .eq. Turbulence_NewSA) then
-     NVAR=6                       ! SA模型，总共6个变量
+     NVAR=6                       ! SA???????6??????
    else if (Iflag_turbulence_model .eq. Turbulence_SST) then
-     NVAR=7                       ! SST 模型，总共7个变量
+     NVAR=7                       ! SST ???????7??????
    else
-     NVAR=5                       ! 5个变量
+     NVAR=5                       ! 5??????
    endif
 
   if(Iflag_turbulence_model .eq. 0) then
-   IF_Walldist=0                   ! 无需该数据
+   IF_Walldist=0                   ! ?????????
   else
    IF_Walldist=1
   endif
@@ -403,8 +403,8 @@ end
 !--------------------------------------------------------------------------------
   AoA=AoA*PI/180.d0   ! Angle of attack
   AoS=AoS*PI/180.d0   ! Angle of Slide
- if(Cood_Y_UP ==1) then   ! Y 轴垂直向上 or Z轴垂直向上 
-   A_alfa=AoA             ! Y轴向上， A_alfa为攻角
+ if(Cood_Y_UP ==1) then   ! Y ??????? or Z??????? 
+   A_alfa=AoA             ! Y??????? A_alfa?????
    A_beta=AoS
  else
    A_alfa=AoS  
@@ -416,7 +416,7 @@ end
    Cp=Cv*gamma 
 !--------------------------------------------------------------------
 
-!  计算到壁面的距离
+!  ????????????
 !   if(Iflag_turbulence_model .eq. Turbulence_SA .or. Iflag_turbulence_model .eq. Turbulence_SST) then
 !     inquire(file="wall_dist.dat",exist=file_exist)
 !	 if( .not. file_exist) then

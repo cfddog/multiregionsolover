@@ -87,8 +87,8 @@
 
 !    Determine BC type and apply to ghost cells
 !    Note: bc3d.inp uses node indices. Cell-center arrays (Ts) use cell indices.
-!    For face 1 (i-): node ib=1 → first cell center at i=ib, ghost cells at i=ib-1..ib-LAP
-!    For face 4 (i+): node ie=nx → last cell center at i=ie-1, ghost cells at i=ie..ie+LAP-1
+!    For face 1 (i-): node ib=1 �� first cell center at i=ib, ghost cells at i=ib-1..ib-LAP
+!    For face 4 (i+): node ie=nx �� last cell center at i=ie-1, ghost cells at i=ie..ie+LAP-1
      select case(face_s)
      case(1)  ! i- face: ghost i=ib-1..ib-LAP, interior i=ib..ib+LAP-1
        do n=1, LAP
@@ -100,13 +100,22 @@
              if(found_bc .and. Tw_val > 0.d0) then
                B%Ts(i1,j,k) = 2.d0*Tw_val - B%Ts(i2,j,k)
              elseif(found_bc .and. Qw_val /= 0.d0) then
-              dx_b = (B%x(ib+1,j,k) - B%x(ib,j,k)) * Lscale
-              B%Ts(i1,j,k) = B%Ts(i2,j,k) + Qw_val * dx_b * n / B%solid_k
+!              Use Euclidean cell-center distance for first ghost layer (FVM accurate).
+!              Single-component abs(xc) is WRONG for non-Cartesian grids (e.g. O-grid
+!              annulus where radial direction is y-only at theta=pi/2).
+              if(n == 1) then
+                dx_b = sqrt( (B%xc(i2,j,k)-B%xc(i1,j,k))**2 &
+                            +(B%yc(i2,j,k)-B%yc(i1,j,k))**2 &
+                            +(B%zc(i2,j,k)-B%zc(i1,j,k))**2 ) * Lscale
+              else
+                dx_b = sqrt( (B%x(ib+1,j,k)-B%x(ib,j,k))**2 &
+                            +(B%y(ib+1,j,k)-B%y(ib,j,k))**2 &
+                            +(B%z(ib+1,j,k)-B%z(ib,j,k))**2 ) * Lscale * n
+              endif
+              B%Ts(i1,j,k) = B%Ts(i2,j,k) + Qw_val * dx_b / B%solid_k
             else
               B%Ts(i1,j,k) = B%Ts(i2,j,k)
             endif
-!            Debug: print ghost cell for first layer
-            if(n==1 .and. my_id==0) print*, '  DBG_GHOST: face=', face_s, ' i1=', i1, ' i2=', i2, ' Ts(i1)=', B%Ts(i1,1,1), ' Ts(i2)=', B%Ts(i2,1,1), ' Tw_val=', Tw_val, ' Qw_val=', Qw_val
            case(3)  ! Symmetry -> adiabatic
              B%Ts(i1,j,k) = B%Ts(i2,j,k)
            case default
@@ -124,8 +133,16 @@
              if(found_bc .and. Tw_val > 0.d0) then
                B%Ts(i1,j,k) = 2.d0*Tw_val - B%Ts(i2,j,k)
              elseif(found_bc .and. Qw_val /= 0.d0) then
-              dx_b = (B%x(ie,j,k) - B%x(ie-1,j,k)) * Lscale
-              B%Ts(i1,j,k) = B%Ts(i2,j,k) + Qw_val * dx_b * n / B%solid_k
+              if(n == 1) then
+                dx_b = sqrt( (B%xc(i1,j,k)-B%xc(i2,j,k))**2 &
+                            +(B%yc(i1,j,k)-B%yc(i2,j,k))**2 &
+                            +(B%zc(i1,j,k)-B%zc(i2,j,k))**2 ) * Lscale
+              else
+                dx_b = sqrt( (B%x(ie,j,k)-B%x(ie-1,j,k))**2 &
+                            +(B%y(ie,j,k)-B%y(ie-1,j,k))**2 &
+                            +(B%z(ie,j,k)-B%z(ie-1,j,k))**2 ) * Lscale * n
+              endif
+              B%Ts(i1,j,k) = B%Ts(i2,j,k) + Qw_val * dx_b / B%solid_k
              else
                B%Ts(i1,j,k) = B%Ts(i2,j,k)
              endif
@@ -146,8 +163,16 @@
              if(found_bc .and. Tw_val > 0.d0) then
                B%Ts(i,j1,k) = 2.d0*Tw_val - B%Ts(i,j2,k)
              elseif(found_bc .and. Qw_val /= 0.d0) then
-              dy_b = (B%y(i,jb+1,k) - B%y(i,jb,k)) * Lscale
-              B%Ts(i,j1,k) = B%Ts(i,j2,k) + Qw_val * dy_b * n / B%solid_k
+              if(n == 1) then
+                dy_b = sqrt( (B%xc(i,j2,k)-B%xc(i,j1,k))**2 &
+                            +(B%yc(i,j2,k)-B%yc(i,j1,k))**2 &
+                            +(B%zc(i,j2,k)-B%zc(i,j1,k))**2 ) * Lscale
+              else
+                dy_b = sqrt( (B%x(i,jb+1,k)-B%x(i,jb,k))**2 &
+                            +(B%y(i,jb+1,k)-B%y(i,jb,k))**2 &
+                            +(B%z(i,jb+1,k)-B%z(i,jb,k))**2 ) * Lscale * n
+              endif
+              B%Ts(i,j1,k) = B%Ts(i,j2,k) + Qw_val * dy_b / B%solid_k
              else
                B%Ts(i,j1,k) = B%Ts(i,j2,k)
              endif
@@ -168,8 +193,16 @@
              if(found_bc .and. Tw_val > 0.d0) then
                B%Ts(i,j1,k) = 2.d0*Tw_val - B%Ts(i,j2,k)
              elseif(found_bc .and. Qw_val /= 0.d0) then
-              dy_b = (B%y(i,je,k) - B%y(i,je-1,k)) * Lscale
-              B%Ts(i,j1,k) = B%Ts(i,j2,k) + Qw_val * dy_b * n / B%solid_k
+              if(n == 1) then
+                dy_b = sqrt( (B%xc(i,j1,k)-B%xc(i,j2,k))**2 &
+                            +(B%yc(i,j1,k)-B%yc(i,j2,k))**2 &
+                            +(B%zc(i,j1,k)-B%zc(i,j2,k))**2 ) * Lscale
+              else
+                dy_b = sqrt( (B%x(i,je,k)-B%x(i,je-1,k))**2 &
+                            +(B%y(i,je,k)-B%y(i,je-1,k))**2 &
+                            +(B%z(i,je,k)-B%z(i,je-1,k))**2 ) * Lscale * n
+              endif
+              B%Ts(i,j1,k) = B%Ts(i,j2,k) + Qw_val * dy_b / B%solid_k
              else
                B%Ts(i,j1,k) = B%Ts(i,j2,k)
              endif
@@ -190,8 +223,16 @@
              if(found_bc .and. Tw_val > 0.d0) then
                B%Ts(i,j,k1) = 2.d0*Tw_val - B%Ts(i,j,k2)
              elseif(found_bc .and. Qw_val /= 0.d0) then
-              dz_b = (B%z(i,j,kb+1) - B%z(i,j,kb)) * Lscale
-              B%Ts(i,j,k1) = B%Ts(i,j,k2) + Qw_val * dz_b * n / B%solid_k
+              if(n == 1) then
+                dz_b = sqrt( (B%xc(i,j,k2)-B%xc(i,j,k1))**2 &
+                            +(B%yc(i,j,k2)-B%yc(i,j,k1))**2 &
+                            +(B%zc(i,j,k2)-B%zc(i,j,k1))**2 ) * Lscale
+              else
+                dz_b = sqrt( (B%x(i,j,kb+1)-B%x(i,j,kb))**2 &
+                            +(B%y(i,j,kb+1)-B%y(i,j,kb))**2 &
+                            +(B%z(i,j,kb+1)-B%z(i,j,kb))**2 ) * Lscale * n
+              endif
+              B%Ts(i,j,k1) = B%Ts(i,j,k2) + Qw_val * dz_b / B%solid_k
              else
                B%Ts(i,j,k1) = B%Ts(i,j,k2)
              endif
@@ -212,8 +253,16 @@
              if(found_bc .and. Tw_val > 0.d0) then
                B%Ts(i,j,k1) = 2.d0*Tw_val - B%Ts(i,j,k2)
              elseif(found_bc .and. Qw_val /= 0.d0) then
-              dz_b = (B%z(i,j,ke) - B%z(i,j,ke-1)) * Lscale
-              B%Ts(i,j,k1) = B%Ts(i,j,k2) + Qw_val * dz_b * n / B%solid_k
+              if(n == 1) then
+                dz_b = sqrt( (B%xc(i,j,k1)-B%xc(i,j,k2))**2 &
+                            +(B%yc(i,j,k1)-B%yc(i,j,k2))**2 &
+                            +(B%zc(i,j,k1)-B%zc(i,j,k2))**2 ) * Lscale
+              else
+                dz_b = sqrt( (B%x(i,j,ke)-B%x(i,j,ke-1))**2 &
+                            +(B%y(i,j,ke)-B%y(i,j,ke-1))**2 &
+                            +(B%z(i,j,ke)-B%z(i,j,ke-1))**2 ) * Lscale * n
+              endif
+              B%Ts(i,j,k1) = B%Ts(i,j,k2) + Qw_val * dz_b / B%solid_k
              else
                B%Ts(i,j,k1) = B%Ts(i,j,k2)
              endif
@@ -243,19 +292,19 @@
    integer:: nMesh, mBlock
    Type (Block_TYPE),pointer:: B
    integer:: i,j,k,ii, nx,ny,nz
-   real(PRE_EC):: T_old, dx, dy, dz, Fo, alpha, res, T_new
-   real(PRE_EC):: rhoCp, hx, hy, hz
+   real(PRE_EC):: T_old, res, T_new
+   real(PRE_EC):: dx_p, dx_m, dy_p, dy_m, dz_p, dz_m
+   real(PRE_EC):: ax_p, ax_m, ay_p, ay_m, az_p, az_m
+   real(PRE_EC):: coef_diff, coef_tr, T_neighbor_sum
    logical:: is_unsteady
    real(PRE_EC),parameter:: GS_OMEGA = 1.7d0   ! SOR over-relaxation
    integer,parameter:: MAX_GS_ITER = 200000
    integer,parameter:: MIN_GS_ITER = 5
    real(PRE_EC),parameter:: GS_TOL = 1.d-12
-   real(PRE_EC), parameter:: LARGE_FO = 1.d10
+   real(PRE_EC),parameter:: EPS_DIST = 1.d-15   ! min distance to avoid div-by-zero
 
    B=>Mesh(nMesh)%Block(mBlock)
    nx=B%nx; ny=B%ny; nz=B%nz
-   rhoCp = B%solid_rho * B%solid_Cp
-   alpha = B%solid_k / max(rhoCp, 1.d-20)
 
 !  Determine if unsteady: RK3 or Dual-time stepping
    is_unsteady = (Time_Method == Time_RK3 .or. Time_Method == Time_Dual_LU_SGS)
@@ -263,54 +312,157 @@
 !  1. Set physical BC ghost cells (wall, symmetry)
    call set_solid_ghost_BC(nMesh, mBlock)
 
-!  2. Gauss-Seidel iteration
-!  Use 2nd-order central difference stencil: update cells 2..nx-2 (excluding
-!  boundary-adjacent cells that may lack valid neighbors on both sides).
+!  2. Gauss-Seidel iteration with FVM non-uniform grid support
+!  For cell (i,j,k), the steady-state heat flux balance:
+!    k * sum[A_face * (T_neighbor - T_i) / d_face] = 0
+!  where A_face = Si/Sj/Sk (face area), d_face = distance between cell centers.
+!  Solving for T_i gives a distance-weighted average of neighbors.
    do ii = 1, MAX_GS_ITER
 !    Re-set physical BC ghost cells each iteration
      call set_solid_ghost_BC(nMesh, mBlock)
+!    Exchange Ts buffer for periodic/internal interfaces
+     call update_Ts_buffer_onemesh(nMesh)
 
-!    Update all cell centers (1..nx-1, 1..ny-1, 1..nz-1).
-!    Neighbors at boundaries (i=0, j=0, k=0 or i=nx, j=ny, k=nz) are
-!    ghost cells properly set by set_solid_ghost_BC.
      res = 0.d0
      do k = 1, nz-1
      do j = 1, ny-1
      do i = 1, nx-1
        T_old = B%Ts(i,j,k)
 
-!      Cell-centered spacings
-       hx = B%x(i+1,j,k) - B%x(i,j,k)
-       hy = B%y(i,j+1,k) - B%y(i,j,k)
-       hz = B%z(i,j,k+1) - B%z(i,j,k)
+!      Cell-center distances (FVM: Euclidean distance between adjacent cell centers)
+!      Must use full 3D distance, not just x/y/z component, for non-Cartesian grids.
+!      Apply non-orthogonal correction: project cell-center connection vector onto
+!      face normal to get the effective normal distance used in Fourier's law.
+!      This removes cross-diffusion error on skewed/non-orthogonal grids.
+       block
+         real(PRE_EC):: vx, vy, vz, vmag, cphi
+         vx = B%xc(i+1,j,k)-B%xc(i,j,k)
+         vy = B%yc(i+1,j,k)-B%yc(i,j,k)
+         vz = B%zc(i+1,j,k)-B%zc(i,j,k)
+         vmag = sqrt(vx*vx + vy*vy + vz*vz)
+         if(vmag > EPS_DIST) then
+           cphi = abs(vx*B%ni1(i+1,j,k) + vy*B%ni2(i+1,j,k) + vz*B%ni3(i+1,j,k)) / vmag
+           dx_p = vmag * max(cphi, 0.1d0)   ! clamp cphi to avoid degenerate
+         else
+           dx_p = 0.d0
+         endif
+         vx = B%xc(i,j,k)-B%xc(i-1,j,k)
+         vy = B%yc(i,j,k)-B%yc(i-1,j,k)
+         vz = B%zc(i,j,k)-B%zc(i-1,j,k)
+         vmag = sqrt(vx*vx + vy*vy + vz*vz)
+         if(vmag > EPS_DIST) then
+           cphi = abs(vx*B%ni1(i,j,k) + vy*B%ni2(i,j,k) + vz*B%ni3(i,j,k)) / vmag
+           dx_m = vmag * max(cphi, 0.1d0)
+         else
+           dx_m = 0.d0
+         endif
+         vx = B%xc(i,j+1,k)-B%xc(i,j,k)
+         vy = B%yc(i,j+1,k)-B%yc(i,j,k)
+         vz = B%zc(i,j+1,k)-B%zc(i,j,k)
+         vmag = sqrt(vx*vx + vy*vy + vz*vz)
+         if(vmag > EPS_DIST) then
+           cphi = abs(vx*B%nj1(i,j+1,k) + vy*B%nj2(i,j+1,k) + vz*B%nj3(i,j+1,k)) / vmag
+           dy_p = vmag * max(cphi, 0.1d0)
+         else
+           dy_p = 0.d0
+         endif
+         vx = B%xc(i,j,k)-B%xc(i,j-1,k)
+         vy = B%yc(i,j,k)-B%yc(i,j-1,k)
+         vz = B%zc(i,j,k)-B%zc(i,j-1,k)
+         vmag = sqrt(vx*vx + vy*vy + vz*vz)
+         if(vmag > EPS_DIST) then
+           cphi = abs(vx*B%nj1(i,j,k) + vy*B%nj2(i,j,k) + vz*B%nj3(i,j,k)) / vmag
+           dy_m = vmag * max(cphi, 0.1d0)
+         else
+           dy_m = 0.d0
+         endif
+         vx = B%xc(i,j,k+1)-B%xc(i,j,k)
+         vy = B%yc(i,j,k+1)-B%yc(i,j,k)
+         vz = B%zc(i,j,k+1)-B%zc(i,j,k)
+         vmag = sqrt(vx*vx + vy*vy + vz*vz)
+         if(vmag > EPS_DIST) then
+           cphi = abs(vx*B%nk1(i,j,k+1) + vy*B%nk2(i,j,k+1) + vz*B%nk3(i,j,k+1)) / vmag
+           dz_p = vmag * max(cphi, 0.1d0)
+         else
+           dz_p = 0.d0
+         endif
+         vx = B%xc(i,j,k)-B%xc(i,j,k-1)
+         vy = B%yc(i,j,k)-B%yc(i,j,k-1)
+         vz = B%zc(i,j,k)-B%zc(i,j,k-1)
+         vmag = sqrt(vx*vx + vy*vy + vz*vz)
+         if(vmag > EPS_DIST) then
+           cphi = abs(vx*B%nk1(i,j,k) + vy*B%nk2(i,j,k) + vz*B%nk3(i,j,k)) / vmag
+           dz_m = vmag * max(cphi, 0.1d0)
+         else
+           dz_m = 0.d0
+         endif
+       end block
 
-!      Fourier number for implicit Euler
-       if(is_unsteady .and. dt_global > 0.d0) then
-         Fo = alpha * dt_global / (hx*hx + hy*hy + hz*hz + 1.d-20)
+!      FVM coefficients: face_area / distance
+!      Skip degenerate directions (e.g., 2D problems with 1 cell in k)
+       if(abs(dx_p) > EPS_DIST) then
+         ax_p = B%Si(i+1,j,k) / dx_p
        else
-!        Steady: use large Fo -> essentially Laplacian(T)=0
-         Fo = LARGE_FO
+         ax_p = 0.d0
+       endif
+       if(abs(dx_m) > EPS_DIST) then
+         ax_m = B%Si(i,j,k) / dx_m
+       else
+         ax_m = 0.d0
+       endif
+       if(abs(dy_p) > EPS_DIST) then
+         ay_p = B%Sj(i,j+1,k) / dy_p
+       else
+         ay_p = 0.d0
+       endif
+       if(abs(dy_m) > EPS_DIST) then
+         ay_m = B%Sj(i,j,k) / dy_m
+       else
+         ay_m = 0.d0
+       endif
+       if(abs(dz_p) > EPS_DIST) then
+         az_p = B%Sk(i,j,k+1) / dz_p
+       else
+         az_p = 0.d0
+       endif
+       if(abs(dz_m) > EPS_DIST) then
+         az_m = B%Sk(i,j,k) / dz_m
+       else
+         az_m = 0.d0
        endif
 
-!      Gauss-Seidel: average of neighbors
-       T_new = (B%Ts(i+1,j,k) + B%Ts(i-1,j,k) + &
-                B%Ts(i,j+1,k) + B%Ts(i,j-1,k) + &
-                B%Ts(i,j,k+1) + B%Ts(i,j,k-1)) / 6.d0
+!      Sum of diffusion coefficients
+       coef_diff = ax_p + ax_m + ay_p + ay_m + az_p + az_m
 
-!      Implicit Euler correction for unsteady
-       if(is_unsteady) then
-!        T_new = (T_old + 6*Fo*T_new) / (1 + 6*Fo)
-         T_new = (T_old + 6.d0*Fo*T_new) / (1.d0 + 6.d0*Fo)
+!      Weighted sum of neighbor temperatures
+       T_neighbor_sum = ax_p*B%Ts(i+1,j,k) + ax_m*B%Ts(i-1,j,k) + &
+                        ay_p*B%Ts(i,j+1,k) + ay_m*B%Ts(i,j-1,k) + &
+                        az_p*B%Ts(i,j,k+1) + az_m*B%Ts(i,j,k-1)
+
+       if(is_unsteady .and. dt_global > 0.d0) then
+!        Transient term: rho*Cp*Vol*Lscale^2/dt
+!        (Lscale converts mesh length to physical length)
+         coef_tr = B%solid_rho * B%solid_Cp * B%Vol(i,j,k) * Lscale*Lscale / dt_global
+!        Implicit Euler: (coef_tr * T_old + k * T_neighbor_sum) / (coef_tr + k * coef_diff)
+         T_new = (coef_tr * T_old + B%solid_k * T_neighbor_sum) / &
+                 (coef_tr + B%solid_k * coef_diff)
+       else
+!        Steady state: weighted average of neighbors
+         T_new = T_neighbor_sum / (coef_diff + 1.d-30)
        endif
 
 !      SOR: Ts_new = (1-omega)*Ts_old + omega*T_new
        B%Ts(i,j,k) = (1.d0-GS_OMEGA)*T_old + GS_OMEGA*T_new
 
-!      Track per-iteration change for convergence check
        res = max(res, abs(B%Ts(i,j,k) - T_old))
      enddo; enddo; enddo
 
-!    Check convergence (every 100 iterations)
+!    Debug: print progress for first few iterations
+     if(ii <= 5 .and. my_id == 0) then
+       print*, "  GS iter", ii, " res=", res, " Ts(1,1,1)=", B%Ts(1,1,1), &
+               " Ts(nx-1,ny-1,1)=", B%Ts(nx-1,ny-1,1)
+     endif
+
      if(mod(ii,100) == 0 .and. ii >= MIN_GS_ITER) then
        if(res < GS_TOL) exit
      endif
@@ -318,7 +470,8 @@
 
    if(my_id == 0 .or. B%Block_no == 3) then
      print*, "Solid solver Block", B%Block_no, " GS iterations:", ii, " final res:", res
-     print*, "  DBG: Ts(1,1,1)=", B%Ts(1,1,1), " Ts(25,1,1)=", B%Ts(25,1,1), " Ts(50,1,1)=", B%Ts(50,1,1)
+     print*, "  DBG: Ts(1,1,1)=", B%Ts(1,1,1), " Ts(nx/2,ny/2,1)=", B%Ts(nx/2,ny/2,1), &
+             " Ts(nx-1,ny-1,1)=", B%Ts(nx-1,ny-1,1)
    endif
   end subroutine solid_solver_one_block
 
