@@ -176,6 +176,7 @@
 
    integer,save:: LS_Inlet_Type, LS_Max_Iter    ! low-speed solver: inlet type (1=velocity,2=mass flow,3=pressure), SIMPLE inner iterations
    integer,save:: LS_Scheme=1    ! low-speed convection scheme: 1=1st-order upwind, 2=2nd-order upwind, 3=MUSCL(Van Leer)
+   integer,save:: LS_Algorithm=1 ! low-speed pressure-velocity coupling: 1=SIMPLE, 2=SIMPLEC
 
    integer,save:: FD_Flux,FD_scheme !
    integer,save:: KRK=0 !

@@ -85,4 +85,5 @@ $control_ec
   LS_Max_Iter=5000
   LS_Tol=1.d-8
   LS_Scheme=3
+  LS_Algorithm=1
 $end

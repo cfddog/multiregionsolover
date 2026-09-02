@@ -122,6 +122,7 @@
     LS_Max_Iter=5000    ! SIMPLE inner iterations per solver call
     LS_Tol=1.d-8        ! SIMPLE convergence tolerance (pressure correction residual)
     LS_Scheme=1         ! convection scheme: 1=1st-order upwind, 2=2nd-order upwind, 3=MUSCL(Van Leer)
+   LS_Algorithm=1      ! pressure-velocity coupling: 1=SIMPLE, 2=SIMPLEC
 end
 
 !------read parameter (Namelist type)---------------- 
@@ -149,7 +150,7 @@ end
 		LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref, LS_Inlet_Type, &
 		LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, &
 		LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, &
-		LS_Max_Iter, LS_Tol, LS_Scheme
+		LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm
 
 
 	open(99,file="control.ec")
@@ -335,6 +336,7 @@ end
     Ipara(32)=LS_Inlet_Type
     Ipara(33)=LS_Max_Iter
     Ipara(34)=LS_Scheme
+    Ipara(35)=LS_Algorithm
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -427,6 +429,7 @@ end
     LS_Inlet_Type=Ipara(32)
     LS_Max_Iter=Ipara(33)
     LS_Scheme=Ipara(34)
+    LS_Algorithm=Ipara(35)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)

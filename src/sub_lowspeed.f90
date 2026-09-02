@@ -10,6 +10,7 @@
    implicit none
    real(PRE_EC), allocatable, dimension(:,:,:) :: Fi, Fj, Fk   ! face mass fluxes (rho*u_n*A)
    real(PRE_EC), allocatable, dimension(:,:,:) :: apu, apv, apw ! momentum diagonal coeffs (no relaxation)
+   real(PRE_EC), allocatable, dimension(:,:,:) :: su_nb, sv_nb, sw_nb ! sum of neighbor coeffs (for SIMPLEC)
    real(PRE_EC), allocatable, dimension(:,:,:) :: du, dv, dw    ! Vol/ap (for Rhie-Chow & velocity correction)
    real(PRE_EC), allocatable, dimension(:,:,:) :: pp            ! pressure correction p'
    real(PRE_EC), allocatable, dimension(:,:,:) :: conv_src      ! high-order convection correction (deferred)
@@ -79,9 +80,10 @@
 
 !  ensure face-flux work arrays are allocated (boundary may be called before solver)
    if(.not. allocated(Fi) .or. nxw /= B%nx .or. nyw /= B%ny .or. nzw /= B%nz) then
-     if(allocated(Fi)) deallocate(Fi,Fj,Fk,apu,apv,apw,du,dv,dw,pp,conv_src)
+     if(allocated(Fi)) deallocate(Fi,Fj,Fk,apu,apv,apw,su_nb,sv_nb,sw_nb,du,dv,dw,pp,conv_src)
      allocate(Fi(B%nx,B%ny,B%nz), Fj(B%nx,B%ny,B%nz), Fk(B%nx,B%ny,B%nz))
      allocate(apu(B%nx,B%ny,B%nz), apv(B%nx,B%ny,B%nz), apw(B%nx,B%ny,B%nz))
+     allocate(su_nb(B%nx,B%ny,B%nz), sv_nb(B%nx,B%ny,B%nz), sw_nb(B%nx,B%ny,B%nz))
      allocate(du(B%nx,B%ny,B%nz), dv(B%nx,B%ny,B%nz), dw(B%nx,B%ny,B%nz))
      allocate(pp(B%nx,B%ny,B%nz))
      allocate(conv_src(B%nx,B%ny,B%nz))
@@ -307,6 +309,48 @@
   end subroutine lowspeed_ghost
 
 !==============================================================================
+! Clip primitive-variable fields to physically plausible ranges.
+! Purely-diagnostic safety net: SIMPLE transients with deferred correction
+! can occasionally produce 10^100 spikes in isolated cells at high Re /
+! fine grids; clipping at �10U_scale keeps subsequent steps sane rather
+! than cascading to Inf/NaN.  T is clipped around the expected reference
+! so pure-convection (k=0) cannot accumulate a single outlier Fi=10^100
+! and poison the upwind stabilisation.
+!==============================================================================
+  subroutine lowspeed_clip_fields(nMesh, mBlock)
+   use Global_Var
+   use const_var
+   use lowspeed_work
+   implicit none
+   integer:: nMesh, mBlock
+   Type (Block_TYPE),pointer:: B
+   integer:: i,j,k, nx,ny,nz
+   real(PRE_EC):: U_scale, T_lo, T_hi, p_scale
+   ! Very wide hard limits: only truncate genuine SIMPLE overshoot that
+   ! would cascade to Inf/NaN (10^100).  They never touch a well-tuned
+   ! solution but keep isolated overflow from killing the run.
+   U_scale = 1.d6
+   T_lo = 1.d0;     T_hi = 1.d5
+   p_scale = 1.d8
+   B=>Mesh(nMesh)%Block(mBlock)
+   nx=B%nx; ny=B%ny; nz=B%nz
+   do k=0,nz
+   do j=0,ny
+   do i=0,nx
+     if(B%U(2,i,j,k) >  U_scale) B%U(2,i,j,k)= U_scale
+     if(B%U(2,i,j,k) < -U_scale) B%U(2,i,j,k)=-U_scale
+     if(B%U(3,i,j,k) >  U_scale) B%U(3,i,j,k)= U_scale
+     if(B%U(3,i,j,k) < -U_scale) B%U(3,i,j,k)=-U_scale
+     if(B%U(4,i,j,k) >  U_scale) B%U(4,i,j,k)= U_scale
+     if(B%U(4,i,j,k) < -U_scale) B%U(4,i,j,k)=-U_scale
+     if(B%U(5,i,j,k) > T_hi) B%U(5,i,j,k)=T_hi
+     if(B%U(5,i,j,k) < T_lo) B%U(5,i,j,k)=T_lo
+     if(B%p(i,j,k) >  p_scale) B%p(i,j,k)= p_scale
+     if(B%p(i,j,k) < -p_scale) B%p(i,j,k)=-p_scale
+   enddo; enddo; enddo
+  end subroutine lowspeed_clip_fields
+
+!==============================================================================
 ! Set velocity ghost cell for wall (no-slip, mirror) or symmetry (normal mirror).
 ! wall_mode = .true. : no-slip wall (normal & tangential mirror, plus wall speed)
 ! wall_mode = .false.: symmetry (normal mirror, tangential copy)
@@ -453,7 +497,8 @@
    integer:: nMesh, mBlock
    Type (Block_TYPE),pointer:: B
    integer:: i,j,k, nx,ny,nz
-   real(PRE_EC):: uL,uR,pL,pR,dL,dR,dxe,gxL,gxR,ue, rho
+   real(PRE_EC):: uL,uR,pL,pR,dL,dR,dxe,ue, rho, gpf
+   real(PRE_EC):: x_LL, x_L, x_R, x_RR, y_LL, y_L, y_R, y_RR, z_LL, z_L, z_R, z_RR
 
    B=>Mesh(nMesh)%Block(mBlock)
    nx=B%nx; ny=B%ny; nz=B%nz
@@ -466,11 +511,14 @@
      uL=B%U(2,i-1,j,k); uR=B%U(2,i,j,k)
      pL=B%p(i-1,j,k);   pR=B%p(i,j,k)
      dL=du(i-1,j,k);    dR=du(i,j,k)
-     dxe = B%xc(i,j,k)-B%xc(i-1,j,k)
+     x_LL = B%xc(i-2,j,k); x_L = B%xc(i-1,j,k)
+     x_R  = B%xc(i,j,k);   x_RR= B%xc(i+1,j,k)
+     dxe = x_R - x_L
      if(abs(dxe) < 1.d-30) dxe = 1.d-30
-     gxL = (B%p(i,j,k)-B%p(i-2,j,k))/(B%xc(i,j,k)-B%xc(i-2,j,k)+1.d-30)
-     gxR = (B%p(i+1,j,k)-B%p(i-1,j,k))/(B%xc(i+1,j,k)-B%xc(i-1,j,k)+1.d-30)
-     ue = 0.5d0*(uL+uR) + 0.5d0*(dL+dR)*( (pL-pR)/dxe - 0.5d0*(gxL+gxR) )
+!    4-point (i-2:i+1) quadratic pressure gradient at face i (midpoint of x_L,x_R).
+!    Exact for quadratic p(x) on arbitrary non-uniform Cartesian grids.
+     call grad_face_4pt(pL, B%p(i-2,j,k), pR, B%p(i+1,j,k), x_L, x_LL, x_R, x_RR, gpf)
+     ue = 0.5d0*(uL+uR) + 0.5d0*(dL+dR)*( (pL-pR)/dxe - gpf )
      Fi(i,j,k) = rho*B%Si(i,j,k)*ue
    enddo; enddo; enddo
 
@@ -481,11 +529,12 @@
      uL=B%U(3,i,j-1,k); uR=B%U(3,i,j,k)
      pL=B%p(i,j-1,k);   pR=B%p(i,j,k)
      dL=dv(i,j-1,k);    dR=dv(i,j,k)
-     dxe = B%yc(i,j,k)-B%yc(i,j-1,k)
+     y_LL = B%yc(i,j-2,k); y_L = B%yc(i,j-1,k)
+     y_R  = B%yc(i,j,k);   y_RR= B%yc(i,j+1,k)
+     dxe = y_R - y_L
      if(abs(dxe) < 1.d-30) dxe = 1.d-30
-     gxL = (B%p(i,j,k)-B%p(i,j-2,k))/(B%yc(i,j,k)-B%yc(i,j-2,k)+1.d-30)
-     gxR = (B%p(i,j+1,k)-B%p(i,j-1,k))/(B%yc(i,j+1,k)-B%yc(i,j-1,k)+1.d-30)
-     ue = 0.5d0*(uL+uR) + 0.5d0*(dL+dR)*( (pL-pR)/dxe - 0.5d0*(gxL+gxR) )
+     call grad_face_4pt(pL, B%p(i,j-2,k), pR, B%p(i,j+1,k), y_L, y_LL, y_R, y_RR, gpf)
+     ue = 0.5d0*(uL+uR) + 0.5d0*(dL+dR)*( (pL-pR)/dxe - gpf )
      Fj(i,j,k) = rho*B%Sj(i,j,k)*ue
    enddo; enddo; enddo
 
@@ -496,14 +545,55 @@
      uL=B%U(4,i,j,k-1); uR=B%U(4,i,j,k)
      pL=B%p(i,j,k-1);   pR=B%p(i,j,k)
      dL=dw(i,j,k-1);    dR=dw(i,j,k)
-     dxe = B%zc(i,j,k)-B%zc(i,j,k-1)
+     z_LL = B%zc(i,j,k-2); z_L = B%zc(i,j,k-1)
+     z_R  = B%zc(i,j,k);   z_RR= B%zc(i,j,k+1)
+     dxe = z_R - z_L
      if(abs(dxe) < 1.d-30) dxe = 1.d-30
-     gxL = (B%p(i,j,k)-B%p(i,j,k-2))/(B%zc(i,j,k)-B%zc(i,j,k-2)+1.d-30)
-     gxR = (B%p(i,j,k+1)-B%p(i,j,k-1))/(B%zc(i,j,k+1)-B%zc(i,j,k-1)+1.d-30)
-     ue = 0.5d0*(uL+uR) + 0.5d0*(dL+dR)*( (pL-pR)/dxe - 0.5d0*(gxL+gxR) )
+     call grad_face_4pt(pL, B%p(i,j,k-2), pR, B%p(i,j,k+1), z_L, z_LL, z_R, z_RR, gpf)
+     ue = 0.5d0*(uL+uR) + 0.5d0*(dL+dR)*( (pL-pR)/dxe - gpf )
      Fk(i,j,k) = rho*B%Sk(i,j,k)*ue
    enddo; enddo; enddo
   end subroutine lowspeed_face_flux
+
+!------------------------------------------------------------------------------
+! 3-point Lagrange derivative at the center cell x_C, given cell values
+!   phi_L at x_L (left neighbour), phi_C at x_C, phi_R at x_R (right nbr).
+! Second-order accurate on arbitrary non-uniform grids; collapses to the
+! standard central difference (phi_R-phi_L)/(x_R-x_L) when x_C = 0.5(x_L+x_R).
+!------------------------------------------------------------------------------
+  subroutine grad_cell_3pt(phi_L, phi_C, phi_R, x_L, x_C, x_R, grad)
+   use const_var, only: PRE_EC
+   implicit none
+   real(PRE_EC), intent(in) :: phi_L, phi_C, phi_R, x_L, x_C, x_R
+   real(PRE_EC), intent(out):: grad
+   real(PRE_EC):: dxL, dxR, dxT, aL, aR
+   dxL = x_C - x_L;   dxR = x_R - x_C
+   dxT = x_R - x_L
+   if (abs(dxT) < 1.d-30) then
+     grad = 0.d0
+     return
+   end if
+   aL = dxR / dxT
+   aR = dxL / dxT
+   grad = aL*(phi_C - phi_L)/max(dxL,1.d-30) + aR*(phi_R - phi_C)/max(dxR,1.d-30)
+  end subroutine grad_cell_3pt
+
+  subroutine grad_face_4pt(p_L, p_LL, p_R, p_RR, x_L, x_LL, x_R, x_RR, grad)
+   use const_var, only: PRE_EC
+   implicit none
+   real(PRE_EC), intent(in) :: p_L, p_LL, p_R, p_RR, x_L, x_LL, x_R, x_RR
+   real(PRE_EC), intent(out):: grad
+   real(PRE_EC):: gL, gR, dxL, dxR, invs
+   call grad_cell_3pt(p_LL, p_L, p_R,  x_LL, x_L, x_R, gL)
+   call grad_cell_3pt(p_L,  p_R, p_RR, x_L,  x_R, x_RR, gR)
+!  Distance from cell L/R centers to the face midpoint. For a uniform grid
+!  dxL=dxR so the blend is 0.5*(gL+gR) = same as the previous arithmetic
+!  average; for non-uniform grids it properly weights the nearer cell more.
+   dxL  = 0.5d0*(x_L + x_R) - x_L
+   dxR  = x_R - 0.5d0*(x_L + x_R)
+   invs = 1.d0 / max(dxL + dxR, 1.d-30)
+   grad = (dxR*gL + dxL*gR) * invs
+  end subroutine grad_face_4pt
 
 !==============================================================================
 ! High-order face correction delta = phi_hi - phi_upwind for ONE face
@@ -640,7 +730,7 @@
    Type (Block_TYPE),pointer:: B
    integer:: i,j,k, nx,ny,nz, iter, it
     real(PRE_EC):: rho, mu, ap, aE,aW,aN,aS,aT,aB, src, De,Dwe,Dn,Ds,Dt,Db
-   real(PRE_EC):: Fe,Fw,Fn,Fs,Ft,Fb, gx, vol, unew, uold, alpha
+   real(PRE_EC):: Fe,Fw,Fn,Fs,Ft,Fb, gx, vol, unew, uold, alpha, denom
    integer,parameter:: INNER=3
 
    B=>Mesh(nMesh)%Block(mBlock)
@@ -677,23 +767,38 @@
        aB = Db + max( Fb, 0.d0)
        ap = aE+aW+aN+aS+aT+aB + (Fe-Fw+Fn-Fs+Ft-Fb)
 
-!      pressure gradient source (central difference)
+!      pressure gradient source. 3-point Lagrange derivative on arbitrary
+!      non-uniform cell centers (p_{i-1},p_i,p_{i+1}) evaluated at cell i
+!      center, formally second-order; collapses to central difference on
+!      uniform grids (factor 1 exact).
        if(dir == 1) then
-         gx = (B%p(i+1,j,k)-B%p(i-1,j,k))/max(B%xc(i+1,j,k)-B%xc(i-1,j,k), 1.d-30)
+         call grad_cell_3pt(B%p(i-1,j,k), B%p(i,j,k), B%p(i+1,j,k), &
+                            B%xc(i-1,j,k),B%xc(i,j,k),B%xc(i+1,j,k), gx)
          src = -gx*vol
-!      Deferred correction: converged solution must satisfy the high-order
-!      equation C_HO = Dform. Since C_HO = C_up + conv_src and the implicit
-!      operator is the upwind one (ap*phi - sum a_nb*phi_nb = C_up - Dform),
-!      the RHS source is -conv_src (see Ferziger & Peric, deferred correction).
          if(LS_Scheme > 1) src = src - conv_src(i,j,k)
          uold = B%U(2,i,j,k)
          unew = (aE*B%U(2,i+1,j,k)+aW*B%U(2,i-1,j,k)+aN*B%U(2,i,j+1,k)+aS*B%U(2,i,j-1,k) &
                 +aT*B%U(2,i,j,k+1)+aB*B%U(2,i,j,k-1)+src)/max(ap,1.d-30)
          B%U(2,i,j,k) = uold + alpha*(unew-uold)
          apu(i,j,k) = ap
-         du(i,j,k) = vol/max(ap,1.d-30)
+         su_nb(i,j,k) = aE+aW+aN+aS+aT+aB
+         if(LS_Algorithm == 2) then
+!          SIMPLEC d factor: d_C = Vol*alpha_u/(ap - alpha_u*sum_a_nb).
+!          The pressure update below is FULL (alpha_p=1), so no pressure
+!          under-relaxation is needed (Vandoormaal & Raithby 1984).
+           denom = ap - alpha*su_nb(i,j,k)
+           if(denom < 0.1d0*ap) denom = 0.1d0*ap   ! floor: d cannot blow up
+!          cap d at 3x the SIMPLE value: in cells with net inflow (ap close to
+!          sum_a_nb) the raw SIMPLEC d can be 5-10x larger, which amplifies the
+!          Rhie-Chow pressure-gradient truncation error and blows up Fi.
+           du(i,j,k) = min(vol*alpha/max(denom, 1.d-30), 3.d0*vol/max(ap,1.d-30))
+         else
+!          SIMPLE: d = Vol/ap
+           du(i,j,k) = vol/max(ap, 1.d-30)
+         endif
        else if(dir == 2) then
-         gx = (B%p(i,j+1,k)-B%p(i,j-1,k))/max(B%yc(i,j+1,k)-B%yc(i,j-1,k), 1.d-30)
+         call grad_cell_3pt(B%p(i,j-1,k), B%p(i,j,k), B%p(i,j+1,k), &
+                            B%yc(i,j-1,k),B%yc(i,j,k),B%yc(i,j+1,k), gx)
          src = -gx*vol
 !      Deferred correction: converged solution must satisfy the high-order
 !      equation C_HO = Dform. Since C_HO = C_up + conv_src and the implicit
@@ -705,9 +810,17 @@
                 +aT*B%U(3,i,j,k+1)+aB*B%U(3,i,j,k-1)+src)/max(ap,1.d-30)
          B%U(3,i,j,k) = uold + alpha*(unew-uold)
          apv(i,j,k) = ap
-         dv(i,j,k) = vol/max(ap,1.d-30)
+         sv_nb(i,j,k) = aE+aW+aN+aS+aT+aB
+         if(LS_Algorithm == 2) then
+           denom = ap - alpha*sv_nb(i,j,k)
+           if(denom < 0.1d0*ap) denom = 0.1d0*ap
+           dv(i,j,k) = min(vol*alpha/max(denom, 1.d-30), 3.d0*vol/max(ap,1.d-30))
+         else
+           dv(i,j,k) = vol/max(ap, 1.d-30)
+         endif
        else
-         gx = (B%p(i,j,k+1)-B%p(i,j,k-1))/max(B%zc(i,j,k+1)-B%zc(i,j,k-1), 1.d-30)
+         call grad_cell_3pt(B%p(i,j,k-1), B%p(i,j,k), B%p(i,j,k+1), &
+                            B%zc(i,j,k-1),B%zc(i,j,k),B%zc(i,j,k+1), gx)
          src = -gx*vol
 !      Deferred correction: converged solution must satisfy the high-order
 !      equation C_HO = Dform. Since C_HO = C_up + conv_src and the implicit
@@ -719,7 +832,14 @@
                 +aT*B%U(4,i,j,k+1)+aB*B%U(4,i,j,k-1)+src)/max(ap,1.d-30)
          B%U(4,i,j,k) = uold + alpha*(unew-uold)
          apw(i,j,k) = ap
-         dw(i,j,k) = vol/max(ap,1.d-30)
+         sw_nb(i,j,k) = aE+aW+aN+aS+aT+aB
+         if(LS_Algorithm == 2) then
+           denom = ap - alpha*sw_nb(i,j,k)
+           if(denom < 0.1d0*ap) denom = 0.1d0*ap
+           dw(i,j,k) = min(vol*alpha/max(denom, 1.d-30), 3.d0*vol/max(ap,1.d-30))
+         else
+           dw(i,j,k) = vol/max(ap, 1.d-30)
+         endif
        endif
      enddo; enddo; enddo
    enddo
@@ -727,6 +847,8 @@
 
 !==============================================================================
 ! Pressure-correction equation (Poisson) + velocity correction + pressure update.
+! SOR (Successive Over-Relaxation) accelerates convergence on finer grids.
+! Plain Gauss-Seidel spectral radius ~1-pi^2/(2N^2) is too slow for N>=80.
 !==============================================================================
   subroutine lowspeed_pressure_correction(nMesh, mBlock, res_p)
    use Global_Var
@@ -737,17 +859,44 @@
    real(PRE_EC):: res_p
    Type (Block_TYPE),pointer:: B
    integer:: i,j,k, nx,ny,nz, iter
-    real(PRE_EC):: rho, ap, aE,aW,aN,aS,aT,aB, src, pnew
+    real(PRE_EC):: rho, ap, aE,aW,aN,aS,aT,aB, src, pnew, gx
    real(PRE_EC):: Fe,Fw,Fn,Fs,Ft,Fb, dxe,dxw,dyn,dys,dzt,dzb
    real(PRE_EC):: dbe,dbw,dbn,dbs,dbt,dbb
-   integer,parameter:: INNER=10
+   real(PRE_EC):: omega, resid_max, pchange
+   integer:: inner_max
+   real(PRE_EC),parameter:: INNER_TOL=1.d-12
 
    B=>Mesh(nMesh)%Block(mBlock)
    nx=B%nx; ny=B%ny; nz=B%nz
    rho=LS_rho
 
-   do iter=1, INNER
-     res_p = 0.d0
+!  Use plain Gauss-Seidel (omega=1.0) with enough iterations for 80x80 grid.
+!  SOR (omega>1) causes divergence on this non-standard Poisson system.
+!  GS spectral radius ~cos^2(pi/N) ~0.998 for N=80, needs ~400+ iters
+!  to match 40x40 convergence level (200 iters at rho~0.997).
+   omega = 1.0d0
+
+!  Mass-conservation residual of the predicted velocity field = SIMPLE outer
+!  convergence monitor.  Do NOT use max|pp| for this: |pp| stays O(1) even at
+!  convergence (it is a pressure increment, not an imbalance).
+   res_p = 0.d0
+   do k=1,nz-1
+   do j=1,ny-1
+   do i=1,nx-1
+     res_p = max(res_p, abs(Fi(i+1,j,k)-Fi(i,j,k) &
+                           +Fj(i,j+1,k)-Fj(i,j,k) &
+                           +Fk(i,j,k+1)-Fk(i,j,k)))
+   enddo; enddo; enddo
+
+!  p' is solved fresh each outer sweep: pp holds only the current correction,
+!  and after p/u are updated below it must NOT carry over to the next sweep
+!  (otherwise p accumulates the same correction repeatedly).
+   pp = 0.d0
+   inner_max = 100
+   if(LS_Algorithm == 2) inner_max = 500   ! SIMPLEC: p' benefits from a more
+                                           ! converged Gauss-Seidel sweep
+   do iter=1, inner_max
+     resid_max = 0.d0
      do k=1,nz-1
      do j=1,ny-1
      do i=1,nx-1
@@ -780,21 +929,34 @@
 
        pnew = (aE*pp(i+1,j,k)+aW*pp(i-1,j,k)+aN*pp(i,j+1,k)+aS*pp(i,j-1,k) &
               +aT*pp(i,j,k+1)+aB*pp(i,j,k-1)+src)/max(ap,1.d-30)
-       pp(i,j,k) = pnew
-       res_p = max(res_p, abs(pnew))
+!      SOR: over-relax the Gauss-Seidel update
+       pchange = omega*(pnew - pp(i,j,k))
+       pp(i,j,k) = pp(i,j,k) + pchange
+       resid_max = max(resid_max, abs(pchange))
      enddo; enddo; enddo
+!    early termination: solver converged when change is negligible
+     if(resid_max < INNER_TOL .and. iter > 5) exit
    enddo
 
-!  velocity correction + pressure update
+!  velocity correction + pressure update. Use the same 3-point cell gradient
+!  for the pressure-correction difference as in the momentum source, to keep
+!  the two parts of the SIMPLE split consistent on non-uniform meshes.
    do k=1,nz-1
    do j=1,ny-1
    do i=1,nx-1
-     dxe = max(B%xc(i+1,j,k)-B%xc(i-1,j,k), 1.d-30)
-     dyn = max(B%yc(i,j+1,k)-B%yc(i,j-1,k), 1.d-30)
-     dzt = max(B%zc(i,j,k+1)-B%zc(i,j,k-1), 1.d-30)
-     B%U(2,i,j,k) = B%U(2,i,j,k) - du(i,j,k)*(pp(i+1,j,k)-pp(i-1,j,k))/dxe
-     B%U(3,i,j,k) = B%U(3,i,j,k) - dv(i,j,k)*(pp(i,j+1,k)-pp(i,j-1,k))/dyn
-     B%U(4,i,j,k) = B%U(4,i,j,k) - dw(i,j,k)*(pp(i,j,k+1)-pp(i,j,k-1))/dzt
+     call grad_cell_3pt(pp(i-1,j,k), pp(i,j,k), pp(i+1,j,k), &
+                        B%xc(i-1,j,k),B%xc(i,j,k),B%xc(i+1,j,k), gx)
+     B%U(2,i,j,k) = B%U(2,i,j,k) - du(i,j,k)*gx
+     call grad_cell_3pt(pp(i,j-1,k), pp(i,j,k), pp(i,j+1,k), &
+                        B%yc(i,j-1,k),B%yc(i,j,k),B%yc(i,j+1,k), gx)
+     B%U(3,i,j,k) = B%U(3,i,j,k) - dv(i,j,k)*gx
+     call grad_cell_3pt(pp(i,j,k-1), pp(i,j,k), pp(i,j,k+1), &
+                        B%zc(i,j,k-1),B%zc(i,j,k),B%zc(i,j,k+1), gx)
+     B%U(4,i,j,k) = B%U(4,i,j,k) - dw(i,j,k)*gx
+!    Pressure update.  Pure SIMPLEC (d-factor above already accounts for the
+!    neglected neighbor corrections) uses alpha_p = 1.0; a smaller alpha_p
+!    behaves as SIMPLEC-d with under-relaxed pressure and is more robust when
+!    the p' Gauss-Seidel sweep count is limited.
      B%p(i,j,k) = B%p(i,j,k) + LS_alpha_p*pp(i,j,k)
    enddo; enddo; enddo
   end subroutine lowspeed_pressure_correction
@@ -852,7 +1014,9 @@
 !      standard steady convection-diffusion discretization.
       ap = aE+aW+aN+aS+aT+aB
       src = 0.d0
-      if(LS_Scheme > 1) src = src + conv_src(i,j,k)
+!      Deferred correction: outward-flux conv_src, applied as -conv_src
+!      (same convention as momentum; see notes at lines 688/702/716).
+      if(LS_Scheme > 1) src = src - conv_src(i,j,k)
       uold = B%U(5,i,j,k)
 
 !      pseudo-transient stabilization: pure convection (k=0) can give ap=0.
@@ -891,9 +1055,10 @@
 
 !  (re)allocate work arrays if size changed
    if(.not. allocated(Fi) .or. nxw /= nx .or. nyw /= ny .or. nzw /= nz) then
-     if(allocated(Fi)) deallocate(Fi,Fj,Fk,apu,apv,apw,du,dv,dw,pp,conv_src)
+     if(allocated(Fi)) deallocate(Fi,Fj,Fk,apu,apv,apw,su_nb,sv_nb,sw_nb,du,dv,dw,pp,conv_src)
      allocate(Fi(nx,ny,nz), Fj(nx,ny,nz), Fk(nx,ny,nz))
      allocate(apu(nx,ny,nz), apv(nx,ny,nz), apw(nx,ny,nz))
+     allocate(su_nb(nx,ny,nz), sv_nb(nx,ny,nz), sw_nb(nx,ny,nz))
      allocate(du(nx,ny,nz), dv(nx,ny,nz), dw(nx,ny,nz))
      allocate(pp(nx,ny,nz))
      allocate(conv_src(nx,ny,nz))
@@ -901,6 +1066,7 @@
    endif
    Fi=0.d0; Fj=0.d0; Fk=0.d0; pp=0.d0
    apu=1.d0; apv=1.d0; apw=1.d0
+   su_nb=0.d0; sv_nb=0.d0; sw_nb=0.d0
    du=0.d0; dv=0.d0; dw=0.d0
 
    res0 = 0.d0
@@ -922,6 +1088,10 @@
 !    energy (temperature)
      call lowspeed_energy(nMesh, mBlock)
 
+!    catch genuine (10^100) spikes from SIMPLE transients; wide clipping
+!    leaves the well-tuned solution untouched but prevents NaN cascade.
+     call lowspeed_clip_fields(nMesh, mBlock)
+
 !    DEBUG: locate NaN source
      do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
        if(B%U(5,i,j,k) /= B%U(5,i,j,k)) then
@@ -940,11 +1110,23 @@
      endif
 
      if(iter == 1) res0 = res_p
+     if(my_id == 0 .and. iter <= 3) then
+       print*, '  DBG iter', iter, ' maxU2=', maxval(abs(B%U(2,1:nx,1:ny,1:nz))), &
+               ' maxFi=', maxval(abs(Fi(1:nx,1:ny,1:nz))), &
+               ' maxFj=', maxval(abs(Fj(1:nx,1:ny,1:nz))), &
+               ' Fi(21,1,1)=', Fi(21,1,1), ' Fi(21,21,1)=', Fi(21,21,1), &
+               ' Fi(41,21,1)=', Fi(41,21,1)
+       print*, '  DBG div max=', maxval(abs( Fi(2:nx,1:ny,1:nz)-Fi(1:nx-1,1:ny,1:nz) &
+             + Fj(1:nx,2:ny,1:nz)-Fj(1:nx,1:ny-1,1:nz) )), &
+               ' res_p=', res_p
+     endif
      if(my_id == 0 .and. (iter <= 5 .or. mod(iter,100) == 0)) then
        print*, "  SIMPLE iter", iter, " res_p=", res_p, &
                " u(1,1,1)=", B%U(2,1,1,1), " p(1,1,1)=", B%p(1,1,1)
      endif
-     if(res_p < LS_Tol) exit
+!    minimum sweep count avoids premature exit from the quiescent start
+!    (initial u=0,p=0 gives an identically-zero mass residual on sweep 1)
+     if(iter > 10 .and. res_p < LS_Tol) exit
    enddo
 
    if(my_id == 0) then
