@@ -1148,4 +1148,58 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    endif
    call MPI_Barrier(MPI_COMM_WORLD,ierr)
    if(my_id .eq. 0) print*, "read bc3d_interface.inc OK"
-  end subroutine read_inc_interface 
+   call align_interface_to_bc_msg   ! reorder bc_msg2 to match bc_msg face order
+  end subroutine read_inc_interface
+
+!----------------------------------------------------------------------
+! Reorder each local block's bc_msg2 entries so that bc_msg2(k) refers to
+! the same physical face as bc_msg(k).  Auto-generated Gridgen files may
+! list interface faces in a different order than bc3d.inp; all boundary
+! loops compare bc_msg and bc_msg2 by the same ksub index, so the orders
+! must match.  Matching key: face + (ib,ie,jb,je,kb,ke).
+!----------------------------------------------------------------------
+  subroutine align_interface_to_bc_msg
+   use Global_Var
+   implicit none
+   integer:: m, k, l, kk, nsub
+   Type (Block_TYPE),pointer:: B
+   TYPE (BC_MSG_TYPE),pointer:: Bc1, Bc2
+   integer,allocatable:: perm(:)
+   logical,allocatable:: used(:)
+   integer:: val1(7), val2(7)
+   TYPE (BC_MSG_TYPE),allocatable:: tmp(:)
+
+   do m=1, Mesh(1)%Num_Block
+     B => Mesh(1)%Block(m)
+     if(.not. associated(B%bc_msg2)) cycle
+     if(.not. associated(B%bc_msg)) cycle
+     nsub = B%subface
+     if(size(B%bc_msg) /= nsub .or. size(B%bc_msg2) /= nsub) then
+       print*, 'align_interface: size mismatch block', m, size(B%bc_msg), size(B%bc_msg2), nsub
+       cycle
+     endif
+     allocate(perm(nsub), used(nsub))
+     used(:) = .false.
+     do k=1, nsub
+       Bc1 => B%bc_msg(k)
+       val1 = (/Bc1%face, Bc1%ib, Bc1%ie, Bc1%jb, Bc1%je, Bc1%kb, Bc1%ke/)
+       perm(k) = k
+       do l=1, nsub
+         if(used(l)) cycle
+         Bc2 => B%bc_msg2(l)
+         val2 = (/Bc2%face, Bc2%ib, Bc2%ie, Bc2%jb, Bc2%je, Bc2%kb, Bc2%ke/)
+         if(all(val1 == val2)) then
+           perm(k) = l; used(l) = .true.
+           exit
+         endif
+       enddo
+     enddo
+!    Apply permutation: bc_msg2(k) <- old bc_msg2(perm(k))
+     allocate(tmp(nsub))
+     tmp(:) = B%bc_msg2(:)
+     do k=1, nsub
+       B%bc_msg2(k) = tmp(perm(k))
+     enddo
+     deallocate(tmp, perm, used)
+   enddo
+  end subroutine align_interface_to_bc_msg 

@@ -87,8 +87,8 @@
 
 !    Determine BC type and apply to ghost cells
 !    Note: bc3d.inp uses node indices. Cell-center arrays (Ts) use cell indices.
-!    For face 1 (i-): node ib=1 „1¤71„1¤771„1¤71„1¤777„1¤71„1¤771„1¤71„1¤777 first cell center at i=ib, ghost cells at i=ib-1..ib-LAP
-!    For face 4 (i+): node ie=nx „1¤71„1¤771„1¤71„1¤777„1¤71„1¤771„1¤71„1¤777 last cell center at i=ie-1, ghost cells at i=ie..ie+LAP-1
+!    For face 1 (i-): node ib=1 ï¿½1ï¿½71ï¿½1ï¿½771ï¿½1ï¿½71ï¿½1ï¿½777ï¿½1ï¿½71ï¿½1ï¿½771ï¿½1ï¿½71ï¿½1ï¿½777 first cell center at i=ib, ghost cells at i=ib-1..ib-LAP
+!    For face 4 (i+): node ie=nx ï¿½1ï¿½71ï¿½1ï¿½771ï¿½1ï¿½71ï¿½1ï¿½777ï¿½1ï¿½71ï¿½1ï¿½771ï¿½1ï¿½71ï¿½1ï¿½777 last cell center at i=ie-1, ghost cells at i=ie..ie+LAP-1
      select case(face_s)
      case(1)  ! i- face: ghost i=ib-1..ib-LAP, interior i=ib..ib+LAP-1
        do n=1, LAP
@@ -298,9 +298,9 @@
    real(PRE_EC):: coef_diff, coef_tr, T_neighbor_sum
    logical:: is_unsteady
    real(PRE_EC),parameter:: GS_OMEGA = 1.7d0   ! SOR over-relaxation
-   integer,parameter:: MAX_GS_ITER = 200000
+   integer,parameter:: MAX_GS_ITER = 20000
    integer,parameter:: MIN_GS_ITER = 5
-   real(PRE_EC),parameter:: GS_TOL = 1.d-12
+   real(PRE_EC),parameter:: GS_TOL = 1.d-9
    real(PRE_EC),parameter:: EPS_DIST = 1.d-15   ! min distance to avoid div-by-zero
 
    B=>Mesh(nMesh)%Block(mBlock)
@@ -514,34 +514,32 @@
        if(mb <= 0) cycle        ! Neighbor not on this process
        Bn => Mesh(nMesh)%Block(mb)
 
-!      Determine if this is a fluid-solid interface
-       if(.not. ((B%Block_type == BLOCK_FLUID .and. Bn%Block_type == BLOCK_SOLID) .or. &
-                 (B%Block_type == BLOCK_SOLID .and. Bn%Block_type == BLOCK_FLUID))) cycle
+!      Determine if this is a fluid-solid interface (compressible BLOCK_FLUID
+!      or incompressible BLOCK_LOWSPEED against BLOCK_SOLID).  Each pair is
+!      processed ONCE from the solid side (B = solid block) so that the
+!      interface entry Bc2 (face/face1/ranges) has the solid face as "face".
+       if(B%Block_type == BLOCK_SOLID .and. &
+          .not.(Bn%Block_type == BLOCK_FLUID .or. Bn%Block_type == BLOCK_LOWSPEED)) cycle
+       if(Bn%Block_type == BLOCK_SOLID) then
+         if(.not.(B%Block_type == BLOCK_FLUID .or. B%Block_type == BLOCK_LOWSPEED)) cycle
+         cycle   ! fluid-side entry: handled once from the solid block above
+       endif
 
        face_s = Bc2%face
        ib=Bc2%ib; ie=Bc2%ie; jb=Bc2%jb; je=Bc2%je; kb=Bc2%kb; ke=Bc2%ke
        face1 = Bc2%face1
        ib1=Bc2%ib1; ie1=Bc2%ie1; jb1=Bc2%jb1; je1=Bc2%je1; kb1=Bc2%kb1; ke1=Bc2%ke1
 
-!      Determine which side is fluid and which is solid
-       if(B%Block_type == BLOCK_FLUID .and. Bn%Block_type == BLOCK_SOLID) then
-!        B is fluid, Bn is solid
-         call compute_interface_T(nMesh, B, Bn, ksub, Bc2, T_i)
-!        Set fluid ghost cell (isothermal wall at T_i) for current block (B)
-         call set_fluid_ghost_wall_face(nMesh, mBlock, &
-             face_s, ib, ie, jb, je, kb, ke, T_i)
-!        Set solid ghost cell for neighbor (Bn) using Bc2 face1/ib1/ie1/...
-         call set_solid_ghost_from_interface_face(nMesh, mb, &
-             face1, ib1, ie1, jb1, je1, kb1, ke1, T_i, Bn)
-       elseif(B%Block_type == BLOCK_SOLID .and. Bn%Block_type == BLOCK_FLUID) then
-!        B is solid, Bn is fluid
-         call compute_interface_T(nMesh, B, Bn, ksub, Bc2, T_i)
-!        Set solid ghost cell for current block (B) using Bc face/ib/ie/...
-         call set_solid_ghost_from_interface_face(nMesh, mBlock, &
-             face_s, ib, ie, jb, je, kb, ke, T_i, B)
-!        Set fluid ghost cell (isothermal wall at T_i) for neighbor (Bn) using Bc2 face1/ib1/ie1/...
-         call set_fluid_ghost_wall_face(nMesh, mb, &
-             face1, ib1, ie1, jb1, je1, kb1, ke1, T_i)
+!      Here B is the solid block, Bn the fluid block.
+       if(Bn%Block_type == BLOCK_FLUID) then
+!        Compressible fluid: per-face-cell interface temperature (unit
+!        conversion to physical K done inside)
+         call couple_compressible_fluid_solid_face(nMesh, B, Bn, Bc2)
+       else
+!        Incompressible (low-speed) fluid: T is stored directly in U(5) [K]
+!        and the thermal conductivity is the low-speed LS_k (same units as
+!        the solid k).  The fluid ghost is a no-slip isothermal wall at T_i.
+         call couple_lowspeed_fluid_solid_face(nMesh, B, Bn, Bc2)
        endif
      enddo
    enddo
@@ -722,6 +720,166 @@
         enddo; enddo
       end select
      end subroutine set_fluid_ghost_wall_face
+
+!   Incompressible (BLOCK_LOWSPEED) fluid - solid conjugate interface.
+!   Bs = solid block, Bf = low-speed fluid block, Bc2 = interface entry as
+!   seen from the solid block (Bc2%face = solid face, Bc2%face1 = fluid face).
+!   For every face cell the interface temperature follows from the flux
+!   balance  k_f*(T_f-T_i)/dx_f = k_s*(T_i-T_s)/dx_s, then ghost cells are
+!   set on both sides:
+!     solid ghost : Ts = 2*T_i - Ts(interior)
+!     fluid ghost : no-slip + p zero-gradient + T = 2*T_i - T(interior)
+!   Requires conformal interface grids (node indices 1:1), as the fluid block
+!   machinery does.  One ghost layer is sufficient for the low-speed solver.
+     subroutine couple_lowspeed_fluid_solid_face(nMesh, Bs, Bf, Bc2)
+      use Global_Var
+      implicit none
+      integer:: nMesh
+      Type (Block_TYPE),pointer:: Bs, Bf
+      TYPE (BC_MSG_TYPE),pointer:: Bc2
+      integer:: face_s, face1
+      integer:: i, k, jcell_s, jcell_f, jg_s, jg_f
+      real(PRE_EC):: T_s, T_f, k_s, k_f, dx_s, dx_f, T_i
+      real(PRE_EC):: yf_s, yf_f
+
+      face_s = Bc2%face
+      face1  = Bc2%face1
+      k_s = Bs%solid_k
+      k_f = LS_k
+      if(k_s <= 0.d0 .or. k_f <= 0.d0) return   ! no conduction on either side
+
+!     j-normal interfaces (2 = j-, 5 = j+); the low-speed case tested here
+      if(.not.(face_s == 2 .or. face_s == 5)) then
+        print*, 'couple_lowspeed: only j-normal interfaces implemented, face=', face_s
+        return
+      endif
+      if(face_s == 2) then
+        jcell_s = Bc2%jb            ! interior cell next to j- face
+        jg_s    = Bc2%jb - 1        ! ghost cell
+      else
+        jcell_s = Bc2%je - 1
+        jg_s    = Bc2%je
+      endif
+      if(face1 == 2) then
+        jcell_f = Bc2%jb1
+        jg_f    = Bc2%jb1 - 1
+      else if(face1 == 5) then
+        jcell_f = Bc2%je1 - 1
+        jg_f    = Bc2%je1
+      else
+        print*, 'couple_lowspeed: unsupported fluid face1=', face1
+        return
+      endif
+
+      do k=Bc2%kb, Bc2%ke-1
+      do i=Bc2%ib, Bc2%ie-1
+        T_s = Bs%Ts(i,jcell_s,k)
+        T_f = Bf%U(5,i,jcell_f,k)
+!       distance cell-centre to face node (y direction, conformal grids)
+        if(face_s == 2) then
+          yf_s = Bs%y(i,Bc2%jb,k)
+          dx_s = Bs%yc(i,jcell_s,k) - yf_s
+        else
+          yf_s = Bs%y(i,Bc2%je,k)
+          dx_s = yf_s - Bs%yc(i,jcell_s,k)
+        endif
+        if(face1 == 2) then
+          yf_f = Bf%y(i,Bc2%jb1,k)
+          dx_f = Bf%yc(i,jcell_f,k) - yf_f
+        else
+          yf_f = Bf%y(i,Bc2%je1,k)
+          dx_f = yf_f - Bf%yc(i,jcell_f,k)
+        endif
+        dx_s = max(dx_s, 1.d-20)
+        dx_f = max(dx_f, 1.d-20)
+        T_i = (k_f*T_f/dx_f + k_s*T_s/dx_s) / (k_f/dx_f + k_s/dx_s)
+
+!       solid ghost (isothermal at T_i)
+        Bs%Ts(i,jg_s,k) = 2.d0*T_i - Bs%Ts(i,jcell_s,k)
+
+!       fluid ghost: no-slip isothermal wall at T_i
+        Bf%U(1,i,jg_f,k)   = LS_rho
+        Bf%U(2,i,jg_f,k)   = -Bf%U(2,i,jcell_f,k)
+        Bf%U(3,i,jg_f,k)   = -Bf%U(3,i,jcell_f,k)
+        Bf%U(4,i,jg_f,k)   = -Bf%U(4,i,jcell_f,k)
+        Bf%U(5,i,jg_f,k)   = 2.d0*T_i - Bf%U(5,i,jcell_f,k)
+        Bf%p(i,jg_f,k)     = Bf%p(i,jcell_f,k)
+      enddo; enddo
+     end subroutine couple_lowspeed_fluid_solid_face
+
+!   Compressible (BLOCK_FLUID) fluid - solid conjugate interface.
+!   Bs = solid block, Bf = compressible fluid block, Bc2 = interface entry as
+!   seen from the solid block.
+!
+!   Units: the compressible solver is non-dimensional (T* = T/T_inf with
+!   T_inf the physical free-stream temperature; mu* = mu_dim/(rho_inf*U_inf*L)
+!   so the freestream mu* = 1/Re).  The solid block is dimensional (K, W/mK,
+!   m).  Conversion factors are derived from Ma/Re/gamma/T_inf/PrL with the
+!   standard-air convention rho_inf = 1 kg/m^3, R = 287 J/(kg K):
+!     U_inf = Ma*sqrt(gamma*R*T_inf), mu_ref = rho_inf*U_inf*Lscale/Re,
+!     k_ref  = mu_ref*cp/PrL  (cp = gamma*R/(gamma-1))
+!   so that the non-dimensional fluid conductivity equals mu* (constant Pr).
+!
+!   Implemented for the current grid topology: solid face_s = 2 (j-),
+!   fluid face1 = 1 (i-).  Other combinations are rejected with a message.
+!   Conformal interface grids with aligned index directions are required.
+     subroutine couple_compressible_fluid_solid_face(nMesh, Bs, Bf, Bc2)
+      use Global_Var
+      implicit none
+      integer:: nMesh
+      Type (Block_TYPE),pointer:: Bs, Bf
+      TYPE (BC_MSG_TYPE),pointer:: Bc2
+      integer:: face_s, face1
+      integer:: i, j, k, js, jg, if1, jg1
+      real(PRE_EC):: T_s, T_f, k_s_star, k_f, dx_s, dx_f, T_i_star, T_i_K
+      real(PRE_EC):: p1, d1, uu1, v1, w1
+      real(PRE_EC),parameter:: R_AIR = 287.0d0, RHO_REF = 1.0d0
+      real(PRE_EC):: a_ref, mu_ref, cp_ref, k_ref
+
+      face_s = Bc2%face
+      face1  = Bc2%face1
+      if(face_s /= 2 .or. face1 /= 1) then
+        print*, 'couple_compressible: supports solid face=2, fluid face=1 only; got', face_s, face1
+        return
+      endif
+      k_s_star = Bs%solid_k
+      if(k_s_star <= 0.d0) return
+      a_ref = sqrt(gamma*R_AIR*T_inf)
+      mu_ref = RHO_REF*Ma*a_ref*max(Lscale,1.d-30)/Re
+      cp_ref = gamma*R_AIR/(gamma-1.d0)
+      k_ref = mu_ref*cp_ref/max(PrL,1.d-30)
+      k_s_star = k_s_star / k_ref
+
+!     solid (Bs): j- face, interior row j=jb, ghost j=jb-1; k aligned
+      js = Bc2%jb
+      jg = Bc2%jb - 1
+!     fluid (Bf): i- face, interior col i=ib1, ghost i=ib1-1
+      if1 = Bc2%ib1
+      jg1 = Bc2%ib1 - 1
+      do k = Bc2%kb, Bc2%ke-1
+      do i = Bc2%ib, Bc2%ie-1
+        j = Bc2%jb1 + (i - Bc2%ib)     ! fluid tangential index (conformal)
+        T_s = Bs%Ts(i,js,k)
+        d1  = Bf%U(1,if1,j,k)
+        uu1 = Bf%U(2,if1,j,k)/d1
+        v1  = Bf%U(3,if1,j,k)/d1
+        w1  = Bf%U(4,if1,j,k)/d1
+        p1  = (Bf%U(5,if1,j,k) - 0.5d0*d1*(uu1*uu1+v1*v1+w1*w1))*(gamma-1.d0)
+        T_f = gamma*Ma*Ma*p1/max(d1,1.d-20)     ! non-dimensional T*
+        k_f = max(Bf%mu(if1,j,k), 1.d-30)       ! non-dimensional k = mu*
+        dx_s = max(Bs%y(i,Bc2%jb,k) - Bs%yc(i,js,k), 1.d-20)
+        dx_f = max(Bf%yc(if1,j,k) - Bf%y(Bc2%ib1,j,k), 1.d-20)
+!       interface temperature (non-dimensional balance)
+        T_i_star = (k_f*T_f/max(dx_f,1.d-30) + k_s_star*(T_s/T_inf)/max(dx_s,1.d-30)) &
+                 / (k_f/max(dx_f,1.d-30) + k_s_star/max(dx_s,1.d-30))
+!       solid ghost: isothermal at T_i (physical K)
+        T_i_K = T_i_star*T_inf
+        Bs%Ts(i,jg,k) = 2.d0*T_i_K - Bs%Ts(i,js,k)
+!       fluid ghost: no-slip isothermal wall at T_i* (compressible wall)
+        call wall_bound_with_Tw(NVAR1, Bf%U(:,if1,j,k), Bf%U(:,jg1,j,k), &
+             Ma, gamma, T_i_star, Bf%mu(if1,j,k), Bf%dw(if1,j,k), Re)
+      enddo; enddo
+     end subroutine couple_compressible_fluid_solid_face
 
   end subroutine couple_fluid_solid_interfaces
 
