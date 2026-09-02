@@ -85,7 +85,7 @@
      allocate(apu(B%nx,B%ny,B%nz), apv(B%nx,B%ny,B%nz), apw(B%nx,B%ny,B%nz))
      allocate(su_nb(B%nx,B%ny,B%nz), sv_nb(B%nx,B%ny,B%nz), sw_nb(B%nx,B%ny,B%nz))
      allocate(du(B%nx,B%ny,B%nz), dv(B%nx,B%ny,B%nz), dw(B%nx,B%ny,B%nz))
-     allocate(pp(B%nx,B%ny,B%nz))
+     allocate(pp(0:B%nx,0:B%ny,0:B%nz))
      allocate(conv_src(B%nx,B%ny,B%nz))
      nxw=B%nx; nyw=B%ny; nzw=B%nz
      Fi=0.d0; Fj=0.d0; Fk=0.d0
@@ -431,22 +431,27 @@
      if(LS_Inlet_Type == 3) then
 !      pressure inlet: velocity extrapolated (zero gradient)
        select case(face_s)
-       case(1);   un = -B%U(2,i1,j1,k1)
+       case(1);   un =  B%U(2,i1,j1,k1)
        case(4);   un =  B%U(2,i1-1,j1,k1)
-       case(2);   un = -B%U(3,i1,j1,k1)
+       case(2);   un =  B%U(3,i1,j1,k1)
        case(5);   un =  B%U(3,i1,j1-1,k1)
-       case(3);   un = -B%U(4,i1,j1,k1)
+       case(3);   un =  B%U(4,i1,j1,k1)
        case(6);   un =  B%U(4,i1,j1,k1-1)
        case default; un = 0.d0
        end select
        call lowspeed_store_face_flux(face_s, i1,j1,k1, LS_rho*A*un)
      else
+!      Fi/Fj/Fk carry the flux in the +coordinate direction (interior faces
+!      use ue = +x face velocity), so a velocity inlet must add +uin*A on
+!      EVERY face regardless of orientation; the sign of uin decides inflow
+!      vs outflow.  The former -uin_x on the i-/j-/k- faces turned an inlet
+!      into a suction boundary and drove a spurious reverse Poiseuille flow.
        select case(face_s)
-       case(1);   un = -uin_x
+       case(1);   un =  uin_x
        case(4);   un =  uin_x
-       case(2);   un = -uin_y
+       case(2);   un =  uin_y
        case(5);   un =  uin_y
-       case(3);   un = -uin_z
+       case(3);   un =  uin_z
        case(6);   un =  uin_z
        case default; un = 0.d0
        end select
@@ -846,6 +851,81 @@
   end subroutine lowspeed_momentum
 
 !==============================================================================
+! Set one ghost layer of the pressure-correction field pp.
+!   - default: zero-gradient (Neumann), correct for walls, symmetry and
+!     velocity/mass-flow inlets (pp does not couple through a Dirichlet p face)
+!   - on faces where p itself is Dirichlet (pressure outlet BC_Outflow, or
+!     pressure inlet LS_Inlet_Type=3) the correction must vanish: pp(ghost)=0
+! Without this, pp(i-1)/pp(i,j-1)/pp(i,j,k-1) at the i-/j-/k- boundaries read
+! out of bounds (pp was allocated 1:nx) and the p' solve carries an undefined
+! (grid/layout dependent) boundary value -> p drifts and, with a pressure
+! outlet, drives a spurious reverse flow.  Allocation is now (0:nx,0:ny,0:nz).
+!==============================================================================
+  subroutine lowspeed_pp_ghost(nMesh, mBlock)
+   use Global_Var
+   use const_var
+   use lowspeed_work
+   implicit none
+   integer:: nMesh, mBlock
+   Type (Block_TYPE),pointer:: B
+   TYPE (BC_MSG_TYPE),pointer:: Bc
+   integer:: i,j,k, nx,ny,nz, ksub, face_s, ib,ie,jb,je,kb,ke
+
+   B=>Mesh(nMesh)%Block(mBlock)
+   nx=B%nx; ny=B%ny; nz=B%nz
+
+!  default: Neumann (dp'/dn = 0) on all six ghost planes
+   do k=0,nz; do j=0,ny
+     pp(0,j,k)  = pp(1,j,k)
+     pp(nx,j,k) = pp(nx-1,j,k)
+   enddo; enddo
+   do k=0,nz; do i=0,nx
+     pp(i,0,k)  = pp(i,1,k)
+     pp(i,ny,k) = pp(i,ny-1,k)
+   enddo; enddo
+   do j=0,ny; do i=0,nx
+     pp(i,j,0)  = pp(i,j,1)
+     pp(i,j,nz) = pp(i,j,nz-1)
+   enddo; enddo
+
+!  pressure-Dirichlet faces: p fixed on the face -> correction pp = 0 there
+   do ksub=1, B%subface
+     Bc => B%bc_msg(ksub)
+     if(Bc%bc < 0) cycle
+     if(Bc%bc == BC_Outflow .or. (Bc%bc == BC_Inflow .and. LS_Inlet_Type == 3)) then
+       face_s = Bc%face
+       ib=Bc%ib; ie=Bc%ie; jb=Bc%jb; je=Bc%je; kb=Bc%kb; ke=Bc%ke
+       select case(face_s)
+       case(1)   ! i- face: ghost cell i = ib-1
+         do k=kb,ke-1; do j=jb,je-1
+           pp(ib-1,j,k) = 0.d0
+         enddo; enddo
+       case(4)   ! i+ face: ghost cell i = ie
+         do k=kb,ke-1; do j=jb,je-1
+           pp(ie,j,k) = 0.d0
+         enddo; enddo
+       case(2)   ! j- face: ghost cell j = jb-1
+         do k=kb,ke-1; do i=ib,ie-1
+           pp(i,jb-1,k) = 0.d0
+         enddo; enddo
+       case(5)   ! j+ face: ghost cell j = je
+         do k=kb,ke-1; do i=ib,ie-1
+           pp(i,je,k) = 0.d0
+         enddo; enddo
+       case(3)   ! k- face: ghost cell k = kb-1
+         do j=jb,je-1; do i=ib,ie-1
+           pp(i,j,kb-1) = 0.d0
+         enddo; enddo
+       case(6)   ! k+ face: ghost cell k = ke
+         do j=jb,je-1; do i=ib,ie-1
+           pp(i,j,ke) = 0.d0
+         enddo; enddo
+       end select
+     endif
+   enddo
+  end subroutine lowspeed_pp_ghost
+
+!==============================================================================
 ! Pressure-correction equation (Poisson) + velocity correction + pressure update.
 ! SOR (Successive Over-Relaxation) accelerates convergence on finer grids.
 ! Plain Gauss-Seidel spectral radius ~1-pi^2/(2N^2) is too slow for N>=80.
@@ -896,6 +976,9 @@
    if(LS_Algorithm == 2) inner_max = 500   ! SIMPLEC: p' benefits from a more
                                            ! converged Gauss-Seidel sweep
    do iter=1, inner_max
+!    refresh the pp ghost layer from the latest interior values (Neumann
+!    default, zero on pressure-Dirichlet faces)
+     call lowspeed_pp_ghost(nMesh, mBlock)
      resid_max = 0.d0
      do k=1,nz-1
      do j=1,ny-1
@@ -941,6 +1024,7 @@
 !  velocity correction + pressure update. Use the same 3-point cell gradient
 !  for the pressure-correction difference as in the momentum source, to keep
 !  the two parts of the SIMPLE split consistent on non-uniform meshes.
+   call lowspeed_pp_ghost(nMesh, mBlock)
    do k=1,nz-1
    do j=1,ny-1
    do i=1,nx-1
@@ -1060,7 +1144,7 @@
      allocate(apu(nx,ny,nz), apv(nx,ny,nz), apw(nx,ny,nz))
      allocate(su_nb(nx,ny,nz), sv_nb(nx,ny,nz), sw_nb(nx,ny,nz))
      allocate(du(nx,ny,nz), dv(nx,ny,nz), dw(nx,ny,nz))
-     allocate(pp(nx,ny,nz))
+     allocate(pp(0:nx,0:ny,0:nz))
      allocate(conv_src(nx,ny,nz))
      nxw=nx; nyw=ny; nzw=nz
    endif
