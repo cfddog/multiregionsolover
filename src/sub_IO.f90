@@ -313,10 +313,12 @@
    if(my_id .eq. 0)  print*, "read flow3d.dat OK"
 
 !----------------------------------Transform data----------------
- !
+ !  For BLOCK_LOWSPEED blocks B%U already stores primitives (rho,u,v,w,T)
+ !  and must NOT be converted to conservative variables.
  do m=1,MP%Num_Block !
     B=>MP%Block(m)
     nx=B%nx; ny=B%ny; nz=B%nz
+   if(B%Block_type == BLOCK_LOWSPEED) cycle
  
    do k=0,nz
    do j=0,ny
@@ -335,7 +337,7 @@
    enddo
    enddo
    enddo
- 
+
  enddo
 
  !
