@@ -57,7 +57,7 @@
 !    Skip interface connections (handled by coupling routines).
 !    Check bc_msg2: if it has bc<0 (interface connection), skip this subface.
      if(associated(B%bc_msg2)) then
-       if(B%bc_msg2(ksub)%bc < 0) cycle
+       if(is_interface_bc(B%bc_msg2(ksub)%bc)) cycle
      endif
 
      face_s = Bc%face
@@ -507,12 +507,17 @@
      do ksub=1, B%subface
        Bc2 => B%bc_msg2(ksub)
 !      Skip physical boundaries (bc >= 0); only process interface connections (bc < 0)
-       if(Bc2%bc >= 0) cycle
+       if(.not. is_interface_bc(Bc2%bc)) cycle
        nb = Bc2%nb1             ! Neighbor block number (global)
        if(nb <= 0) cycle
        mb = B_n(nb)             ! Local index on this process
        if(mb <= 0) cycle        ! Neighbor not on this process
        Bn => Mesh(nMesh)%Block(mb)
+
+!      Same-class fluid-fluid interfaces are handled by the buffer exchange
+!      mechanism, not by this routine: skip them here.
+       if(B%Block_type == BLOCK_FLUID .and. Bn%Block_type == BLOCK_FLUID) cycle
+       if(B%Block_type == BLOCK_LOWSPEED .and. Bn%Block_type == BLOCK_LOWSPEED) cycle
 
 !      Determine if this is a fluid-solid interface (compressible BLOCK_FLUID
 !      or incompressible BLOCK_LOWSPEED against BLOCK_SOLID).  Each pair is
@@ -523,6 +528,15 @@
        if(Bn%Block_type == BLOCK_SOLID) then
          if(.not.(B%Block_type == BLOCK_FLUID .or. B%Block_type == BLOCK_LOWSPEED)) cycle
          cycle   ! fluid-side entry: handled once from the solid block above
+       endif
+
+!      High-speed (compressible) <-> low-speed fluid pair: handled once from
+!      the compressible side (B = FLUID, Bn = LOWSPEED)
+       if(B%Block_type == BLOCK_FLUID .and. Bn%Block_type == BLOCK_LOWSPEED) then
+         call couple_highlow_fluid_face(nMesh, B, Bn, Bc2)
+         cycle
+       else if(B%Block_type == BLOCK_LOWSPEED .and. Bn%Block_type == BLOCK_FLUID) then
+         cycle   ! handled from the compressible side above
        endif
 
        face_s = Bc2%face
@@ -881,6 +895,111 @@
       enddo; enddo
      end subroutine couple_compressible_fluid_solid_face
 
+!   High-speed (BLOCK_FLUID, compressible) <-> low-speed (BLOCK_LOWSPEED)
+!   conjugate interface.  Each pair is processed ONCE from the compressible
+!   block entry (B = compressible, Bn = low-speed).  The compressible
+!   solution is non-dimensional (rho* = rho/rho_inf, u* = u/U_inf,
+!   T* = T/T_inf, p* = p/(rho_inf*U_inf^2)); the low-speed solution is
+!   physical SI (rho = LS_rho, u m/s, T K).  Units are unified with the
+!   standard-air convention used elsewhere:
+!     rho_inf = 1 kg/m^3, R = 287 J/(kgK), a_inf = sqrt(gamma*R*T_inf),
+!     U_inf = Ma*a_inf,  p* = rho* T* / (gamma*Ma^2).
+!   Ghost buffers are exchanged directly (ghost = converted value of the
+!   neighbour's first interior cell), as requested.
+!
+!   Implemented for the current topology: compressible face_s = 2 (j-)
+!   against low-speed face1 = 5 (j+).  Conformal aligned grids required.
+     subroutine couple_highlow_fluid_face(nMesh, B, Bn, Bc2)
+      use Global_Var
+      implicit none
+      integer:: nMesh
+      Type (Block_TYPE),pointer:: B, Bn
+      TYPE (BC_MSG_TYPE),pointer:: Bc2
+      integer:: face_s, face1, i, k, jc_h, jc_l, jg_l, n1, n2
+      real(PRE_EC):: rho, uu, vv, TT, rho_s, u_s, v_s, T_s, p_nd, E_s
+      real(PRE_EC),parameter:: R_AIR = 287.0d0, RHO_REF = 1.0d0
+      real(PRE_EC),parameter:: U_MAX_LS = 30.d0   ! m/s tangential cap (low-speed side)
+      real(PRE_EC),parameter:: V_MAX_LS = 1.0d0   ! m/s normal cap (low-speed side)
+      real(PRE_EC):: a_ref, U_ref
+      real(PRE_EC):: U1,U2,U3,U5, r1, u1s, v1s, p1n, T1s
+      real(PRE_EC):: p_anch
+
+      face_s = Bc2%face
+      face1  = Bc2%face1
+      if(face_s /= 2 .or. face1 /= 5) then
+        print*, 'couple_highlow: supports comp face=2, low face=5 only; got', face_s, face1
+        return
+      endif
+      a_ref = sqrt(gamma*R_AIR*T_inf)
+      U_ref = Ma*a_ref
+!     compressible block B (j- face): interior row jc_h = jb, ghost row 0
+      jc_h = Bc2%jb
+!     low-speed block Bn (j+ face): interior row jc_l = je1-1? ranges are in
+!     nodes of the low-speed block: top face j = je1 (node), interior cell je1-1
+      jc_l = Bc2%je1 - 1
+      jg_l = Bc2%je1        ! first ghost cell row of the low-speed block
+
+!     j- interface of B: ghost row j=0 ; low-speed interior at row jc_l
+      do k = Bc2%kb, Bc2%ke-1
+      do i = Bc2%ib, Bc2%ie-1
+!       --- compressible ghost <- low-speed interior ---
+        rho = Bn%U(1,i,jc_l,k)
+        uu  = Bn%U(2,i,jc_l,k)/rho
+        vv  = Bn%U(3,i,jc_l,k)/rho
+        TT  = Bn%U(5,i,jc_l,k)
+        rho_s = rho/RHO_REF
+        u_s   = uu/U_ref
+        v_s   = vv/U_ref
+        T_s   = TT/T_inf
+        p_nd  = rho_s*T_s/(gamma*Ma*Ma)
+        E_s   = p_nd/(gamma-1.d0) + 0.5d0*rho_s*(u_s*u_s+v_s*v_s)
+        B%U(1,i,jc_h-1,k) = rho_s
+        B%U(2,i,jc_h-1,k) = rho_s*u_s
+        B%U(3,i,jc_h-1,k) = rho_s*v_s
+        B%U(4,i,jc_h-1,k) = 0.d0
+        B%U(5,i,jc_h-1,k) = E_s
+!       --- low-speed ghost <- compressible interior ---
+        U1 = B%U(1,i,jc_h,k)
+        U2 = B%U(2,i,jc_h,k)
+        U3 = B%U(3,i,jc_h,k)
+        U5 = B%U(5,i,jc_h,k)
+        r1  = max(U1,1.d-20)
+        u1s = U2/r1
+        v1s = U3/r1
+        p1n = (U5 - 0.5d0*U1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+        T1s = gamma*Ma*Ma*p1n/max(r1,1.d-20)
+        rho = r1*RHO_REF
+        uu  = u1s*U_ref
+        vv  = v1s*U_ref
+!       The low-speed (incompressible) solver cannot sustain supersonic
+!       drag from the interface; clamp the exchanged velocity so the
+!       low-speed model stays in its valid (Ma << 1) regime.
+        uu  = max(min(uu,  U_MAX_LS), -U_MAX_LS)
+        vv  = max(min(vv,  V_MAX_LS), -V_MAX_LS)
+        TT  = T1s*T_inf
+        do n1 = jg_l, jg_l+LAP-1
+          Bn%U(1,i,n1,k) = rho
+          Bn%U(2,i,n1,k) = rho*uu
+          Bn%U(3,i,n1,k) = rho*vv
+          Bn%U(4,i,n1,k) = 0.d0
+          Bn%U(5,i,n1,k) = TT
+          Bn%p(i,n1,k)   = Bn%p(i,jc_l,k)
+        enddo
+      enddo; enddo
+
+!     No pressure-Dirichlet face on the low-speed block (velocity inlet +
+!     walls + exchange face): SIMPLE pressure has an undetermined constant.
+!     Anchor it each outer step so it cannot drift.
+      p_anch = Bn%p(1,1,1)
+      if(abs(p_anch) > 1.d-12) then
+        do k = 1, Bn%nz-1
+        do j = 1, Bn%ny-1
+        do i = 1, Bn%nx-1
+          Bn%p(i,j,k) = Bn%p(i,j,k) - p_anch
+        enddo; enddo; enddo
+      endif
+     end subroutine couple_highlow_fluid_face
+
   end subroutine couple_fluid_solid_interfaces
 
 !----------------------------------------------------------------------
@@ -952,7 +1071,7 @@
      do ksub=1, B%subface
        Bc2 => B%bc_msg2(ksub)
 !      Skip physical boundaries (bc >= 0); only process interface connections (bc < 0)
-       if(Bc2%bc >= 0) cycle
+       if(.not. is_interface_bc(Bc2%bc)) cycle
        nb = Bc2%nb1             ! Neighbor block number (global)
        if(nb <= 0) cycle
        mb = B_n(nb)             ! Local index on this process

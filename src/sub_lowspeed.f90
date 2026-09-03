@@ -96,7 +96,7 @@
 
    do ksub=1, B%subface
      Bc => B%bc_msg(ksub)
-     if(Bc%bc < 0) cycle                       ! internal interface -> buffer exchange
+     if(is_interface_bc(Bc%bc)) cycle                       ! internal interface -> buffer exchange
      if(associated(B%bc_msg2)) then
        if(B%bc_msg2(ksub)%bc < 0) cycle        ! interface connection handled elsewhere
      endif
@@ -203,7 +203,7 @@
      A_tot = 0.d0
      do ksub=1, B%subface
        Bc => B%bc_msg(ksub)
-       if(Bc%bc == BC_Inflow) then
+       if(Bc%bc == BC_Inflow .or. Bc%bc == BC_LS_Inlet) then
          face_s = Bc%face
          ib=Bc%ib; ie=Bc%ie; jb=Bc%jb; je=Bc%je; kb=Bc%kb; ke=Bc%ke
          select case(face_s)
@@ -275,7 +275,7 @@
           .false., uw, vw, ww)
      B%U(5,ig,jg,kg) = B%U(5,i2,j2,k2)
      B%p(ig,jg,kg) = B%p(i2,j2,k2)
-   case(BC_Inflow)   ! inlet
+   case(BC_Inflow, BC_LS_Inlet)   ! inlet
      if(LS_Inlet_Type == 3) then
 !      pressure inlet: velocity extrapolated, pressure specified
        B%U(2,ig,jg,kg) = B%U(2,i2,j2,k2)
@@ -290,7 +290,7 @@
        B%p(ig,jg,kg) = B%p(i2,j2,k2)
      endif
      B%U(5,ig,jg,kg) = 2.d0*LS_T_ref - B%U(5,i2,j2,k2)
-   case(BC_Outflow)  ! pressure outlet
+   case(BC_Outflow, BC_LS_Outlet)  ! pressure outlet
      B%U(2,ig,jg,kg) = B%U(2,i2,j2,k2)
      B%U(3,ig,jg,kg) = B%U(3,i2,j2,k2)
      B%U(4,ig,jg,kg) = B%U(4,i2,j2,k2)
@@ -426,7 +426,7 @@
    case(BC_Wall, BC_Symmetry)
 !    no mass flux through wall / symmetry
      call lowspeed_store_face_flux(face_s, i1,j1,k1, 0.d0)
-   case(BC_Inflow)
+   case(BC_Inflow, BC_LS_Inlet)
 !    inlet normal velocity
      if(LS_Inlet_Type == 3) then
 !      pressure inlet: velocity extrapolated (zero gradient)
@@ -457,7 +457,7 @@
        end select
        call lowspeed_store_face_flux(face_s, i1,j1,k1, LS_rho*A*un)
      endif
-   case(BC_Outflow, BC_Farfield)
+   case(BC_Outflow, BC_LS_Outlet, BC_Farfield)
 !    outlet / farfield: velocity extrapolated (zero gradient)
      select case(face_s)
      case(1);   un = -B%U(2,i1,j1,k1)
@@ -891,8 +891,9 @@
 !  pressure-Dirichlet faces: p fixed on the face -> correction pp = 0 there
    do ksub=1, B%subface
      Bc => B%bc_msg(ksub)
-     if(Bc%bc < 0) cycle
-     if(Bc%bc == BC_Outflow .or. (Bc%bc == BC_Inflow .and. LS_Inlet_Type == 3)) then
+     if(is_interface_bc(Bc%bc)) cycle
+     if((Bc%bc == BC_Outflow .or. Bc%bc == BC_LS_Outlet) .or. &
+       ((Bc%bc == BC_Inflow .or. Bc%bc == BC_LS_Inlet) .and. LS_Inlet_Type == 3)) then
        face_s = Bc%face
        ib=Bc%ib; ie=Bc%ie; jb=Bc%jb; je=Bc%je; kb=Bc%kb; ke=Bc%ke
        select case(face_s)

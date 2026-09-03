@@ -41,6 +41,29 @@
    
    integer,parameter::  BC_Zero=0 !
 
+!  Explicit interface (multi-solver conjugate) boundary types.  Write these
+!  codes directly in bc3d.inp / bc3d_interface.inp instead of the generic
+!  negative code BC_Inner.  The code identifies the pair of block types and
+!  therefore selects the matching coupling routine:
+!    11 compressible (BLOCK_FLUID)  - solid (BLOCK_SOLID)
+!    12 compressible (BLOCK_FLUID)  - low-speed (BLOCK_LOWSPEED)
+!    13 low-speed  (BLOCK_LOWSPEED) - solid (BLOCK_SOLID)
+!    14 solid      (BLOCK_SOLID)    - solid (BLOCK_SOLID)
+!    15 compressible block-to-block interface (handled by buffer exchange)
+   integer,parameter::  BC_Interface_FluidSolid = 11
+   integer,parameter::  BC_Interface_FluidLow    = 12
+   integer,parameter::  BC_Interface_LowSolid    = 13
+   integer,parameter::  BC_Interface_SolidSolid  = 14
+   integer,parameter::  BC_Interface_FluidFluid  = 15
+   integer,parameter::  BC_Interface_First = 11, BC_Interface_Last = 15
+
+!  Explicit low-speed inlet / outlet types (kept distinct from the
+!  compressible BC_Inflow / BC_Outflow codes).
+   integer,parameter::  BC_LS_Inlet = 21
+   integer,parameter::  BC_LS_Outlet = 22
+
+
+
  !
    integer,parameter::  BC_USER_FixedInlet=901, BC_USER_Inlet_time=902 !
    integer,parameter:: BC_USER_Blow_Suction_Wall=903 !
@@ -54,6 +77,17 @@
    integer,parameter:: FD_WENO5=1,FD_WENO7=2,FD_OMP6=3 !
    integer,parameter:: FD_Steger_Warming=1,FD_Van_Leer=2
 
+
+
+   contains
+!    True for every "inner" boundary: the legacy negative codes
+!    (BC_Inner / BC_PeriodicL / BC_PeriodicR) and the explicit interface
+!    types BC_Interface_FluidSolid .. BC_Interface_FluidFluid.
+     logical function is_interface_bc(bc)
+       integer,intent(in):: bc
+       is_interface_bc = (bc < 0) .or. &
+            (bc >= BC_Interface_First .and. bc <= BC_Interface_Last)
+     end function is_interface_bc
 
   end module const_var
 

@@ -1201,5 +1201,12 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
        B%bc_msg2(k) = tmp(perm(k))
      enddo
      deallocate(tmp, perm, used)
+
+!    bc3d.inp is authoritative for boundary TYPES: bc_msg2 only supplies
+!    the interface pairing (ranges, face1, L1..L3, nb1) from the
+!    auto-generated bc3d_interface file, whose own bc codes are ignored.
+     do k=1, nsub
+       B%bc_msg2(k)%bc = B%bc_msg(k)%bc
+     enddo
    enddo
   end subroutine align_interface_to_bc_msg 

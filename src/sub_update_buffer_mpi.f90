@@ -59,6 +59,8 @@
 
 !-----------------------------------------------------------------------------------------------
       if(Bc%bc .ge. 0 ) cycle          ! 非内边界 inner boundary
+      if(.not.(B%Block_type == BLOCK_FLUID .and. &
+               Block_Type_List(Bc%nb1) == BLOCK_FLUID)) cycle
       
 !--------------------------------------------------------
 !  B块为源数据； B1块为目标数据；   数据从源数据写入目标数据
@@ -160,6 +162,8 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
   B => Mesh(nMesh)%Block(mBlock)
   do  ksub=1,B%subface
    Bc=> B%bc_msg(ksub)
+      if(.not.(B%Block_type == BLOCK_FLUID .and. &
+               Block_Type_List(Bc%nb1) == BLOCK_FLUID)) cycle
    if(Bc%bc .ge. 0 ) cycle               ! 内边界 inner boundary
    Recv_from_ID=B_proc(Bc%nb1)           ! 相邻块（接收源块）所在的进程号
    if(Recv_from_ID .eq. my_id) cycle     ! 源块在本进程内，不使用MPI通信 (Umessage_send_mpi()已完成写入操作)  
@@ -706,7 +710,7 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
    if(.not. associated(B%bc_msg2)) cycle
    do ksub=1,B%subface
      Bc=> B%bc_msg2(ksub)
-     if(Bc%bc .ge. 0) cycle
+     if(.not. is_interface_bc(Bc%bc)) cycle
 !     Source data: LAP layers near boundary
      kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
      k=mod(Bc%face-1,3)+1
@@ -778,7 +782,7 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
    if(.not. associated(B%bc_msg2)) cycle
    do ksub=1,B%subface
      Bc=> B%bc_msg2(ksub)
-     if(Bc%bc .ge. 0) cycle
+     if(.not. is_interface_bc(Bc%bc)) cycle
      Recv_from_ID=B_proc(Bc%nb1)
      if(Recv_from_ID .eq. my_id) cycle
      kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1

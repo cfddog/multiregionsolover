@@ -6,6 +6,7 @@
 ! 这些冗余信息为块-块之间的通信（尤其是MPI并行通信）提供了便利，有利于简化代码
  
  module  Type_def1
+   use const_var
     TYPE BC_MSG_TYPE              ! 边界链接信息
  !   integer::  f_no, face, ist, iend, jst, jend, kst, kend, neighb, subface, orient   ! BXCFD .in format
      integer:: ib,ie,jb,je,kb,ke,bc,face,f_no                      ! 边界区域（子面）的定义， .inp format
@@ -60,7 +61,7 @@
       Bc%f_no=ksub                        ! 子面号
 	  read(88,*)  kb(1),ke(1),kb(2),ke(2),kb(3),ke(3),Bc%bc
 	 
-	  if(Bc%bc .lt. 0) then
+	  if(is_interface_bc(Bc%bc)) then
  !  --------有连接的情况 (内边界)--------------------------------------------------------	    
 	   read(88,*) kb1(1),ke1(1),kb1(2),ke1(2),kb1(3),ke1(3),Bc%nb1
       else
@@ -78,7 +79,7 @@
      B => Block(m)
      do ksub=1, B%subface
        Bc => B%bc_msg(ksub)
-       if(Bc%bc .lt. 0) then
+       if(is_interface_bc(Bc%bc)) then
          Bc%f_no1=0
 		 B1=>Block(Bc%nb1)         ! 指向连接块
          
@@ -135,7 +136,7 @@
 	   integer,dimension(3):: kb,ke,kb1,ke1,s,p,LP
        integer:: k,j,k1
 
-	   if(Bc%bc .ge. 0) then
+	   if(.not. is_interface_bc(Bc%bc)) then
 	     Bc%ib1=0; Bc%ie1=0; Bc%jb1=0; Bc%je1=0; Bc%kb1=0; Bc%ke1=0; Bc%nb1=0
          Bc%L1=0; Bc%L2=0; Bc%L3=0; Bc%face1=0; Bc%f_no1=0
        endif
@@ -181,7 +182,7 @@
 
 !---------------------------------------------------------------------------
 !------内边界的情况，建立连接描述
-  if( Bc%bc .lt. 0) then            ! 内边界
+  if( is_interface_bc(Bc%bc)) then            ! 内边界
 !      计算连接顺序描述符L1,L2,L3
 !      计算各维之间的连接关系      
      do k=1,3  
@@ -282,7 +283,7 @@
       Bc => B%bc_msg(ksub)
       Bc%f_no=ksub
       read(88,*)  kb(1),ke(1),kb(2),ke(2),kb(3),ke(3),Bc%bc
-      if(Bc%bc .lt. 0) then
+      if(is_interface_bc(Bc%bc)) then
         read(88,*) kb1(1),ke1(1),kb1(2),ke1(2),kb1(3),ke1(3),Bc%nb1
       else
         kb1(:)=0; ke1(:)=0; Bc%nb1=0
@@ -296,7 +297,7 @@
      B => Block(m)
      do ksub=1, B%subface
        Bc => B%bc_msg(ksub)
-       if(Bc%bc .lt. 0 .and. Bc%nb1 .gt. 0) then
+       if(is_interface_bc(Bc%bc) .and. Bc%nb1 .gt. 0) then
          Bc%f_no1=0
          B1=>Block(Bc%nb1)
          do ksub1=1,B1%subface
