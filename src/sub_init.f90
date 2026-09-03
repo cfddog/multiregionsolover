@@ -339,8 +339,8 @@
         do j=1-LAP,B%ny+LAP-1
         do i=1-LAP,B%nx+LAP-1
           B%U(1,i,j,k)=LS_rho
-          B%U(2,i,j,k)=0.d0
-          B%U(3,i,j,k)=0.d0
+          B%U(2,i,j,k)=LS_rho*LS_U_in
+          B%U(3,i,j,k)=LS_rho*LS_V_in
           B%U(4,i,j,k)=0.d0
           B%U(5,i,j,k)=LS_T_ref
           B%p(i,j,k)=LS_P_out
