@@ -123,6 +123,12 @@
     LS_Tol=1.d-8        ! SIMPLE convergence tolerance (pressure correction residual)
     LS_Scheme=1         ! convection scheme: 1=1st-order upwind, 2=2nd-order upwind, 3=MUSCL(Van Leer)
    LS_Algorithm=1      ! pressure-velocity coupling: 1=SIMPLE, 2=SIMPLEC
+
+!---- Porous-media solver parameters (SI units) --------------------------------
+    Porous_T_ref=288.15d0   ! initial/reference solid-frame temperature [K]
+    Porous_alpha_Ts=0.7d0   ! under-relaxation for the Ts (solid-frame) solve
+    Porous_Max_Iter=5000    ! SIMPLE inner iterations per solver call
+    Porous_Tol=1.d-8        ! SIMPLE convergence tolerance (pressure correction residual)
 end
 
 !------read parameter (Namelist type)---------------- 
@@ -150,7 +156,8 @@ end
 		LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref, LS_Inlet_Type, &
 		LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, &
 		LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, &
-		LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm
+		LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm, &
+		Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol
 
 
 	open(99,file="control.ec")
@@ -301,6 +308,9 @@ end
     rpara(54)=LS_alpha_u
     rpara(55)=LS_alpha_T
     rpara(56)=LS_Tol
+    rpara(57)=Porous_T_ref
+    rpara(58)=Porous_alpha_Ts
+    rpara(59)=Porous_Tol
 
 
 
@@ -337,6 +347,7 @@ end
     Ipara(33)=LS_Max_Iter
     Ipara(34)=LS_Scheme
     Ipara(35)=LS_Algorithm
+    Ipara(36)=Porous_Max_Iter
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -395,6 +406,9 @@ end
     LS_alpha_u=rpara(54)
     LS_alpha_T=rpara(55)
     LS_Tol=rpara(56)
+    Porous_T_ref=rpara(57)
+    Porous_alpha_Ts=rpara(58)
+    Porous_Tol=rpara(59)
 
 
 
@@ -430,6 +444,7 @@ end
     LS_Max_Iter=Ipara(33)
     LS_Scheme=Ipara(34)
     LS_Algorithm=Ipara(35)
+    Porous_Max_Iter=Ipara(36)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -525,7 +540,64 @@ end
      print*, "  Block", m, ": Block_type=", Block_Type_List(m), &
              " rho=", solid_rho_list(m), " Cp=", solid_Cp_list(m), " k=", solid_k_list(m)
    enddo
+    call read_porous_prop
   end subroutine read_material_in
+!----------------------------------------------------------------------
+! Read porous material properties from porous.inp (block-uniform first version)
+! Format:
+!   Total_Porous_Blocks
+!   Block_no  eps  dp(m)  hv(W/m3/K)
+!   ...
+! eps in (0,1], dp>0. hv<=0 disables the inter-phase heat exchange (frozen frame).
+! Blocks not listed keep defaults eps=0.9, dp=1e-3 m, hv=0.
+! Called on root inside read_material_in; broadcast follows in bcast_material.
+!----------------------------------------------------------------------
+  subroutine read_porous_prop
+    use Global_var
+    use const_var
+    implicit none
+    integer:: m, n, i
+    logical:: ex
+    allocate(porous_eps_list(Total_block), porous_dp_list(Total_block), &
+             porous_hv_list(Total_block))
+    porous_eps_list(:)=0.9d0
+    porous_dp_list(:)=1.d-3
+    porous_hv_list(:)=0.d0
+    inquire(file="porous.inp", exist=ex)
+    if(.not. ex) then
+      print*, "porous.inp not found: porous blocks use defaults (eps=0.9, dp=1e-3 m, hv=0)"
+      return
+    endif
+    open(97, file="porous.inp")
+    read(97,*) n
+    do i=1, n
+      read(97,*,end=200) m, porous_eps_list(m), porous_dp_list(m), porous_hv_list(m)
+      if(m .lt. 1 .or. m .gt. Total_block) then
+        print*, "  porous.inp: block index out of range", m
+        cycle
+      endif
+      if(porous_eps_list(m) .le. 0.d0 .or. porous_eps_list(m) .gt. 1.d0) then
+        print*, "  porous.inp block", m, ": eps must be in (0,1], reset to 0.9"
+        porous_eps_list(m)=0.9d0
+      endif
+      if(porous_dp_list(m) .le. 0.d0) then
+        print*, "  porous.inp block", m, ": dp must be > 0, reset to 1e-3"
+        porous_dp_list(m)=1.d-3
+      endif
+      cycle
+200   continue
+    enddo
+    close(97)
+    print*, "Read porous.inp OK"
+    do m=1, Total_block
+      if(Block_Type_List(m) .eq. BLOCK_POROUS) then
+        print*, "  Porous Block", m, ": eps=", porous_eps_list(m), &
+                " dp=", porous_dp_list(m), " hv=", porous_hv_list(m), &
+                " rho_s=", solid_rho_list(m), " k_s=", solid_k_list(m)
+      endif
+    enddo
+  end subroutine read_porous_prop
+
 
 !----------------------------------------------------------------------
 ! Read solid thermal boundary conditions from solid_bc.inp

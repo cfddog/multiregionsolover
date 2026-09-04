@@ -313,12 +313,12 @@
    if(my_id .eq. 0)  print*, "read flow3d.dat OK"
 
 !----------------------------------Transform data----------------
- !  For BLOCK_LOWSPEED blocks B%U already stores primitives (rho,u,v,w,T)
- !  and must NOT be converted to conservative variables.
+ !  For BLOCK_LOWSPEED / BLOCK_POROUS blocks B%U already stores primitives
+ !  (rho,u,v,w,T) and must NOT be converted to conservative variables.
  do m=1,MP%Num_Block !
     B=>MP%Block(m)
     nx=B%nx; ny=B%ny; nz=B%nz
-   if(B%Block_type == BLOCK_LOWSPEED) cycle
+   if(B%Block_type == BLOCK_LOWSPEED .or. B%Block_type == BLOCK_POROUS) cycle
  
    do k=0,nz
    do j=0,ny
@@ -340,6 +340,17 @@
 
  enddo
 
+ !  Restart files carry only U(1..5); re-seed pressure and solid-frame
+ !  temperature for porous blocks on every process.
+  do m=1,MP%Num_Block
+    B=>MP%Block(m)
+    if(B%Block_type /= BLOCK_POROUS) cycle
+    nx=B%nx; ny=B%ny; nz=B%nz
+    do k=1-LAP,nz+LAP-1; do j=1-LAP,ny+LAP-1; do i=1-LAP,nx+LAP-1
+      B%p(i,j,k)  = LS_P_out
+      B%Ts(i,j,k) = Porous_T_ref
+    enddo; enddo; enddo
+  enddo
  !
   if(my_id .eq. 0) then
    Inquire(file="Step_mess.dat",exist=Ex)
@@ -421,7 +432,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
       mt=B_n(m) !
 	  B=>MP%Block(mt)
 	 
-	  if(B%Block_type == BLOCK_LOWSPEED) then
+	  if(B%Block_type == BLOCK_LOWSPEED .or. B%Block_type == BLOCK_POROUS) then
 	    do k=0,nz
 	    do j=0,ny
 	    do i=0,nx
@@ -487,7 +498,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 	  Num_data=(nx+1)*(ny+1)*(nz+1)*NVAR1
  	  tag=m
 	 
-	   if(B%Block_type == BLOCK_LOWSPEED) then
+	   if(B%Block_type == BLOCK_LOWSPEED .or. B%Block_type == BLOCK_POROUS) then
 	     do k=0,nz
 	     do j=0,ny
 	     do i=0,nx
@@ -576,7 +587,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
            G(i,j,k,3)=B%z(i,j,k)
          enddo; enddo; enddo
 !        Flow data (cell-centered primitive variables)
-          if(Block_Type_List(m) == BLOCK_LOWSPEED) then
+          if(Block_Type_List(m) == BLOCK_LOWSPEED .or. Block_Type_List(m) == BLOCK_POROUS) then
             do k=0,nz; do j=0,ny; do i=0,nx
               U(i,j,k,1) = B%U(1,i,j,k)      ! rho
               U(i,j,k,2) = B%U(2,i,j,k)      ! u
@@ -661,7 +672,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
        ncells = (nx-1)*(ny-1)*(nz-1)
 
 !      Determine if this is a solid block (check via Block_Type_List)
-       if(Block_Type_List(m) /= BLOCK_SOLID) cycle
+       if(Block_Type_List(m) /= BLOCK_SOLID .and. Block_Type_List(m) /= BLOCK_POROUS) cycle
 
        allocate(G(nx,ny,nz,3))
        allocate(Ts_buf(nx-1,ny-1,nz-1))
@@ -735,7 +746,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 !      Send flow data (cell-centered primitive variables)
        allocate(U(0:nx,0:ny,0:nz,6))
-       if(Block_Type_List(m1) == BLOCK_LOWSPEED) then
+       if(Block_Type_List(m1) == BLOCK_LOWSPEED .or. Block_Type_List(m1) == BLOCK_POROUS) then
          do k=0,nz; do j=0,ny; do i=0,nx
            U(i,j,k,1) = B%U(1,i,j,k)
            U(i,j,k,2) = B%U(2,i,j,k)
@@ -766,7 +777,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
        deallocate(U)
 
 !      Send solid Ts data if this is a solid block
-       if(B%Block_type == BLOCK_SOLID) then
+       if(B%Block_type == BLOCK_SOLID .or. B%Block_type == BLOCK_POROUS) then
          allocate(G(nx,ny,nz,3))
          do k=1,nz; do j=1,ny; do i=1,nx
            G(i,j,k,1)=B%x(i,j,k)

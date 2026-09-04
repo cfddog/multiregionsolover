@@ -1134,18 +1134,9 @@
   end subroutine couple_solid_solid_interfaces
 
 !----------------------------------------------------------------------
-! Porous media solver stub
+! (porous_solver_one_block is implemented in sub_porous.f90)
 !----------------------------------------------------------------------
-  subroutine porous_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
-   use Global_Var
-   implicit none
-   integer:: nMesh, mBlock
-   real(PRE_EC):: Sfac, Sfac1
-!  TODO: implement porous media solver
-  end subroutine porous_solver_one_block
-
-!----------------------------------------------------------------------
-! Output solid temperature field (Ts) for all solid blocks
+! Output solid-frame temperature field (Ts) for solid and porous blocks
 ! Writes one file per block: Ts_block_NNN.dat (formatted, PLOT3D-like)
 !----------------------------------------------------------------------
   subroutine output_Ts
@@ -1158,7 +1149,7 @@
    nMesh = 1
    do mBlock=1, Mesh(nMesh)%Num_Block
      B => Mesh(nMesh)%Block(mBlock)
-     if(B%Block_type /= BLOCK_SOLID) cycle
+     if(B%Block_type /= BLOCK_SOLID .and. B%Block_type /= BLOCK_POROUS) cycle
      nx = B%nx; ny = B%ny; nz = B%nz
      write(fname, '("Ts_block_",I0,".dat")') mBlock
      open(201, file=fname, status='replace')

@@ -286,6 +286,15 @@
 	 call init_flow_zero                   ! ??????????????????????????? ????????????????????????
    else
 	 call read_flow_data
+!    restart file stores only U(1..5); re-seed pressure & frame temperature
+     do m=1,Mesh(1)%Num_Block
+       B => Mesh(1)%Block(m)
+       if(B%Block_type /= BLOCK_POROUS) cycle
+       do k=1-LAP,B%nz+LAP-1; do j=1-LAP,B%ny+LAP-1; do i=1-LAP,B%nx+LAP-1
+         B%p(i,j,k)  = LS_P_out
+         B%Ts(i,j,k) = Porous_T_ref
+       enddo; enddo; enddo
+     enddo
    endif
  
  !    n??n-1??????? ????????????????, ????LU-SGS??? ??????????????
@@ -344,6 +353,22 @@
           B%U(4,i,j,k)=0.d0
           B%U(5,i,j,k)=LS_T_ref
           B%p(i,j,k)=LS_P_out
+        enddo; enddo; enddo
+        cycle
+     endif
+     if(B%Block_type == BLOCK_POROUS) then
+!        porous block: same primitive variables U=[rho,u,v,w,Tf] as low-speed,
+!        pressure in B%p, solid-frame temperature in B%Ts
+        do k=1-LAP,B%nz+LAP-1
+        do j=1-LAP,B%ny+LAP-1
+        do i=1-LAP,B%nx+LAP-1
+          B%U(1,i,j,k)=LS_rho
+          B%U(2,i,j,k)=LS_rho*LS_U_in
+          B%U(3,i,j,k)=LS_rho*LS_V_in
+          B%U(4,i,j,k)=0.d0
+          B%U(5,i,j,k)=LS_T_ref
+          B%p(i,j,k)=LS_P_out
+          B%Ts(i,j,k)=Porous_T_ref
         enddo; enddo; enddo
         cycle
      endif
@@ -645,6 +670,18 @@
    call MPI_bcast(solid_rho_list,Total_block,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
    call MPI_bcast(solid_Cp_list,Total_block,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
    call MPI_bcast(solid_k_list,Total_block,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+   if(.not. associated(porous_eps_list)) then
+     if(my_id .eq. 0) then
+       allocate(porous_eps_list(Total_block), porous_dp_list(Total_block), porous_hv_list(Total_block))
+       porous_eps_list(:)=0.9d0; porous_dp_list(:)=1.d-3; porous_hv_list(:)=0.d0
+     endif
+   endif
+   if(my_id .ne. 0) then
+     allocate(porous_eps_list(Total_block), porous_dp_list(Total_block), porous_hv_list(Total_block))
+   endif
+   call MPI_bcast(porous_eps_list,Total_block,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+   call MPI_bcast(porous_dp_list,Total_block,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+   call MPI_bcast(porous_hv_list,Total_block,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
   end subroutine bcast_material
 
 !-----------------------------------------------------------------------
@@ -666,6 +703,9 @@
      B%solid_rho=solid_rho_list(ib)
      B%solid_Cp=solid_Cp_list(ib)
      B%solid_k=solid_k_list(ib)
+     B%porous_eps=porous_eps_list(ib)
+     B%porous_dp=porous_dp_list(ib)
+     B%porous_hv=porous_hv_list(ib)
    enddo
   end subroutine set_block_type
 !------------------------------------------------

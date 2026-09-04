@@ -55,7 +55,19 @@
    integer,parameter::  BC_Interface_LowSolid    = 13
    integer,parameter::  BC_Interface_SolidSolid  = 14
    integer,parameter::  BC_Interface_FluidFluid  = 15
-   integer,parameter::  BC_Interface_First = 11, BC_Interface_Last = 15
+!  Porous-media interfaces.  Same convention as 11-15: the code identifies the
+!  PAIR of block types, never the direction.  On a given face the neighbour's
+!  block type (Block_Type_List(nb1)) decides which routine handles the pair and
+!  from which side it is processed once.
+!    16 low-speed (BLOCK_LOWSPEED) - porous (BLOCK_POROUS)
+!    17 solid     (BLOCK_SOLID)    - porous (BLOCK_POROUS)
+!    18 porous    (BLOCK_POROUS)   - porous (BLOCK_POROUS)
+!    19 compressible (BLOCK_FLUID) - porous (BLOCK_POROUS)
+   integer,parameter::  BC_Interface_LowPorous    = 16
+   integer,parameter::  BC_Interface_SolidPorous  = 17
+   integer,parameter::  BC_Interface_PorousPorous = 18
+   integer,parameter::  BC_Interface_FluidPorous  = 19
+   integer,parameter::  BC_Interface_First = 11, BC_Interface_Last = 19
 
 !  Explicit low-speed inlet / outlet types (kept distinct from the
 !  compressible BC_Inflow / BC_Outflow codes).
@@ -147,6 +159,11 @@
 	 integer,pointer,dimension(:):: solid_bc_face_no ! face number in bc_msg (1-based)
 	 real(PRE_EC),pointer,dimension(:):: solid_bc_Tw ! wall temperature (K, dimensional; >0 isothermal, <0 heat flux)
 	 real(PRE_EC),pointer,dimension(:):: solid_bc_Qw ! heat flux (W/m2, dimensional; used when Tw<0)
+!     Porous-media material properties (block-uniform in the first version).
+!     The solid skeleton uses solid_rho / solid_Cp / solid_k above (read from
+!     material.in for every block); the extra porous quantities come from
+!     porous.inp and are copied here by set_block_type.
+	 real(PRE_EC):: porous_eps, porous_dp, porous_hv ! porosity, particle diam. (m), volumetric h_fs*A_fs (W/m3/K)
 	End TYPE Block_TYPE  
 
  !
@@ -223,6 +240,7 @@
    real(PRE_EC),save:: Periodic_dX,Periodic_dY,Periodic_dZ
    integer,pointer,dimension(:):: Block_Type_List ! global block type list (0=fluid, 1=solid, 2=low-speed, 3=porous)
    real(PRE_EC),pointer,dimension(:):: solid_rho_list, solid_Cp_list, solid_k_list  ! global solid material property lists
+   real(PRE_EC),pointer,dimension(:):: porous_eps_list, porous_dp_list, porous_hv_list ! global porous material lists
 
  
  !
@@ -237,6 +255,8 @@
    real(PRE_EC),save:: LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref    ! low-speed fluid properties (SI units)
    real(PRE_EC),save:: LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, LS_T_wall, LS_U_lid ! low-speed BC parameters
    real(PRE_EC),save:: LS_alpha_p, LS_alpha_u, LS_alpha_T, LS_Tol  ! low-speed under-relaxation + tolerance
+   real(PRE_EC),save:: Porous_T_ref, Porous_alpha_Ts, Porous_Tol    ! porous: initial/frame T ref, Ts relaxation, SIMPLE tolerance
+   integer,save:: Porous_Max_Iter                                   ! porous SIMPLE inner iterations per solver call
  !-----------mpi data ----------------------------------------------------------- 
    integer:: my_id,Total_proc !
    integer,pointer,dimension(:):: B_Proc, B_n !
