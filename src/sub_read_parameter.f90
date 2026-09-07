@@ -93,6 +93,8 @@
 	Periodic_dZ=0.d0
 
     Iflag_savefile=0       ! ???��??flow3d.dat
+    Iflag_vtk_onefile=0    ! 0=one vtk per block (flow3d_block_*.vtk), 1=single merged flow3d.vtk
+    Iflag_vtk_SI=0         ! 0=compressible blocks written non-dimensional, 1=convert to SI units in vtk
 !----for Turbomachinary solver------------
     IF_TurboMachinary=0    ! ??????????????
 	Ref_medium_usrdef=0    ! ???????????? ???????????
@@ -152,7 +154,7 @@ end
         IF_TurboMachinary, Ref_medium_usrdef, IF_Scheme_Positivity, &
 		Turbo_P0,Turbo_T0, Turbo_L0,Turbo_w, Turbo_Periodic_seta, &
 		Periodic_dX, Periodic_dY, Periodic_dZ, &
-		IF_Innerflow, Iflag_savefile, &
+		IF_Innerflow, Iflag_savefile, Iflag_vtk_onefile, Iflag_vtk_SI, &
 		LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref, LS_Inlet_Type, &
 		LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, &
 		LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, &
@@ -348,6 +350,8 @@ end
     Ipara(34)=LS_Scheme
     Ipara(35)=LS_Algorithm
     Ipara(36)=Porous_Max_Iter
+    Ipara(37)=Iflag_vtk_onefile
+    Ipara(38)=Iflag_vtk_SI
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -445,6 +449,8 @@ end
     LS_Scheme=Ipara(34)
     LS_Algorithm=Ipara(35)
     Porous_Max_Iter=Ipara(36)
+    Iflag_vtk_onefile=Ipara(37)
+    Iflag_vtk_SI=Ipara(38)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -613,11 +619,14 @@ end
    use Global_var
    use mod_type_def
    implicit none
-   integer:: m, n, i, j, nf, unit
+   integer:: m, n, i, j, nf, unit, ios
    logical:: ex
    integer,allocatable:: nface_global(:)
    integer,allocatable:: face_global(:,:)
    real(PRE_EC),allocatable:: Tw_global(:,:), Qw_global(:,:)
+   real(PRE_EC),allocatable:: htc_global(:,:), Tinf_global(:,:)
+   real(PRE_EC):: f1, f2, f3
+   character(len=256):: line
    Type (Block_TYPE),pointer:: B
 
    if(my_id .eq. 0) then
@@ -633,14 +642,21 @@ end
      allocate(face_global(6, Total_block))
      allocate(Tw_global(6, Total_block))
      allocate(Qw_global(6, Total_block))
+     allocate(htc_global(6, Total_block))
+     allocate(Tinf_global(6, Total_block))
      face_global = 0; Tw_global = 0.d0; Qw_global = 0.d0
+     htc_global = 0.d0; Tinf_global = 0.d0
      do i = 1, n
        read(unit,*) m
        read(unit,*) nf
        if(m .ge. 1 .and. m .le. Total_block) then
          nface_global(m) = nf
          do j = 1, nf
-           read(unit,*) face_global(j,m), Tw_global(j,m), Qw_global(j,m)
+           read(unit,'(A)') line
+           read(line,*,iostat=ios) face_global(j,m), Tw_global(j,m), Qw_global(j,m)
+           if(ios .eq. 0) then
+             read(line,*,iostat=ios) f1, f2, f3, htc_global(j,m), Tinf_global(j,m)
+           endif
          enddo
        endif
      enddo
@@ -653,10 +669,14 @@ end
    if(.not. allocated(face_global)) allocate(face_global(6, Total_block))
    if(.not. allocated(Tw_global)) allocate(Tw_global(6, Total_block))
    if(.not. allocated(Qw_global)) allocate(Qw_global(6, Total_block))
+   if(.not. allocated(htc_global)) allocate(htc_global(6, Total_block))
+   if(.not. allocated(Tinf_global)) allocate(Tinf_global(6, Total_block))
    call MPI_Bcast(nface_global, Total_block, MPI_INTEGER, 0, MPI_COMM_WORLD, i)
    call MPI_Bcast(face_global, 6*Total_block, MPI_INTEGER, 0, MPI_COMM_WORLD, i)
    call MPI_Bcast(Tw_global, 6*Total_block, OCFD_DATA_TYPE, 0, MPI_COMM_WORLD, i)
    call MPI_Bcast(Qw_global, 6*Total_block, OCFD_DATA_TYPE, 0, MPI_COMM_WORLD, i)
+   call MPI_Bcast(htc_global, 6*Total_block, OCFD_DATA_TYPE, 0, MPI_COMM_WORLD, i)
+   call MPI_Bcast(Tinf_global, 6*Total_block, OCFD_DATA_TYPE, 0, MPI_COMM_WORLD, i)
 
 !  Set per-block data
    do m = 1, Total_block
@@ -667,10 +687,14 @@ end
        allocate(B%solid_bc_face_no(nf))
        allocate(B%solid_bc_Tw(nf))
        allocate(B%solid_bc_Qw(nf))
+       allocate(B%solid_bc_htc(nf))
+       allocate(B%solid_bc_Tinf(nf))
        do j = 1, nf
          B%solid_bc_face_no(j) = face_global(j,m)
          B%solid_bc_Tw(j) = Tw_global(j,m)
          B%solid_bc_Qw(j) = Qw_global(j,m)
+         B%solid_bc_htc(j) = htc_global(j,m)
+         B%solid_bc_Tinf(j) = Tinf_global(j,m)
        enddo
        if(my_id .eq. 0) then
          print*, "  Block", m, " (solid):", nf, " thermal BC faces"
@@ -681,5 +705,5 @@ end
      endif
    enddo
 
-   deallocate(nface_global, face_global, Tw_global, Qw_global)
+   deallocate(nface_global, face_global, Tw_global, Qw_global, htc_global, Tinf_global)
   end subroutine read_solid_bc

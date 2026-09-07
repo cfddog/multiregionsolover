@@ -1,0 +1,13 @@
+case: L=0.01 m, eps=0.3, ks=13.4, hv=2.000e+06 W/m3K, G=2.0, cp=1007.0
+kse=(1-eps)ks = 9.3800 W/mK   G*cp = 2014.0 W/m2K
+   station       Tf_num        Tf_an       Ts_num        Ts_an  Ts-Tf_num
+       y=0     302.6417     302.6742     515.4531     516.7776   212.8115
+     y=L/4     540.3873     542.0256     597.1520     598.5227    56.7647
+     y=L/2     696.6315     697.7612     770.5770     771.6890    73.9454
+    y=3L/4     925.2279     925.9479    1040.2000    1041.0214   114.9721
+       y=L    1287.0460    1287.4183    1467.8656    1468.5374   180.8196
+Tf RMS err  = 1.1717e+00 K   max|err| = 1.7951e+00 K
+Ts RMS err  = 1.1098e+00 K   max|err| = 1.3975e+00 K
+rel err (Tf, vs dTf) = 1.823e-03
+energy balance: q=2.000e+06; out=Gcp dTf+ hc dTs =1.995e+06; rel gap=2.662e-03
+plot not written: No module named 'matplotlib'

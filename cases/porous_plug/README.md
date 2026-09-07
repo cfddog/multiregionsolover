@@ -47,20 +47,22 @@ conda run -n num_python python3 plot_validation/pv_main.py .        validation_l
 |---|---|---|
 | `darcy/`（压差驱动，LS_Inlet_Type=3, LS_P_in=0.25） | 230 步, res=1e-9 | p 沿程线性，拟合 dp/dx=−3.08e-2 Pa/m；u_max=9.17e-3、柱均 u=7.85e-3，与按拟合 dp/dx 的 Darcy–Brinkman 解误差 **+0.48%** |
 | `velinlet/`（速度入口 u_in=0.01） | 643 步, res=1e-8 | 局部 Brinkman 一致（柱均 u vs 解析 +0.51%）；但 **柱均 u/u_in=0.722**（约 28% 通量缺口） |
-| LTNE（本目录, hv=50, Tw=400 K, LS_U_in=0.05） | 782 步 | Tf∈[311.6,400.0]、Ts∈[380.8,400.0] K；中心线在下游迅速趋近 400 K，近壁 Ts≈400 |
+| LTNE（本目录, hv=50, Tw=400 K, LS_U_in=0.05） | 782 步 | Tf∈[396.3,400.0]、Ts∈[399.4,400.0] K（修复 hv 体源后：骨架/流体经壁面 400 K 充分换热、两者均贴近 400 K，趋势合理、有界） |
 
 结论：
 
 - 压差驱动的多孔塞（经典 Darcy–Brinkman 定解）定量吻合（<0.5%），说明多孔阻力源项、粘度项、压力梯度在 SIMPLE 离散中实现正确；
 - **速度入口 + 强多孔阻力**情形下，SIMPLE 得到的域内平均流量低于指定入口速度（u_bar/u_in≈0.72），而局部压力-速度关系仍与 Brinkman 一致 —— 说明速度入口在阻力主导下并未像预期那样“锁定”总流量（入口面质量通量与压力修正/动量耦合需要进一步排查）。因此 plug 类验证建议使用**压差驱动**入口（LS_Inlet_Type=3），或多块结构的“低速-多孔”界面。
-- LTNE 温度场有界、无 NaN，骨架/流体两温度趋势合理；进一步定量验证需要与 Wakao/二维 LTNE 解析解对比（下一步）。
+- LTNE 温度场有界、无 NaN。**注意（2026-09-07 修复）**：多孔流体相能量方程中 `h_v·Vol·(Ts−Tf)` 的 `Vol` 此前未赋值（未初始化），使流-固相间换热实际失效——本算例早期版本正是靠"壁面同时加热两相"掩盖了该缺陷；修复后两温度经壁面 400 K + `hv` 交换充分耦合（上表数值）。定量验证（一维发汗冷却 LTNE 两温度解析解）见 `cases/porous_ltne_1d`（对解析解 Tf/Ts 相对误差 ~0.2%）。
 
 图：`validation_darcy.png`、`validation_darcy_velinlet.png`、`validation_ltne.png`。
 
 ## 待办（下一阶段）
 
+- LowPorous 界面耦合（接口码 16）已在 `sub_multi_region.f90` 实现（`couple_lowspeed_porous_interfaces`），
+  并有 `cases/beavers_joseph/` 两块 **Beavers–Joseph** 验证算例（中网格剖面误差 < 0.1%）。
+  SolidPorous / PorousPorous（17/18）尚未实现。
 - 排查“速度入口 + 强阻力”下总通量与入口速度不一致的问题（入口面通量/压力修正耦合）
-- LowPorous / SolidPorous / PorousPorous 界面耦合（接口码 16/17/18 已定义）
 - Ts 缓冲交换按块类型过滤（只交换 solid/porous 之间），并核对耦合与缓冲先后顺序
 - 进出口处可采用“纯流体(lowspeed)-多孔-纯流体”三块结构替代直接把 BC 加在多孔块上
 - 后处理输出 p/Ts 进重启文件

@@ -344,12 +344,13 @@
      B => MP%Block(m)                
      if(B%Block_type == BLOCK_LOWSPEED) then
 !        low-speed block: primitive variables U=[rho,u,v,w,T], pressure in B%p
+!        (U(2..4) store VELOCITY, not momentum: U(1) carries LS_rho)
         do k=1-LAP,B%nz+LAP-1
         do j=1-LAP,B%ny+LAP-1
         do i=1-LAP,B%nx+LAP-1
           B%U(1,i,j,k)=LS_rho
-          B%U(2,i,j,k)=LS_rho*LS_U_in
-          B%U(3,i,j,k)=LS_rho*LS_V_in
+          B%U(2,i,j,k)=LS_U_in
+          B%U(3,i,j,k)=LS_V_in
           B%U(4,i,j,k)=0.d0
           B%U(5,i,j,k)=LS_T_ref
           B%p(i,j,k)=LS_P_out
@@ -514,6 +515,8 @@
      nullify(B%solid_bc_face_no)
      nullify(B%solid_bc_Tw)
      nullify(B%solid_bc_Qw)
+     nullify(B%solid_bc_htc)
+     nullify(B%solid_bc_Tinf)
      B%solid_bc_nface = 0
 	  	 
 !   ???????   (x,y,z) ??????? (xc,yc,zc)????????????; Vol ??????????? U, Un ??????

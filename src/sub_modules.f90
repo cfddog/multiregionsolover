@@ -159,6 +159,8 @@
 	 integer,pointer,dimension(:):: solid_bc_face_no ! face number in bc_msg (1-based)
 	 real(PRE_EC),pointer,dimension(:):: solid_bc_Tw ! wall temperature (K, dimensional; >0 isothermal, <0 heat flux)
 	 real(PRE_EC),pointer,dimension(:):: solid_bc_Qw ! heat flux (W/m2, dimensional; used when Tw<0)
+	 real(PRE_EC),pointer,dimension(:):: solid_bc_htc  ! convective htc (W/m2/K); Robin BC when Tw==0 and htc>0
+	 real(PRE_EC),pointer,dimension(:):: solid_bc_Tinf ! ambient temperature (K) for convective (Robin) BC
 !     Porous-media material properties (block-uniform in the first version).
 !     The solid skeleton uses solid_rho / solid_Cp / solid_k above (read from
 !     material.in for every block); the extra porous quantities come from
@@ -221,7 +223,7 @@
       IF_Walldist, IFLAG_LIMIT_FLOW, & !
       IF_Scheme_Positivity,          & !
       Kstep_average,                 & !
-      Iflag_savefile !
+      Iflag_savefile, Iflag_vtk_onefile, Iflag_vtk_SI !
    integer,save:: IF_TurboMachinary , Ref_medium_usrdef !
    integer,save:: IF_InnerFlow !
 

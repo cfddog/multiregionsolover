@@ -248,7 +248,7 @@
    Type (Block_TYPE),pointer:: B
    real(PRE_EC):: uin_x, uin_y, uin_z
    real(PRE_EC):: uw, vw, ww    ! wall velocity components (lid-driven)
-    real(PRE_EC):: Tw_val, Qw_val, dx_g
+    real(PRE_EC):: Tw_val, Qw_val, dx_g, htc_val, Tinf_val, ks_eff
     integer:: ii
     logical:: found_bc
 
@@ -266,17 +266,22 @@
    end interface
 
 !  Look up a per-face thermal BC (from solid_bc.inp, reused for porous blocks).
-!  Tw>0 -> isothermal at Tw (K); else Qw (W/m2) heat flux.
+!  Tw>0    -> isothermal at Tw (K);
+!  Tw<0    -> heat flux Qw (W/m2);
+!  Tw==0 & htc>0 -> convective (Robin) q = htc*(T - Tinf).
+!  The BC is applied to the SOLID-FRAME temperature Ts on ANY physical face
+!  (wall / inlet / outlet / symmetry) that carries a solid_bc.inp entry, so the
+!  frame and the fluid can have independent boundary conditions at one face.
    found_bc = .false.; Tw_val = 0.d0; Qw_val = 0.d0
+   htc_val = 0.d0; Tinf_val = 0.d0
    if(associated(B%solid_bc_face_no)) then
      do ii=1, B%solid_bc_nface
        if(B%solid_bc_face_no(ii) == face_s) then
          found_bc = .true.
-         if(B%solid_bc_Tw(ii) > 0.d0) then
-           Tw_val = B%solid_bc_Tw(ii)
-         else
-           Qw_val = B%solid_bc_Qw(ii)
-         endif
+         Tw_val   = B%solid_bc_Tw(ii)
+         Qw_val   = B%solid_bc_Qw(ii)
+         htc_val  = B%solid_bc_htc(ii)
+         Tinf_val = B%solid_bc_Tinf(ii)
          exit
        endif
      enddo
@@ -333,20 +338,32 @@
 
 
 !  --- porous solid-frame temperature ghost ---
-!  Adiabatic (zero-gradient) by default.  Wall faces honour the per-face
-!  thermal BC: isothermal (Ts = 2*Tw - Ts_int) or heat flux
-!  (Ts = Ts_int + Qw*dx/k_s, linear ghost extrapolation).
+!  Adiabatic (zero-gradient) by default.  A face with a solid_bc.inp entry
+!  honours the per-phase thermal BC on the frame:
+!    isothermal : Ts_g = 2*Tw - Ts_int
+!    heat flux  : Ts_g = Ts_int + Qw*dx/kse  (linear ghost extrapolation)
+!    convective : kse*(Ts_int - Ts_g)/dx = htc*((Ts_int+Ts_g)/2 - Tinf)
+!  with kse = (1-eps)*k_s (effective skeleton conductivity).
+!  (dx = distance between the interior and ghost cell centres).
    B%Ts(ig,jg,kg) = B%Ts(i2,j2,k2)
-   if(bc == BC_Wall) then
-     if(found_bc) then
-       if(Tw_val > 0.d0) then
-         B%Ts(ig,jg,kg) = 2.d0*Tw_val - B%Ts(i2,j2,k2)
-       else if(Qw_val /= 0.d0) then
-         dx_g = sqrt( (B%xc(ig,jg,kg)-B%xc(i2,j2,k2))**2 &
-                    + (B%yc(ig,jg,kg)-B%yc(i2,j2,k2))**2 &
-                    + (B%zc(ig,jg,kg)-B%zc(i2,j2,k2))**2 ) * Lscale
-         B%Ts(ig,jg,kg) = B%Ts(i2,j2,k2) + Qw_val*dx_g/max(B%solid_k, 1.d-30)
-       endif
+   if(found_bc) then
+     if(Tw_val > 0.d0) then
+       B%Ts(ig,jg,kg) = 2.d0*Tw_val - B%Ts(i2,j2,k2)
+     else if(Tw_val == 0.d0 .and. htc_val > 0.d0 .and. Qw_val == 0.d0) then
+       dx_g = sqrt( (B%xc(ig,jg,kg)-B%xc(i2,j2,k2))**2 &
+                  + (B%yc(ig,jg,kg)-B%yc(i2,j2,k2))**2 &
+                  + (B%zc(ig,jg,kg)-B%zc(i2,j2,k2))**2 ) * Lscale
+       ! effective skeleton conductivity (Ts eq. is in total-volume units):
+       ks_eff = max((1.d0 - B%porous_eps)*B%solid_k, 1.d-30)
+       B%Ts(ig,jg,kg) = ( (ks_eff - 0.5d0*htc_val*dx_g)*B%Ts(i2,j2,k2) &
+                        + htc_val*dx_g*Tinf_val ) &
+                      / max(ks_eff + 0.5d0*htc_val*dx_g, 1.d-30)
+     else if(Qw_val /= 0.d0) then
+       dx_g = sqrt( (B%xc(ig,jg,kg)-B%xc(i2,j2,k2))**2 &
+                  + (B%yc(ig,jg,kg)-B%yc(i2,j2,k2))**2 &
+                  + (B%zc(ig,jg,kg)-B%zc(i2,j2,k2))**2 ) * Lscale
+       ks_eff = max((1.d0 - B%porous_eps)*B%solid_k, 1.d-30)
+       B%Ts(ig,jg,kg) = B%Ts(i2,j2,k2) + Qw_val*dx_g/ks_eff
      endif
    endif
 !  density is constant
@@ -1136,6 +1153,7 @@ integer,parameter:: INNER=3
      do k=1,nz-1
      do j=1,ny-1
      do i=1,nx-1
+       vol = B%Vol(i,j,k)
        De = kcond*B%Si(i+1,j,k)/max(B%xc(i+1,j,k)-B%xc(i,j,k), 1.d-30)
        Dwe = kcond*B%Si(i,j,k)/max(B%xc(i,j,k)-B%xc(i-1,j,k), 1.d-30)
        Dn = kcond*B%Sj(i,j+1,k)/max(B%yc(i,j+1,k)-B%yc(i,j,k), 1.d-30)
