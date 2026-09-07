@@ -15,6 +15,7 @@
      do mBlock=1,Mesh(nMesh)%Num_Block
        B => Mesh(nMesh)%Block(mBlock)
        if(B%Block_type == BLOCK_SOLID) cycle   ! Skip solid blocks (handled by solid solver)
+       if(B%Block_type == BLOCK_POROUS) cycle  ! porous: physical BCs applied inside porous solver
        if(B%Block_type == BLOCK_LOWSPEED) then
          call lowspeed_boundary_block(nMesh, mBlock)
          cycle

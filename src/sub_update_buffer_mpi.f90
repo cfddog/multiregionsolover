@@ -697,6 +697,7 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
 !----------------------------------------------------------------------
      subroutine Ts_send_mpi(nMesh)
      use Global_Var
+     use const_var
      use interface_defines
      implicit none
      Type (Block_TYPE),pointer:: B,B1
@@ -711,6 +712,7 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
    do ksub=1,B%subface
      Bc=> B%bc_msg2(ksub)
      if(.not. is_interface_bc(Bc%bc)) cycle
+     if(.not. (B%Block_type==BLOCK_SOLID .or. B%Block_type==BLOCK_POROUS)) cycle
 !     Source data: LAP layers near boundary
      kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
      k=mod(Bc%face-1,3)+1
@@ -745,6 +747,7 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
          enddo
        enddo
      enddo
+     if(.not. (Block_Type_List(Bc%nb1)==BLOCK_SOLID .or. Block_Type_List(Bc%nb1)==BLOCK_POROUS)) cycle
      Send_to_ID=B_proc(Bc%nb1)
      if(Send_to_ID .ne. my_id) then
        Num_data=(ke1(1)-kb1(1)+1)*(ke1(2)-kb1(2)+1)*(ke1(3)-kb1(3)+1)
@@ -769,6 +772,7 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
 !----------------------------------------------------------------------
  subroutine Ts_recv_mpi(nMesh)
      use Global_Var
+     use const_var
      use interface_defines
      implicit none
      Type (Block_TYPE),pointer:: B
@@ -783,6 +787,8 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
    do ksub=1,B%subface
      Bc=> B%bc_msg2(ksub)
      if(.not. is_interface_bc(Bc%bc)) cycle
+     if(.not. (B%Block_type==BLOCK_SOLID .or. B%Block_type==BLOCK_POROUS)) cycle
+     if(.not. (Block_Type_List(Bc%nb1)==BLOCK_SOLID .or. Block_Type_List(Bc%nb1)==BLOCK_POROUS)) cycle
      Recv_from_ID=B_proc(Bc%nb1)
      if(Recv_from_ID .eq. my_id) cycle
      kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1

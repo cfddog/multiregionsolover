@@ -532,10 +532,12 @@
 
 !      High-speed (compressible) <-> low-speed fluid pair: handled once from
 !      the compressible side (B = FLUID, Bn = LOWSPEED)
-       if(B%Block_type == BLOCK_FLUID .and. Bn%Block_type == BLOCK_LOWSPEED) then
+       if(B%Block_type == BLOCK_FLUID .and. &
+          (Bn%Block_type == BLOCK_LOWSPEED .or. Bn%Block_type == BLOCK_POROUS)) then
          call couple_highlow_fluid_face(nMesh, B, Bn, Bc2)
          cycle
-       else if(B%Block_type == BLOCK_LOWSPEED .and. Bn%Block_type == BLOCK_FLUID) then
+       else if((B%Block_type == BLOCK_LOWSPEED .or. B%Block_type == BLOCK_POROUS) &
+               .and. Bn%Block_type == BLOCK_FLUID) then
          cycle   ! handled from the compressible side above
        endif
 
@@ -917,12 +919,17 @@
       TYPE (BC_MSG_TYPE),pointer:: Bc2
       integer:: face_s, face1, i, k, jc_h, jc_l, jg_l, n1, n2
       real(PRE_EC):: rho, uu, vv, TT, rho_s, u_s, v_s, T_s, p_nd, E_s
-      real(PRE_EC),parameter:: R_AIR = 287.0d0, RHO_REF = 1.0d0
+      real(PRE_EC),parameter:: R_AIR = 287.0d0
+      real(PRE_EC),parameter:: MU_SI0 = 1.716d-5, T_SI0 = 273.15d0, S_SI = 110.4d0
+      real(PRE_EC):: RHO_REF, mu_inf_p
       real(PRE_EC),parameter:: U_MAX_LS = 30.d0   ! m/s tangential cap (low-speed side)
       real(PRE_EC),parameter:: V_MAX_LS = 1.0d0   ! m/s normal cap (low-speed side)
       real(PRE_EC):: a_ref, U_ref
       real(PRE_EC):: U1,U2,U3,U5, r1, u1s, v1s, p1n, T1s
       real(PRE_EC):: p_anch
+      logical:: has_pfix
+      integer:: ksub2
+      TYPE (BC_MSG_TYPE),pointer:: Bcl
 
       face_s = Bc2%face
       face1  = Bc2%face1
@@ -931,6 +938,8 @@
         return
       endif
       a_ref = sqrt(gamma*R_AIR*T_inf)
+      mu_inf_p = MU_SI0*sqrt((T_inf/T_SI0)**3)*(T_SI0+S_SI)/(T_inf+S_SI)
+      RHO_REF = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
       U_ref = Ma*a_ref
 !     compressible block B (j- face): interior row jc_h = jb, ghost row 0
       jc_h = Bc2%jb
@@ -943,10 +952,10 @@
       do k = Bc2%kb, Bc2%ke-1
       do i = Bc2%ib, Bc2%ie-1
 !       --- compressible ghost <- low-speed interior ---
-        rho = Bn%U(1,i,jc_l,k)
-        uu  = Bn%U(2,i,jc_l,k)/rho
-        vv  = Bn%U(3,i,jc_l,k)/rho
-        TT  = Bn%U(5,i,jc_l,k)
+        rho = Bn%U(1,i,jc_l,k)          ! physical density [kg/m3]
+        uu  = Bn%U(2,i,jc_l,k)          ! velocity [m/s] (LS stores velocity in U(2..4))
+        vv  = Bn%U(3,i,jc_l,k)
+        TT  = Bn%U(5,i,jc_l,k)          ! temperature [K]
         rho_s = rho/RHO_REF
         u_s   = uu/U_ref
         v_s   = vv/U_ref
@@ -979,24 +988,43 @@
         TT  = T1s*T_inf
         do n1 = jg_l, jg_l+LAP-1
           Bn%U(1,i,n1,k) = rho
-          Bn%U(2,i,n1,k) = rho*uu
-          Bn%U(3,i,n1,k) = rho*vv
+!         low-speed block stores VELOCITY in U(2..4) (U(1)=density); the old
+!         rho*uu form was only harmless while rho=1 kg/m^3
+          Bn%U(2,i,n1,k) = uu
+          Bn%U(3,i,n1,k) = vv
           Bn%U(4,i,n1,k) = 0.d0
           Bn%U(5,i,n1,k) = TT
           Bn%p(i,n1,k)   = Bn%p(i,jc_l,k)
         enddo
       enddo; enddo
 
-!     No pressure-Dirichlet face on the low-speed block (velocity inlet +
-!     walls + exchange face): SIMPLE pressure has an undetermined constant.
-!     Anchor it each outer step so it cannot drift.
-      p_anch = Bn%p(1,1,1)
-      if(abs(p_anch) > 1.d-12) then
-        do k = 1, Bn%nz-1
-        do j = 1, Bn%ny-1
-        do i = 1, Bn%nx-1
-          Bn%p(i,j,k) = Bn%p(i,j,k) - p_anch
-        enddo; enddo; enddo
+!     Anchor the low-speed pressure only when the block has NO pressure-
+!     Dirichlet face (velocity inlet + walls + exchange face): with a
+!     pressure inlet (LS_Inlet_Type=3) or pressure outlet the level is fixed
+!     by that face, and the old whole-field shift (subtract p(1,1,1)) would
+!     zero the interior pressure while the inlet ghost keeps p_face=LS_P_in,
+!     producing a spurious O(LS_P_in) gradient at the inlet.
+      has_pfix = .false.
+      do ksub2 = 1, Bn%subface
+        Bcl => Bn%bc_msg(ksub2)
+        if(is_interface_bc(Bcl%bc)) cycle
+        if(Bcl%bc == BC_Outflow .or. Bcl%bc == BC_LS_Outlet) then
+          has_pfix = .true.; exit
+        endif
+        if((Bcl%bc == BC_Inflow .or. Bcl%bc == BC_LS_Inlet) .and. &
+           LS_Inlet_Type == 3) then
+          has_pfix = .true.; exit
+        endif
+      enddo
+      if(.not. has_pfix) then
+        p_anch = Bn%p(1,1,1)
+        if(abs(p_anch) > 1.d-12) then
+          do k = 1, Bn%nz-1
+          do j = 1, Bn%ny-1
+          do i = 1, Bn%nx-1
+            Bn%p(i,j,k) = Bn%p(i,j,k) - p_anch
+          enddo; enddo; enddo
+        endif
       endif
      end subroutine couple_highlow_fluid_face
 
@@ -1132,6 +1160,153 @@
      enddo
    enddo
   end subroutine couple_solid_solid_interfaces
+
+!----------------------------------------------------------------------
+! Low-speed (BLOCK_LOWSPEED) <-> porous (BLOCK_POROUS) interface coupling
+! (explicit interface code BC_Interface_LowPorous = 16).
+!
+! Both solvers store the SAME incompressible primitive layout on the cells:
+!   U(1)   = rho  (density, constant = LS_rho)
+!   U(2:4) = rho*(u,v,w)  (momentum, SI units)
+!   U(5)   = Tf           (fluid temperature, K)
+!   B%p    = pressure     (Pa, cell-centred)
+! The porous block additionally carries the solid-frame temperature B%Ts,
+! which is NOT exchanged here (isothermal low-porous test cases keep the
+! inter-phase heat exchange off, hv=0; the porous ghost Ts keeps its
+! zero-gradient initial value on the interface face).
+!
+! For every interface face the LAP ghost cells of block B are filled with
+! the neighbour block's first interior cell values so that the tangential
+! velocity, pressure and temperature are continuous across the face.
+! The normal velocity on a conformal flat interface is ~0 in the fully
+! developed Beavers-Joseph test, so the interface face mass flux stays 0 on
+! both sides and only the tangential momentum (viscous shear) is coupled
+! through the ghosts.
+!
+! Supported: conformal, axis-aligned, index-aligned block faces (1:1
+! tangential node ranges, opposite low/high normal orientation).  A pair is
+! processed once from each side (like couple_solid_solid_interfaces).
+!----------------------------------------------------------------------
+  subroutine couple_lowspeed_porous_interfaces(nMesh)
+   use Global_Var
+   use const_var
+   implicit none
+   integer:: nMesh
+   Type (Block_TYPE),pointer:: B, Bn
+   TYPE (BC_MSG_TYPE),pointer:: Bc2
+   integer:: mBlock, ksub, nb, mb
+   integer:: face_s, face1, n, i, j, k
+   integer:: i1, j1, k1          ! normal index of neighbour's first interior cell
+   logical:: ok
+
+   do mBlock=1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(.not. associated(B%bc_msg2)) cycle
+     do ksub=1, B%subface
+       Bc2 => B%bc_msg2(ksub)
+       if(.not. is_interface_bc(Bc2%bc)) cycle
+       nb = Bc2%nb1
+       if(nb <= 0) cycle
+       mb = B_n(nb)
+       if(mb <= 0) cycle
+       Bn => Mesh(nMesh)%Block(mb)
+
+!      this routine couples exactly one LOWSPEED block with one POROUS block
+       if(.not. ((B%Block_type == BLOCK_LOWSPEED .and. Bn%Block_type == BLOCK_POROUS) .or. &
+                 (B%Block_type == BLOCK_POROUS  .and. Bn%Block_type == BLOCK_LOWSPEED))) cycle
+
+       face_s = Bc2%face     ! face of B at the interface
+       face1  = Bc2%face1    ! face of Bn at the interface
+!      conformal flat interface: same normal axis, opposite low/high faces
+       ok = .false.
+       if(face_s == 1 .and. face1 == 4) ok = .true.
+       if(face_s == 4 .and. face1 == 1) ok = .true.
+       if(face_s == 2 .and. face1 == 5) ok = .true.
+       if(face_s == 5 .and. face1 == 2) ok = .true.
+       if(face_s == 3 .and. face1 == 6) ok = .true.
+       if(face_s == 6 .and. face1 == 3) ok = .true.
+       if(.not. ok) then
+         if(my_id == 0) print*, 'couple_lowspeed_porous: unsupported face pair', &
+                                face_s, face1, ' (block', B%Block_no, nb, ') skipped'
+         cycle
+       endif
+
+!      first interior cell of Bn adjacent to its interface face
+       i1 = Bc2%ib1; j1 = Bc2%jb1; k1 = Bc2%kb1
+       select case(face1)
+       case(4); i1 = Bc2%ie1 - 1      ! i+ face: last interior cell row ie1-1
+       case(2); j1 = Bc2%jb1          ! j- face: first interior cell row jb1
+       case(5); j1 = Bc2%je1 - 1      ! j+ face: last interior cell row je1-1
+       case(6); k1 = Bc2%ke1 - 1      ! k+ face: last interior cell row ke1-1
+       end select
+
+!      fill B's ghost layers (n = 1..LAP) from Bn's first interior cell
+       select case(face_s)
+       case(1)      ! B i- face: ghosts i = ib - n
+         do n=1, LAP
+           i = Bc2%ib - n
+           do k=Bc2%kb, Bc2%ke-1
+           do j=Bc2%jb, Bc2%je-1
+             B%U(1,i,j,k)=Bn%U(1,i1,j,k); B%U(2,i,j,k)=Bn%U(2,i1,j,k)
+             B%U(3,i,j,k)=Bn%U(3,i1,j,k); B%U(4,i,j,k)=Bn%U(4,i1,j,k)
+             B%U(5,i,j,k)=Bn%U(5,i1,j,k); B%p(i,j,k) = Bn%p(i1,j,k)
+           enddo; enddo
+         enddo
+       case(4)      ! B i+ face: ghosts i = ie + n - 1
+         do n=1, LAP
+           i = Bc2%ie + n - 1
+           do k=Bc2%kb, Bc2%ke-1
+           do j=Bc2%jb, Bc2%je-1
+             B%U(1,i,j,k)=Bn%U(1,i1,j,k); B%U(2,i,j,k)=Bn%U(2,i1,j,k)
+             B%U(3,i,j,k)=Bn%U(3,i1,j,k); B%U(4,i,j,k)=Bn%U(4,i1,j,k)
+             B%U(5,i,j,k)=Bn%U(5,i1,j,k); B%p(i,j,k) = Bn%p(i1,j,k)
+           enddo; enddo
+         enddo
+       case(2)      ! B j- face: ghosts j = jb - n
+         do n=1, LAP
+           j = Bc2%jb - n
+           do k=Bc2%kb, Bc2%ke-1
+           do i=Bc2%ib, Bc2%ie-1
+             B%U(1,i,j,k)=Bn%U(1,i,j1,k); B%U(2,i,j,k)=Bn%U(2,i,j1,k)
+             B%U(3,i,j,k)=Bn%U(3,i,j1,k); B%U(4,i,j,k)=Bn%U(4,i,j1,k)
+             B%U(5,i,j,k)=Bn%U(5,i,j1,k); B%p(i,j,k) = Bn%p(i,j1,k)
+           enddo; enddo
+         enddo
+       case(5)      ! B j+ face: ghosts j = je + n - 1
+         do n=1, LAP
+           j = Bc2%je + n - 1
+           do k=Bc2%kb, Bc2%ke-1
+           do i=Bc2%ib, Bc2%ie-1
+             B%U(1,i,j,k)=Bn%U(1,i,j1,k); B%U(2,i,j,k)=Bn%U(2,i,j1,k)
+             B%U(3,i,j,k)=Bn%U(3,i,j1,k); B%U(4,i,j,k)=Bn%U(4,i,j1,k)
+             B%U(5,i,j,k)=Bn%U(5,i,j1,k); B%p(i,j,k) = Bn%p(i,j1,k)
+           enddo; enddo
+         enddo
+       case(3)      ! B k- face: ghosts k = kb - n
+         do n=1, LAP
+           k = Bc2%kb - n
+           do j=Bc2%jb, Bc2%je-1
+           do i=Bc2%ib, Bc2%ie-1
+             B%U(1,i,j,k)=Bn%U(1,i,j,k1); B%U(2,i,j,k)=Bn%U(2,i,j,k1)
+             B%U(3,i,j,k)=Bn%U(3,i,j,k1); B%U(4,i,j,k)=Bn%U(4,i,j,k1)
+             B%U(5,i,j,k)=Bn%U(5,i,j,k1); B%p(i,j,k) = Bn%p(i,j,k1)
+           enddo; enddo
+         enddo
+       case(6)      ! B k+ face: ghosts k = ke + n - 1
+         do n=1, LAP
+           k = Bc2%ke + n - 1
+           do j=Bc2%jb, Bc2%je-1
+           do i=Bc2%ib, Bc2%ie-1
+             B%U(1,i,j,k)=Bn%U(1,i,j,k1); B%U(2,i,j,k)=Bn%U(2,i,j,k1)
+             B%U(3,i,j,k)=Bn%U(3,i,j,k1); B%U(4,i,j,k)=Bn%U(4,i,j,k1)
+             B%U(5,i,j,k)=Bn%U(5,i,j,k1); B%p(i,j,k) = Bn%p(i,j,k1)
+           enddo; enddo
+         enddo
+       end select
+     enddo
+   enddo
+  end subroutine couple_lowspeed_porous_interfaces
+
 
 !----------------------------------------------------------------------
 ! (porous_solver_one_block is implemented in sub_porous.f90)
