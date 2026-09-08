@@ -1,0 +1,49 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is         7200
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        7200
+ Total Grid number=       14762
+ Max grid number is        14762  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        14762  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1005.0000000000000       k=   2.5999999999999999E-002
+ creat main mesh OK, Num_Cell=        7200
+  read main mesh ...
+At line 49 of file sub_IO.f90 (unit = 99, file = 'Mesh3d.x')
+Fortran runtime error: End of file
+
+Error termination. Backtrace:
+#0  0x75c9adc23e59 in ???
+#1  0x75c9adc24a71 in ???
+#2  0x75c9adc256dc in ???
+#3  0x75c9adebb6c3 in ???
+#4  0x75c9adebc177 in ???
+#5  0x75c9adebc25c in ???
+#6  0x75c9adebe802 in ???
+#7  0x75c9adebf0f2 in ???
+#8  0x619a143daf07 in read_main_mesh_
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/sub_IO.f90:49
+#9  0x619a1436541b in init_
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/sub_init.f90:28
+#10  0x619a143588df in MAIN__
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/opencfd_ec3d_v1.16a.f90:153
+#11  0x619a1435839e in main
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/opencfd_ec3d_v1.16a.f90:127
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun detected that one or more processes exited with non-zero status, thus causing
+the job to be terminated. The first process to do so was:
+
+  Process name: [[42540,1],0]
+  Exit code:    2
+--------------------------------------------------------------------------

@@ -560,15 +560,33 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    integer:: Recv_from_ID,tag,ierr, status(MPI_status_size)
    integer:: npts, ncells, grid_size, flow_size
    real(PRE_EC):: d1, u1, v1, w1, p1, T1
+   real(PRE_EC),parameter:: R_AIR_SI=287.0d0
+   real(PRE_EC),parameter:: MU_SI0=1.716d-5, T_SI0=273.15d0, S_SI=110.4d0
+   real(PRE_EC):: sc_rho, sc_u, sc_T, sc_p, a_ref, mu_inf_p
    character(len=50):: filename
 
    MP=>Mesh(1)
    NVAR1=MP%NVAR
 
+!  Optional SI conversion for compressible (BLOCK_FLUID) blocks in VTK output:
+!  U_ref=Ma*a_ref, rho_ref=Re*mu_SI(T_inf)/(Ma*a_ref*Lscale), T_ref=T_inf,
+!  p_ref=rho_ref*U_ref^2  (real-gas reference state).
+   sc_rho=1.d0; sc_u=1.d0; sc_T=1.d0; sc_p=1.d0
+   if(Iflag_vtk_SI .eq. 1) then
+     a_ref = sqrt(gamma*R_AIR_SI*T_inf)
+     mu_inf_p = MU_SI0*sqrt((T_inf/T_SI0)**3)*(T_SI0+S_SI)/(T_inf+S_SI)
+     sc_u   = Ma*a_ref
+     sc_rho = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
+     sc_T   = T_inf
+     sc_p   = sc_rho*sc_u*sc_u
+   endif
+
    if(my_id .eq. 0) then
      print*, "write VTK files ......"
      
 !    --- Flow data VTK (all blocks) ---
+     if(Iflag_vtk_onefile .eq. 0) then
+!      default: one structured-grid file per block
      do m=1, Total_block
        nx=bNi(m); ny=bNj(m); nz=bNk(m)
        npts = nx*ny*nz
@@ -622,6 +640,20 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
          call MPI_Recv(U, flow_size, OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, Status, ierr)
        endif
 
+!      SI conversion: compressible (non-dimensional) block -> physical units
+       if(Iflag_vtk_SI .eq. 1) then
+         if(Block_Type_List(m) /= BLOCK_LOWSPEED .and. Block_Type_List(m) /= BLOCK_POROUS) then
+           do k=0,nz; do j=0,ny; do i=0,nx
+             U(i,j,k,1) = U(i,j,k,1)*sc_rho
+             U(i,j,k,2) = U(i,j,k,2)*sc_u
+             U(i,j,k,3) = U(i,j,k,3)*sc_u
+             U(i,j,k,4) = U(i,j,k,4)*sc_u
+             U(i,j,k,5) = U(i,j,k,5)*sc_T
+             U(i,j,k,6) = U(i,j,k,6)*sc_p
+           enddo; enddo; enddo
+         endif
+       endif
+
 !      Write VTK file for this block
        write(filename, '("flow3d_block_",I0,".vtk")') m
        open(99, file=filename, status='replace')
@@ -664,6 +696,11 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
        close(99)
        deallocate(U, G)
      enddo
+     else
+!      Iflag_vtk_onefile = 1: all flow blocks written into one unstructured file
+       call output_vtk_merged_flow
+     endif
+
 
 !    --- Solid temperature VTK (all solid blocks) ---
      do m=1, Total_block
@@ -800,6 +837,203 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    call MPI_Barrier(MPI_COMM_WORLD,ierr)
    if(my_id .eq. 0) print*, "write VTK files OK"
   end subroutine output_vtk
+
+  subroutine output_vtk_merged_flow
+   use Global_Var
+   use const_var
+   implicit none
+   Type (Mesh_TYPE),pointer:: MP
+   Type (Block_TYPE),pointer:: B
+   real(PRE_EC),allocatable,dimension(:,:):: xyz
+   real(PRE_EC),allocatable,dimension(:):: dbuf, tbuf, pbuf
+   real(PRE_EC),allocatable,dimension(:,:):: ubuf
+   real(PRE_EC),allocatable,dimension(:,:,:,:):: G
+   real(PRE_EC),allocatable,dimension(:,:,:,:):: U
+   integer:: m, mt, nx,ny,nz, i,j,k, pt_base, cl_base, idx, nb
+   integer:: tot_pts, tot_cells, Recv_from_ID, tag, ierr
+   integer:: grid_size, flow_size
+   integer:: status(MPI_status_size)
+   integer:: ip0,ip1,ip2,ip3,ip4,ip5,ip6,ip7
+   real(PRE_EC):: d1,u1,v1,w1,p1,T1
+   real(PRE_EC),parameter:: R_AIR_SI=287.0d0
+   real(PRE_EC),parameter:: MU_SI0=1.716d-5, T_SI0=273.15d0, S_SI=110.4d0
+   real(PRE_EC):: sc_rho, sc_u, sc_T, sc_p, a_ref, mu_inf_p
+
+!  This subroutine runs on the master process only and writes one legacy VTK
+!  UNSTRUCTURED_GRID file (flow3d.vtk) containing ALL flow-type blocks
+!  (fluid / low-speed / porous).  Node and cell ordering follows the global
+!  block sequence, so the file layout (POINTS, CELLS, CELL_TYPES, CELL_DATA)
+!  can be reproduced from the per-block structured grid topology.
+
+   MP=>Mesh(1)
+
+!  SI conversion scales for compressible blocks (see output_vtk for definition)
+   sc_rho=1.d0; sc_u=1.d0; sc_T=1.d0; sc_p=1.d0
+   if(Iflag_vtk_SI .eq. 1) then
+     a_ref = sqrt(gamma*R_AIR_SI*T_inf)
+     mu_inf_p = MU_SI0*sqrt((T_inf/T_SI0)**3)*(T_SI0+S_SI)/(T_inf+S_SI)
+     sc_u   = Ma*a_ref
+     sc_rho = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
+     sc_T   = T_inf
+     sc_p   = sc_rho*sc_u*sc_u
+   endif
+
+   tot_pts=0; tot_cells=0
+   do m=1, Total_block
+     tot_pts  = tot_pts  + bNi(m)*bNj(m)*bNk(m)
+     tot_cells= tot_cells + (bNi(m)-1)*(bNj(m)-1)*(bNk(m)-1)
+   enddo
+   allocate(xyz(3,tot_pts))
+   allocate(dbuf(tot_cells), ubuf(3,tot_cells), tbuf(tot_cells), pbuf(tot_cells))
+
+   pt_base=0; cl_base=0
+   do m=1, Total_block
+     nx=bNi(m); ny=bNj(m); nz=bNk(m)
+     allocate(U(0:nx,0:ny,0:nz,6))
+     allocate(G(nx,ny,nz,3))
+
+     if(B_proc(m) .eq. 0) then
+       mt=B_n(m)
+       B=>MP%Block(mt)
+       do k=1,nz; do j=1,ny; do i=1,nx
+         G(i,j,k,1)=B%x(i,j,k)
+         G(i,j,k,2)=B%y(i,j,k)
+         G(i,j,k,3)=B%z(i,j,k)
+       enddo; enddo; enddo
+       if(Block_Type_List(m) == BLOCK_LOWSPEED .or. Block_Type_List(m) == BLOCK_POROUS) then
+         do k=0,nz; do j=0,ny; do i=0,nx
+           U(i,j,k,1) = B%U(1,i,j,k)
+           U(i,j,k,2) = B%U(2,i,j,k)
+           U(i,j,k,3) = B%U(3,i,j,k)
+           U(i,j,k,4) = B%U(4,i,j,k)
+           U(i,j,k,5) = B%U(5,i,j,k)
+           U(i,j,k,6) = B%p(i,j,k)
+         enddo; enddo; enddo
+       else
+         do k=0,nz; do j=0,ny; do i=0,nx
+           d1 = B%U(1,i,j,k)
+           u1 = B%U(2,i,j,k)/max(d1, 1.d-20)
+           v1 = B%U(3,i,j,k)/max(d1, 1.d-20)
+           w1 = B%U(4,i,j,k)/max(d1, 1.d-20)
+           p1 = (B%U(5,i,j,k) - 0.5d0*d1*(u1*u1+v1*v1+w1*w1)) * (gamma-1.d0)
+           T1 = gamma * Ma * Ma * p1 / max(d1, 1.d-20)
+           U(i,j,k,1) = d1
+           U(i,j,k,2) = u1
+           U(i,j,k,3) = v1
+           U(i,j,k,4) = w1
+           U(i,j,k,5) = T1
+           U(i,j,k,6) = p1
+         enddo; enddo; enddo
+       endif
+     else
+       grid_size = nx*ny*nz*3
+       flow_size = 6*(nx+1)*(ny+1)*(nz+1)
+       Recv_from_ID = B_proc(m)
+       tag = B_n(m)*2
+       call MPI_Recv(G, grid_size, OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, status, ierr)
+       tag = B_n(m)*2+1
+       call MPI_Recv(U, flow_size, OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, status, ierr)
+     endif
+
+!    SI conversion: compressible (non-dimensional) block -> physical units
+     if(Iflag_vtk_SI .eq. 1) then
+       if(Block_Type_List(m) /= BLOCK_LOWSPEED .and. Block_Type_List(m) /= BLOCK_POROUS) then
+         do k=0,nz; do j=0,ny; do i=0,nx
+           U(i,j,k,1) = U(i,j,k,1)*sc_rho
+           U(i,j,k,2) = U(i,j,k,2)*sc_u
+           U(i,j,k,3) = U(i,j,k,3)*sc_u
+           U(i,j,k,4) = U(i,j,k,4)*sc_u
+           U(i,j,k,5) = U(i,j,k,5)*sc_T
+           U(i,j,k,6) = U(i,j,k,6)*sc_p
+         enddo; enddo; enddo
+       endif
+     endif
+
+!    store node coordinates (block order)
+     idx=0
+     do k=1,nz; do j=1,ny; do i=1,nx
+       xyz(1,pt_base+idx+1) = G(i,j,k,1)
+       xyz(2,pt_base+idx+1) = G(i,j,k,2)
+       xyz(3,pt_base+idx+1) = G(i,j,k,3)
+       idx = idx + 1
+     enddo; enddo; enddo
+
+!    store cell-centred data (block order)
+     idx=0
+     do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+       dbuf(cl_base+idx+1)        = U(i,j,k,1)
+       ubuf(1,cl_base+idx+1)      = U(i,j,k,2)
+       ubuf(2,cl_base+idx+1)      = U(i,j,k,3)
+       ubuf(3,cl_base+idx+1)      = U(i,j,k,4)
+       tbuf(cl_base+idx+1)        = U(i,j,k,5)
+       pbuf(cl_base+idx+1)        = U(i,j,k,6)
+       idx = idx + 1
+     enddo; enddo; enddo
+
+     pt_base = pt_base + nx*ny*nz
+     cl_base = cl_base + (nx-1)*(ny-1)*(nz-1)
+     deallocate(G, U)
+   enddo
+
+   open(99, file='flow3d.vtk', status='replace')
+   write(99, '(A)') '# vtk DataFile Version 3.0'
+   write(99, '(A)') 'OpenCFD-EC output (all blocks in one file)'
+   write(99, '(A)') 'ASCII'
+   write(99, '(A)') 'DATASET UNSTRUCTURED_GRID'
+   write(99, '(A,I12,A)') 'POINTS ', tot_pts, ' double'
+   do nb=1, tot_pts
+     write(99, '(3ES25.15)') xyz(1,nb), xyz(2,nb), xyz(3,nb)
+   enddo
+
+   write(99, '(A,I12,I13)') 'CELLS ', tot_cells, tot_cells*9
+   pt_base = 0
+   do m=1, Total_block
+     nx=bNi(m); ny=bNj(m); nz=bNk(m)
+     do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+       ip0 = pt_base + (k-1)*ny*nx + (j-1)*nx + (i-1)
+       ip1 = ip0 + 1
+       ip2 = ip0 + 1 + nx
+       ip3 = ip0 + nx
+       ip4 = ip0 + ny*nx
+       ip5 = ip0 + ny*nx + 1
+       ip6 = ip0 + ny*nx + 1 + nx
+       ip7 = ip0 + ny*nx + nx
+       write(99, '(A,8I12)') '8 ', ip0, ip1, ip2, ip3, ip4, ip5, ip6, ip7
+     enddo; enddo; enddo
+     pt_base = pt_base + nx*ny*nz
+   enddo
+
+   write(99, '(A,I12)') 'CELL_TYPES ', tot_cells
+   do nb=1, tot_cells
+     write(99, '(I4)') 12
+   enddo
+
+   write(99, '(A,I12)') 'CELL_DATA ', tot_cells
+   write(99, '(A)') 'SCALARS density double 1'
+   write(99, '(A)') 'LOOKUP_TABLE default'
+   do nb=1, tot_cells
+     write(99, '(ES25.15)') dbuf(nb)
+   enddo
+   write(99, '(A)') 'VECTORS velocity double'
+   do nb=1, tot_cells
+     write(99, '(3ES25.15)') ubuf(1,nb), ubuf(2,nb), ubuf(3,nb)
+   enddo
+   write(99, '(A)') 'SCALARS temperature double 1'
+   write(99, '(A)') 'LOOKUP_TABLE default'
+   do nb=1, tot_cells
+     write(99, '(ES25.15)') tbuf(nb)
+   enddo
+   write(99, '(A)') 'SCALARS pressure double 1'
+   write(99, '(A)') 'LOOKUP_TABLE default'
+   do nb=1, tot_cells
+     write(99, '(ES25.15)') pbuf(nb)
+   enddo
+   close(99)
+
+   deallocate(xyz, dbuf, ubuf, tbuf, pbuf)
+   print*, "write merged flow3d.vtk OK: points=", tot_pts, " cells=", tot_cells
+  end subroutine output_vtk_merged_flow
+
 
 
 

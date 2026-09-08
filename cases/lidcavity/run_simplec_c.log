@@ -1,0 +1,69 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is         1600
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        1600
+ Total Grid number=        3362
+ Max grid number is         3362  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is         3362  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+ creat main mesh OK, Num_Cell=        1600
+  read main mesh ...
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+   DBG iter           1  maxU2=   2.0000000000000000       maxFi=   2.1561171765779732E-002  maxFj=   0.0000000000000000       Fi(21,1,1)=   0.0000000000000000       Fi(21,21,1)=   0.0000000000000000       Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=   1.9526603299325294E-002  res_p=   1.9526603299325294E-002
+   SIMPLE iter           1  res_p=   1.9526603299325294E-002  u(1,1,1)=   1.7081258627252760E-005  p(1,1,1)=  -1.5840998304005228E-005
+   DBG iter           2  maxU2=   1.3247712652507695       maxFi=   1.9583259278638077E-002  maxFj=   1.1224079254864310E-002  Fi(21,1,1)=  -8.7091948071928634E-007  Fi(21,21,1)=  -4.1046145821451647E-005  Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=   5.3816422724363207E-003  res_p=   5.3816422724363207E-003
+   SIMPLE iter           2  res_p=   5.3816422724363207E-003  u(1,1,1)=   2.0481005690340100E-004  p(1,1,1)=  -2.1735849075307662E-004
+   DBG iter           3  maxU2=   1.7953349069438582       maxFi=   2.0397136793480944E-002  maxFj=   6.9900001220107155E-003  Fi(21,1,1)=  -8.3046019323171570E-006  Fi(21,21,1)=  -2.3423373920043432E-004  Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=   8.0141503362567597E-003  res_p=   8.0141503362567597E-003
+   SIMPLE iter           3  res_p=   8.0141503362567597E-003  u(1,1,1)=   9.7992606200368116E-004  p(1,1,1)=  -1.2611895585307566E-003
+   SIMPLE iter           4  res_p=   3.5354075203413021E-003  u(1,1,1)=   2.4974773416451880E-003  p(1,1,1)=  -4.2107508659419016E-003
+   SIMPLE iter           5  res_p=   5.0169140610743920E-003  u(1,1,1)=   4.1324915066897009E-003  p(1,1,1)=  -9.6555037708691473E-003
+Note: The following floating-point exceptions are signalling: IEEE_INVALID_FLAG IEEE_OVERFLOW_FLAG IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
+ DEBUG T NaN at iter          24  cell           2          29           1  T(i-1)   299.99999999999989       T(i+1)                       NaN  T(j-1)   300.00000000000000       T(j+1)                       NaN  p                       NaN  Fi(i,j)  -896.95324626831655     
+--------------------------------------------------------------------------
+mpirun has exited due to process rank 0 with PID 0 on
+node DESKTOP-68P2P7O exiting improperly. There are three reasons this could occur:
+
+1. this process did not call "init" before exiting, but others in
+the job did. This can cause a job to hang indefinitely while it waits
+for all processes to call "init". By rule, if one process calls "init",
+then ALL processes must call "init" prior to termination.
+
+2. this process called "init", but exited without calling "finalize".
+By rule, all processes that call "init" MUST call "finalize" prior to
+exiting or it will be considered an "abnormal termination"
+
+3. this process called "MPI_Abort" or "orte_abort" and the mca parameter
+orte_create_session_dirs is set to false. In this case, the run-time cannot
+detect that the abort call was an abnormal termination. Hence, the only
+error message you will receive is this one.
+
+This may have caused other processes in the application to be
+terminated by signals sent by mpirun (as reported here).
+
+You can avoid this message by specifying -quiet on the mpirun command line.
+--------------------------------------------------------------------------

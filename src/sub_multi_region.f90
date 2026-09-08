@@ -532,12 +532,22 @@
 
 !      High-speed (compressible) <-> low-speed fluid pair: handled once from
 !      the compressible side (B = FLUID, Bn = LOWSPEED)
-       if(B%Block_type == BLOCK_FLUID .and. &
-          (Bn%Block_type == BLOCK_LOWSPEED .or. Bn%Block_type == BLOCK_POROUS)) then
+       if(B%Block_type == BLOCK_FLUID .and. Bn%Block_type == BLOCK_LOWSPEED) then
          call couple_highlow_fluid_face(nMesh, B, Bn, Bc2)
          cycle
-       else if((B%Block_type == BLOCK_LOWSPEED .or. B%Block_type == BLOCK_POROUS) &
-               .and. Bn%Block_type == BLOCK_FLUID) then
+       else if(B%Block_type == BLOCK_LOWSPEED .and. Bn%Block_type == BLOCK_FLUID) then
+         cycle   ! handled from the compressible side above
+       else if(B%Block_type == BLOCK_FLUID .and. Bn%Block_type == BLOCK_POROUS) then
+!        Interface 19: coolant velocity inlet (LS_Inlet_Type=1) activates the
+!        transpiration (blowing) coupling; otherwise the phase-A shear-type
+!        ghost exchange is used (G=0 reference).
+         if(LS_Inlet_Type == 1) then
+           call couple_compressible_porous_blowing_face(nMesh, B, Bn, Bc2)
+         else
+           call couple_highlow_fluid_face(nMesh, B, Bn, Bc2)
+         endif
+         cycle
+       else if(B%Block_type == BLOCK_POROUS .and. Bn%Block_type == BLOCK_FLUID) then
          cycle   ! handled from the compressible side above
        endif
 
@@ -1027,6 +1037,82 @@
         endif
       endif
      end subroutine couple_highlow_fluid_face
+!----------------------------------------------------------------------
+! Compressible (BLOCK_FLUID) <-> porous (BLOCK_POROUS) transpiration
+! interface (code 19), blowing variant (Phase B).
+!   - porous hot face (porous j+ face) is a coolant outlet: ghost layers get
+!     zero-gradient state and the wall pressure from the compressible side
+!     (SI), closing the porous SIMPLE pressure problem.
+!   - compressible face (fluid j- face) is a wall with normal mass injection:
+!     coolant at G = LS_rho*LS_U_in leaves the porous wall at temperature
+!     T_w = Tf(porous hot cell) and enters the flow with v_w = G/rho_w,
+!     rho_w = p_w/(R*T_w).  Tangential velocity mirrored (wall at rest).
+!   Explicit staggered coupling per outer step (frame heat balance in phase C).
+!   Conformal aligned grids: compressible j- (face_s=2) vs porous j+
+!   (face1=5).  Indices/dimensions of ghost arrays as in couple_highlow.
+     subroutine couple_compressible_porous_blowing_face(nMesh, B, Bn, Bc2)
+      use Global_Var
+      implicit none
+      integer:: nMesh
+      Type (Block_TYPE),pointer:: B, Bn
+      TYPE (BC_MSG_TYPE),pointer:: Bc2
+      integer:: face_s, face1, i, k, n1, jc_h, jc_l, jg_l, jg
+      real(PRE_EC):: G, T_w, v_w, rho_w, p_phys
+      real(PRE_EC):: r1, u1s, v1s, p1n, v_w_s, v_int_s, vg_s, ug_s, T_s, rho_s, E_s
+      real(PRE_EC):: RHO_REF, mu_inf_p, a_ref, U_ref
+      real(PRE_EC),parameter:: R_AIR = 287.0d0
+      real(PRE_EC),parameter:: MU_SI0 = 1.716d-5, T_SI0 = 273.15d0, S_SI = 110.4d0
+
+      face_s = Bc2%face
+      face1  = Bc2%face1
+      if(face_s /= 2 .or. face1 /= 5) then
+        if(my_id == 0) print*, 'couple_compressible_porous_blowing: unsupported face pair', face_s, face1, '(skipped)'
+        return
+      endif
+      a_ref = sqrt(gamma*R_AIR*T_inf)
+      mu_inf_p = MU_SI0*sqrt((T_inf/T_SI0)**3)*(T_SI0+S_SI)/(T_inf+S_SI)
+      RHO_REF = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
+      U_ref = Ma*a_ref
+      G = LS_rho*max(LS_V_in,0.d0)          ! coolant mass flux kg/(m2 s), normal +y
+      jc_h = Bc2%jb          ! compressible first interior cell row (j- face)
+      jc_l = Bc2%je1 - 1     ! porous first interior cell row (j+ face)
+      jg_l = Bc2%je1         ! porous first ghost cell row (j+ face)
+
+      do k = Bc2%kb, Bc2%ke-1
+      do i = Bc2%ib, Bc2%ie-1
+        r1  = max(B%U(1,i,jc_h,k), 1.d-20)
+        u1s = B%U(2,i,jc_h,k)/r1
+        v1s = B%U(3,i,jc_h,k)/r1
+        p1n = (B%U(5,i,jc_h,k) - 0.5d0*B%U(1,i,jc_h,k)*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+        p_phys = p1n*RHO_REF*U_ref*U_ref
+        T_w = Bn%U(5,i,jc_l,k)              ! coolant exit temperature [K]
+!       porous ghost layers: coolant outlet (zero-gradient) + wall pressure
+        do n1 = 0, LAP-1
+          jg = jg_l + n1
+          Bn%U(1,i,jg,k)=Bn%U(1,i,jc_l,k); Bn%U(2,i,jg,k)=Bn%U(2,i,jc_l,k)
+          Bn%U(3,i,jg,k)=Bn%U(3,i,jc_l,k); Bn%U(4,i,jg,k)=Bn%U(4,i,jc_l,k)
+          Bn%U(5,i,jg,k)=Bn%U(5,i,jc_l,k); Bn%p(i,jg,k) = p_phys
+        enddo
+!       compressible ghost layers: blowing wall (temperature T_w)
+        rho_w = p_phys/(R_AIR*max(T_w,1.d0))
+        v_w   = G/max(rho_w,1.d-30)
+        v_w_s = v_w/U_ref
+        do n1 = 1, LAP
+          jg = jc_h - n1
+          v_int_s = v1s
+          vg_s = 2.d0*v_w_s - v_int_s
+          ug_s = -u1s                       ! mirror tangential (wall at rest)
+          T_s  = T_w/T_inf
+          rho_s = p1n*gamma*Ma*Ma/max(T_s,1.d-30)
+          E_s  = p1n/(gamma-1.d0) + 0.5d0*rho_s*(ug_s*ug_s+vg_s*vg_s)
+          B%U(1,i,jg,k)=rho_s; B%U(2,i,jg,k)=rho_s*ug_s
+          B%U(3,i,jg,k)=rho_s*vg_s; B%U(4,i,jg,k)=0.d0
+          B%U(5,i,jg,k)=E_s
+        enddo
+      enddo; enddo
+     end subroutine couple_compressible_porous_blowing_face
+
+
 
   end subroutine couple_fluid_solid_interfaces
 
@@ -1342,3 +1428,314 @@
      if(my_id == 0) print*, 'Output Ts to ', trim(fname)
    enddo
   end subroutine output_Ts
+
+!==============================================================================
+! Staggered segmented coupling for FLUID<->POROUS interface code 19
+! (Iflag_Couple_Scheme=1, thermal wall / transpiration-cooled porous wall).
+!
+! Outer loop (steady, segregated / staggered):
+!   for it = 1 .. Niter_Couple_Outer
+!     (1) GAS CHUNK: advance only the compressible (BLOCK_FLUID) blocks for
+!         Kstep_Couple_Comp time steps.  The code-19 subfaces of the gas block
+!         (the "coupling" region, in this topology the whole j- wall) are
+!         imposed as a no-slip isothermal wall at the per-face temperature
+!         fp_Tw(i,k) (first chunk: Twall_Couple_Init, e.g. 300 K).  Ordinary
+!         code-2 wall segments stay adiabatic (standard Twall<0 handling).
+!         The porous block is NOT advanced in this phase.
+!     (2) EXTRACT: evaluate the per-face wall heat flux fp_qw(i,k) [W/m2,
+!         >0 into the wall] and wall static pressure fp_pw(i,k) [Pa].
+!     (3) POROUS CHUNK: advance only the porous block to convergence.  At its
+!         hot face (same code-19 face, porous j+): fluid outlet ghost pressure
+!         = fp_pw, velocity/T zero-gradient; solid-frame Ts ghost enforces the
+!         incoming heat flux fp_qw (Ts_g = Ts_i + qw*dx/ks_eff).  Coolant
+!         supply at the porous underside keeps physical BCs from control.ec.
+!     (4) RETURN: new hot-face temperature fp_Tw = (Ts_i + Ts_g)/2 -> gas
+!         chunk; repeat until max|dT_w| < Tol_Couple_Tw.
+!
+! Supports one conformal pair: compressible face_s=2 (j-) vs porous
+! face1=5 (j+), aligned indices (porous_fluid_phaseB topology).
+!==============================================================================
+  subroutine run_staggered_fluid_porous(nMesh)
+   use Global_Var
+   use const_var
+   implicit none
+   integer:: nMesh
+   integer:: mf, mp, mBlock, ksub, nb, mb, it, step, pc, NVAR1
+   integer:: nstep, nhalve
+   integer:: face_s, face1, ib,ie,jb,je,kb,ke, ib1,ie1,jb1,je1,kb1,ke1
+   Type (Block_TYPE),pointer:: Bf, Bp, B, Bn
+   TYPE (BC_MSG_TYPE),pointer:: Bc2
+   integer:: i, k, jc_h, jc_l, jg, n1
+   real(PRE_EC):: Sfac, Sfac1, twmax, qwmax
+   real(PRE_EC):: a_ref, U_ref, RHO_REF, mu_inf_p, mu_ref, cp_ref
+   real(PRE_EC),parameter:: R_AIR=287.d0
+   real(PRE_EC),parameter:: MU_SI0=1.716d-5, T_SI0=273.15d0, S_SI=110.4d0
+   real(PRE_EC):: r1, u1s, v1s, p1n, T1_nd, T1_K, mu_SI, k_gas, dxp
+   real(PRE_EC):: mu1c, dwc
+   logical:: found, converged
+   real(PRE_EC):: Utmp(7)
+
+!  ---- locate compressible and porous blocks --------------------------------
+   mf=0; mp=0
+   do mBlock=1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(B%Block_type == BLOCK_FLUID .and. mf == 0) mf = mBlock
+     if(B%Block_type == BLOCK_POROUS .and. mp == 0) mp = mBlock
+   enddo
+   if(mf == 0 .or. mp == 0) then
+     print*, 'run_staggered_fluid_porous: need one BLOCK_FLUID and one BLOCK_POROUS block, got', mf, mp
+     return
+   endif
+   Bf => Mesh(nMesh)%Block(mf)
+   Bp => Mesh(nMesh)%Block(mp)
+   NVAR1 = Mesh(nMesh)%NVAR
+
+!  ---- find the FLUID code-19 subface (coupling region) ---------------------
+   found = .false.
+   do ksub=1, Bf%subface
+     Bc2 => Bf%bc_msg2(ksub)
+     if(.not. is_interface_bc(Bc2%bc)) cycle
+     nb = Bc2%nb1
+     if(nb <= 0) cycle
+     mb = 0
+     do mBlock=1, Mesh(nMesh)%Num_Block
+       if(Mesh(nMesh)%Block(mBlock)%Block_no == nb) then
+         Bn => Mesh(nMesh)%Block(mBlock); mb = mBlock; exit
+       endif
+     enddo
+     if(mb == 0) cycle
+     if(Bn%Block_type /= BLOCK_POROUS) cycle
+     face_s = Bc2%face; face1 = Bc2%face1
+     if(face_s /= 2 .or. face1 /= 5) then
+       if(my_id == 0) print*, 'run_staggered: supports gas j- (face=2) vs porous j+ (face1=5) only; got', face_s, face1
+       return
+     endif
+     ib=Bc2%ib; ie=Bc2%ie; jb=Bc2%jb; je=Bc2%je; kb=Bc2%kb; ke=Bc2%ke
+     ib1=Bc2%ib1; ie1=Bc2%ie1; jb1=Bc2%jb1; je1=Bc2%je1; kb1=Bc2%kb1; ke1=Bc2%ke1
+     found = .true.
+     exit
+   enddo
+   if(.not. found) then
+     print*, 'run_staggered_fluid_porous: no FLUID-POROUS (code 19) interface found'
+     return
+   endif
+
+
+!  ---- per-face work arrays (gas face cells i=ib..ie-1, k=kb..ke-1) ----------
+   if(.not. allocated(fp_Tw)) then
+     allocate(fp_Tw(1:Bf%nx-1, 1:Bf%nz-1))
+     allocate(fp_Tw_old(1:Bf%nx-1, 1:Bf%nz-1))
+     allocate(fp_qw(1:Bf%nx-1, 1:Bf%nz-1))
+     allocate(fp_pw(1:Bf%nx-1, 1:Bf%nz-1))
+   endif
+   fp_Tw = Twall_Couple_Init
+   fp_qw = 0.d0
+   fp_pw = 0.d0
+
+!  ---- physical references (same convention as couple_highlow) --------------
+   a_ref   = sqrt(gamma*R_AIR*T_inf)
+   mu_inf_p= MU_SI0*sqrt((T_inf/T_SI0)**3)*(T_SI0+S_SI)/(T_inf+S_SI)
+   RHO_REF = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
+   U_ref   = Ma*a_ref
+   mu_ref  = RHO_REF*U_ref*max(Lscale,1.d-30)/Re
+   cp_ref  = gamma*R_AIR/(gamma-1.d0)
+
+   Mesh(nMesh)%tt = 0.d0
+   Mesh(nMesh)%Kstep = 0
+   if(my_id == 0) then
+     print*, ' run_staggered_fluid_porous: Kstep_Couple_Comp=', Kstep_Couple_Comp, &
+             ' Niter_Couple_Outer=', Niter_Couple_Outer, &
+             ' Twall_Couple_Init=', Twall_Couple_Init, ' K'
+     print*, '   gas block', mf, ' (nx-1 x nz-1 =', Bf%nx-1, 'x', Bf%nz-1, &
+             '), porous block', mp, '; interface j- cells i=', ib, '..', ie-1
+   endif
+
+   converged = .false.
+   outer: do it=1, Niter_Couple_Outer
+     fp_Tw_old = fp_Tw
+!    adaptive gas-chunk length: keep the full Kstep_Couple_Comp for the first
+!    Niter_Couple_Warm outer iterations (warm start), then halve it each outer
+!    iteration down to Kstep_Couple_Min for the final refinement stage.
+     nstep = Kstep_Couple_Comp
+     if(it > Niter_Couple_Warm) then
+       nhalve = it - Niter_Couple_Warm
+       do i=1, nhalve
+         nstep = max(Kstep_Couple_Min, nstep/2)
+       enddo
+     endif
+     nstep = max(1, nstep)
+     if(my_id == 0) print*, ' outer iter', it, ': gas chunk steps =', nstep
+
+!   ==================== (1) GAS CHUNK ===========================
+     do step=1, nstep
+!     impose the isothermal wall on the code-19 face of the gas block
+       call fill_gas_wall_ghost(Bf, ib, ie, jb, kb, ke, NVAR1)
+!     advance compressible blocks only
+       call comput_Sfac(Sfac,Sfac1)
+       call Set_Un(nMesh)
+       do mBlock=1, Mesh(nMesh)%Num_Block
+         B => Mesh(nMesh)%Block(mBlock)
+         if(B%Block_type == BLOCK_FLUID) call solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+       enddo
+       if(IFLAG_LIMIT_FLOW == 1) call limit_flow(nMesh)
+       call Boundary_condition_onemesh(nMesh)
+       call update_buffer_onemesh(nMesh)
+       call update_Ts_buffer_onemesh(nMesh)
+       Mesh(nMesh)%tt = Mesh(nMesh)%tt + dt_global
+       Mesh(nMesh)%Kstep = Mesh(nMesh)%Kstep + 1
+       if(my_id == 0 .and. mod(Mesh(nMesh)%Kstep, Kstep_show) == 0) then
+         call comput_force
+         call output_Res(nMesh)
+       endif
+       if(my_id == 0 .and. mod(Mesh(nMesh)%Kstep, Kstep_save) == 0) then
+         call output_flow
+         call output_Ts
+         call output_vtk
+       endif
+     enddo
+     if(my_id == 0) print*, ' gas chunk done, Kstep=', Mesh(nMesh)%Kstep, ' tt=', Mesh(nMesh)%tt
+
+!     refresh the wall ghost once more against the final gas interior so the
+!     extracted q_w is consistent with this chunk's isothermal wall state
+      call fill_gas_wall_ghost(Bf, ib, ie, jb, kb, ke, NVAR1)
+
+
+!   ==================== (2) EXTRACT q_w, p_w =========================
+     jc_h = jb
+     qwmax = 0.d0
+     do k=kb, ke-1
+     do i=ib, ie-1
+       r1  = max(Bf%U(1,i,jc_h,k), 1.d-20)
+       u1s = Bf%U(2,i,jc_h,k)/r1
+       v1s = Bf%U(3,i,jc_h,k)/r1
+       p1n = (Bf%U(5,i,jc_h,k) - 0.5d0*r1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+       T1_nd = gamma*Ma*Ma*p1n/max(r1,1.d-20)
+       T1_K  = T1_nd*T_inf
+       mu_SI = MU_SI0*sqrt((T1_K/T_SI0)**3)*(T_SI0+S_SI)/(T1_K+S_SI)
+       k_gas  = mu_SI*cp_ref/max(PrL,1.d-30)
+       dxp = max((Bf%yc(i,jc_h,k)-Bf%yc(i,jc_h-1,k))*Lscale, 1.d-20)
+       Utmp(1:NVAR1) = Bf%U(1:NVAR1,i,jc_h-1,k)
+!      wall heat flux into the wall (>0): q = k_gas*(T_int - T_ghost)/dx
+       fp_qw(i,k) = k_gas*(T1_nd - T_nd_from_U(Utmp, NVAR1, Ma, gamma))/dxp * T_inf
+       fp_pw(i,k) = p1n*RHO_REF*U_ref*U_ref
+       qwmax = max(qwmax, abs(fp_qw(i,k)))
+     enddo; enddo
+     if(my_id == 0) print*, ' gas heat-flux max|q_w|=', qwmax, ' W/m2'
+
+!   ==================== (3) POROUS CHUNK =========================
+     jc_l = je1 - 1     ! porous first interior row below the hot face
+     do pc=1, Porous_Chunk_Iter
+!     porous hot-face boundary: outlet pressure fp_pw + heat-flux Ts BC
+       do k=kb1, ke1-1
+       do i=ib1, ie1-1
+         do n1=0, LAP-1
+           jg = je1 + n1
+           Bp%U(1,i,jg,k) = Bp%U(1,i,jc_l,k)
+           Bp%U(2,i,jg,k) = Bp%U(2,i,jc_l,k)
+           Bp%U(3,i,jg,k) = Bp%U(3,i,jc_l,k)
+           Bp%U(4,i,jg,k) = Bp%U(4,i,jc_l,k)
+           Bp%U(5,i,jg,k) = Bp%U(5,i,jc_l,k)
+           Bp%p(i,jg,k)   = fp_pw(i,k)
+         enddo
+         call set_porous_Ts_flux(Bp, i, jc_l, je1, k, fp_qw(i,k))
+       enddo; enddo
+       do mBlock=1, Mesh(nMesh)%Num_Block
+         B => Mesh(nMesh)%Block(mBlock)
+         if(B%Block_type == BLOCK_POROUS) call porous_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+       enddo
+     enddo
+
+!   ==================== (4) RETURN T_w from porous hot face ========
+     do k=kb1, ke1-1
+     do i=ib1, ie1-1
+       fp_Tw(i,k) = 0.5d0*(Bp%Ts(i,jc_l,k) + Bp%Ts(i,jc_l+1,k))
+     enddo; enddo
+     twmax = 0.d0
+     do k=kb1, ke1-1
+     do i=ib1, ie1-1
+       twmax = max(twmax, abs(fp_Tw(i,k)-fp_Tw_old(i,k)))
+     enddo; enddo
+     if(my_id == 0) then
+       print*, ' porous chunk done, outer iter', it, ' max|dT_w|=', twmax, ' K', &
+               '  T_w range [', minval(fp_Tw(ib:ie-1,kb:ke-1)), ',', &
+               maxval(fp_Tw(ib:ie-1,kb:ke-1)), ']'
+       open(203, file='iface_couple.dat', status='replace')
+       write(203,'(A)') '# x_w(m)  T_w(K)  q_w(W/m2)  p_w(Pa)'
+       do k=kb, ke-1
+       do i=ib, ie-1
+         write(203,'(4ES16.7)') 0.5d0*(Bf%x(i,jb,k)+Bf%x(i+1,jb,k)), &
+                                fp_Tw(i,k), fp_qw(i,k), fp_pw(i,k)
+       enddo; enddo
+       close(203)
+     endif
+     if(it >= 2 .and. twmax < Tol_Couple_Tw) then
+       converged = .true.
+       if(my_id == 0) print*, ' Staggered coupling converged at outer iter', it, &
+                              ' (max|dT_w| <', Tol_Couple_Tw, ')'
+       exit outer
+     endif
+   enddo outer
+
+   if(.not. converged) then
+     if(my_id == 0) print*, ' Staggered coupling reached Niter_Couple_Outer=', &
+                            Niter_Couple_Outer, ' (not fully converged)'
+   endif
+
+   call output_flow
+   call output_Ts
+   call output_vtk
+
+  contains
+
+!   Impose the isothermal wall state on the gas block code-19 face cells
+!   (j- face, rows j=jb.., ghost row jb-1..).  T_w = fp_Tw(i,k) [K].
+    subroutine fill_gas_wall_ghost(Bf, ib, ie, jb, kb, ke, nv)
+      implicit none
+      Type (Block_TYPE),pointer:: Bf
+      integer:: ib, ie, jb, kb, ke, nv
+      integer:: i, k, n1
+      real(PRE_EC):: mu1c, dwc
+      do k=kb, ke-1
+      do i=ib, ie-1
+        if(If_viscous == 1) then
+          mu1c = Bf%mu(i,jb,k); dwc = Bf%dw(i,jb,k)
+        else
+          mu1c = 1.d0/Re; dwc = 0.d0
+        endif
+        call wall_bound_with_Tw(nv, Bf%U(:,i,jb,k), Bf%U(:,i,jb-1,k), &
+             Ma, gamma, fp_Tw(i,k)/T_inf, mu1c, dwc, Re)
+        do n1=2, LAP
+          Bf%U(:,i,jb-n1,k) = Bf%U(:,i,jb-1,k)   ! deeper ghosts (copy of layer 1)
+        enddo
+      enddo; enddo
+    end subroutine fill_gas_wall_ghost
+
+!   Non-dimensional temperature T/T_inf of a compressible state U(:)
+    real(PRE_EC) function T_nd_from_U(U1, nv, Ma1, gam)
+      implicit none
+      real(PRE_EC):: U1(nv)
+      integer:: nv
+      real(PRE_EC):: Ma1, gam, d1, uu, vv, ww, p1
+      d1 = max(U1(1), 1.d-20)
+      uu = U1(2)/d1; vv = U1(3)/d1; ww = U1(4)/d1
+      p1 = (U1(5) - 0.5d0*d1*(uu*uu+vv*vv+ww*ww))*(gam-1.d0)
+      T_nd_from_U = gam*Ma1*Ma1*p1/max(d1,1.d-20)
+    end function T_nd_from_U
+
+!   Solid-frame Ts ghost on the porous hot face from incoming heat flux
+!   qw>0 (W/m2, heat entering the wall): Ts_g = Ts_i + qw*dx/ks_eff
+    subroutine set_porous_Ts_flux(B, i, jint, jgh, k, qw)
+      implicit none
+      Type (Block_TYPE),pointer:: B
+      integer:: i, jint, jgh, k
+      real(PRE_EC):: qw, dx_g, ks_eff
+      integer:: n1
+      ks_eff = max((1.d0 - B%porous_eps)*B%solid_k, 1.d-30)
+      do n1 = 0, LAP-1
+        dx_g = sqrt( (B%xc(i,jint,k)-B%xc(i,jgh+n1,k))**2 &
+                   + (B%yc(i,jint,k)-B%yc(i,jgh+n1,k))**2 &
+                   + (B%zc(i,jint,k)-B%zc(i,jgh+n1,k))**2 ) * Lscale
+        B%Ts(i,jgh+n1,k) = B%Ts(i,jint,k) + qw*dx_g/ks_eff
+      enddo
+    end subroutine set_porous_Ts_flux
+  end subroutine run_staggered_fluid_porous

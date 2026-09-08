@@ -1,0 +1,8 @@
+Mesh3d.x    : block1(fluid) 81x81x2 , block2(porous) 81x97x2
+cell sizes  : dx=0.10000  dy_fluid=0.01250  dy_porous=0.01250 (match=True)
+eps=0.800 dp=0.500 m -> Ergun K=2.133333e-02 m2, K_eff=K/eps^2=3.333333e-02 m2
+lambda=sqrt(K_eff)=0.18257 m , kappa=1/lambda=5.4772 1/m
+bed depth Hp=1.200 m -> kappa*Hp=6.57 (>=6 -> deep-bed BJ limit OK)
+fluid height h=1.000 m -> kappa*h=5.48
+nominal dp/dx=-6.2500e-04 Pa/m, u_Darcy=1.0417e-03 m/s
+cells per lambda near interface: 14.61 (fluid), 14.61 (porous)

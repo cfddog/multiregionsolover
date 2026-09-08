@@ -1,36 +1,108 @@
  ------------------Block            1 ---------------------------
- Cell Number=        6700
- Max volume=   389.83497170355690              100          67           1
- Min Volume=   1.2437810945272199                1          66           1
+ Cell Number=        8000
+ Max volume=   3.4420092053557747E-004         100          15           1
+ Min Volume=   6.2499999999999162E-009           1          29           1
  =============
- max grid factor=   1.0668769732289383               99          18           1
- dtime_mesh=  0.98404206392509730     
- max grid-line turn angle (degree)=   1.2074182697602438E-006          18           1           1
- dtime_mesh=  0.98957668766139861     
+ max grid factor=   1.1237777022229123               99          24           1
+ dtime_mesh=  0.94650074786681482     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           1           3           1
+ dtime_mesh=  0.99983273272058759     
  ------------------Block            2 ---------------------------
- Cell Number=        6700
- Max volume=   389.83497170357288                1          23           1
- Min Volume=   1.2437810945271692              100          57           1
+ Cell Number=        1600
+ Max volume=   1.4931936940544769E-004           1          40           1
+ Min Volume=   6.2499999999718756E-009           1           1           1
  =============
- max grid factor=   1.0668769732289356                2          28           1
- dtime_mesh=  0.98404206392509852     
- max grid-line turn angle (degree)=   1.2074182697602438E-006          33           1           1
- dtime_mesh=  0.98405234203666347     
- ------------------Block            3 ---------------------------
- Cell Number=        6600
- Max volume=   395.74156218392312               33         100           1
- Min Volume=   1.2626262626260447               17           1           1
- =============
- max grid factor=   1.0668769732289258                1          99           1
- dtime_mesh=  0.98404206392510307     
- max grid-line turn angle (degree)=   1.2074182697602438E-006          61          24           1
- dtime_mesh=  0.98687533660439841     
+ max grid factor=   1.3139067672648865                1          39           1
+ dtime_mesh=  0.70682772029548657     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           2           1           1
+ dtime_mesh=  0.99495227852228252     
  ------------------Block            1 ---------------------------
- Cell Number=       20000
- Max volume=   878.56164171515593                1         124           1
- Min Volume=   1.2437814054725085              100         194           1
+ Cell Number=        8000
+ Max volume=   3.4420092053557747E-004         100          15           1
+ Min Volume=   6.2499999999999162E-009           1          29           1
  =============
- max grid factor=   1.0755693425903297                2          75           1
- dtime_mesh=  0.97967441949429668     
- max grid-line turn angle (degree)=   1.4787793335133647E-006          17          35           1
- dtime_mesh=  0.97967480481471281     
+ max grid factor=   1.1237777022229123               99          24           1
+ dtime_mesh=  0.94650074786681482     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           1           3           1
+ dtime_mesh=  0.99983273272058759     
+ ------------------Block            2 ---------------------------
+ Cell Number=        1600
+ Max volume=   1.4931936940544769E-004           1          40           1
+ Min Volume=   6.2499999999718756E-009           1           1           1
+ =============
+ max grid factor=   1.3139067672648865                1          39           1
+ dtime_mesh=  0.70682772029548657     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           2           1           1
+ dtime_mesh=  0.99495227852228252     
+ ------------------Block            1 ---------------------------
+ Cell Number=        8000
+ Max volume=   3.4420092053557747E-004         100          15           1
+ Min Volume=   6.2499999999999162E-009           1          29           1
+ =============
+ max grid factor=   1.1237777022229123               99          24           1
+ dtime_mesh=  0.94650074786681482     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           1           3           1
+ dtime_mesh=  0.99983273272058759     
+ ------------------Block            2 ---------------------------
+ Cell Number=        1600
+ Max volume=   1.4931936940544769E-004           1          40           1
+ Min Volume=   6.2499999999718756E-009           1           1           1
+ =============
+ max grid factor=   1.3139067672648865                1          39           1
+ dtime_mesh=  0.70682772029548657     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           2           1           1
+ dtime_mesh=  0.99495227852228252     
+ ------------------Block            1 ---------------------------
+ Cell Number=        8000
+ Max volume=   3.4420092053557747E-004         100          15           1
+ Min Volume=   6.2499999999999162E-009           1          29           1
+ =============
+ max grid factor=   1.1237777022229123               99          24           1
+ dtime_mesh=  0.94650074786681482     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           1           3           1
+ dtime_mesh=  0.99983273272058759     
+ ------------------Block            2 ---------------------------
+ Cell Number=        1600
+ Max volume=   1.4931936940544769E-004           1          40           1
+ Min Volume=   6.2499999999718756E-009           1           1           1
+ =============
+ max grid factor=   1.3139067672648865                1          39           1
+ dtime_mesh=  0.70682772029548657     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           2           1           1
+ dtime_mesh=  0.99495227852228252     
+ ------------------Block            1 ---------------------------
+ Cell Number=        8000
+ Max volume=   3.4420092053557747E-004         100          15           1
+ Min Volume=   6.2499999999999162E-009           1          29           1
+ =============
+ max grid factor=   1.1237777022229123               99          24           1
+ dtime_mesh=  0.94650074786681482     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           1           3           1
+ dtime_mesh=  0.99983273272058759     
+ ------------------Block            2 ---------------------------
+ Cell Number=        1600
+ Max volume=   1.4931936940544769E-004           1          40           1
+ Min Volume=   6.2499999999718756E-009           1           1           1
+ =============
+ max grid factor=   1.3139067672648865                1          39           1
+ dtime_mesh=  0.70682772029548657     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           2           1           1
+ dtime_mesh=  0.99495227852228252     
+ ------------------Block            1 ---------------------------
+ Cell Number=        8000
+ Max volume=   3.4420092053557747E-004         100          15           1
+ Min Volume=   6.2499999999999162E-009           1          29           1
+ =============
+ max grid factor=   1.1237777022229123               99          24           1
+ dtime_mesh=  0.94650074786681482     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           1           3           1
+ dtime_mesh=  0.99983273272058759     
+ ------------------Block            2 ---------------------------
+ Cell Number=        1600
+ Max volume=   1.4931936940544769E-004           1          40           1
+ Min Volume=   6.2499999999718756E-009           1           1           1
+ =============
+ max grid factor=   1.3139067672648865                1          39           1
+ dtime_mesh=  0.70682772029548657     
+ max grid-line turn angle (degree)=   1.2074182697602438E-006           2           1           1
+ dtime_mesh=  0.99495227852228252     

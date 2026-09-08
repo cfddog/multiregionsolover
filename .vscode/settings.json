@@ -1,6 +1,6 @@
 {
     // 浅色主题（仅对当前项目生效）
-    "workbench.colorTheme": "Default Light+",
+    "workbench.colorTheme": "Quiet Light",
     // Fortran 语言服务器 (Modern Fortran 扩展 + fortls)
     "fortran.fortls.path": "/home/sundong/.local/bin/fortls",
     "fortran.linter.compiler": "gfortran",

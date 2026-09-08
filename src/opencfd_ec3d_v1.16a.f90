@@ -159,6 +159,17 @@
    if(my_id .eq. 0) print*, " Start ......"
 
 !------------------------------------------------------------------------
+! Staggered segmented coupling (interface 19, FLUID<->POROUS thermal):
+! gas chunk (compressible only) -> extract q_w -> porous chunk -> return T_w.
+! Otherwise the standard per-step simultaneous multi-block time loop runs.
+   if(Iflag_Couple_Scheme == 1) then
+     if(my_id .eq. 0) print*, ' Staggered segmented coupling mode (Iflag_Couple_Scheme=1) ...'
+     call run_staggered_fluid_porous(1)
+     call mpi_finalize(ierr)
+     stop
+   endif
+
+!------------------------------------------------------------------------
 ! ??????????????????????????????????? ????1??Euler??3??RK
    do while(Mesh(1)%tt .lt. t_end )
     
@@ -180,6 +191,8 @@
            enddo
            call couple_fluid_solid_interfaces(1)       ! ????-???��???????
            call couple_solid_solid_interfaces(1)       ! ????-???��??????????
+            call couple_lowspeed_porous_interfaces(1)   ! low-speed-porous (16)
+
            if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
            call Boundary_condition_onemesh(1)          ! ??????? (?څGhost Cell???)
            call update_buffer_onemesh(1)               ! ?????????????
@@ -193,6 +206,8 @@
              call solver_one_block(1,mBlock,Sfac,Sfac1)
            enddo
            call couple_fluid_solid_interfaces(1)       ! ????-???��???????
+            call couple_lowspeed_porous_interfaces(1)   ! low-speed-porous (16)
+
            call couple_solid_solid_interfaces(1)       ! ????-???��??????????
            if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
            call Boundary_condition_onemesh(1)          ! ??????? (?څGhost Cell???)
@@ -221,6 +236,7 @@
          enddo
          call couple_fluid_solid_interfaces(1)       ! ????-???��???????
          call couple_solid_solid_interfaces(1)       ! ????-???��??????????
+         call couple_lowspeed_porous_interfaces(1)   ! low-speed-porous (16)
          if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
          call Boundary_condition_onemesh(1)            ! ??????? (?څGhost Cell???)
          call update_buffer_onemesh(1)                 ! ?????????????

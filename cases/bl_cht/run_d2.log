@@ -1,0 +1,89 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            2 Total Cell number is        13600
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=       13600
+ Total Grid number=       27892
+ Max grid number is        27892  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        27892  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           2
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1000.0000000000000       k=   1.4286000000000001     
+   Block           2 : Block_type=           1  rho=   7800.0000000000000       Cp=   460.00000000000000       k=   50.000000000000000     
+ creat main mesh OK, Num_Cell=       13600
+  read main mesh ...
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ Convert bc3d_interface.inp to bc3d_interface.inc ...
+ Convert bc3d_interface.inp to bc3d_interface.inc OK
+ read bc3d_interface.inc (Interface link file)......
+ read bc3d_interface.inc OK
+ Read solid_bc.inp OK
+   Block           2  (solid):           1  thermal BC faces
+     face           2  Tw=   800.00000000000000       Qw=   0.0000000000000000     
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           2           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+   DBG iter           1  maxU2=   4.8861613541656013       maxFi=  0.24182349112964499       maxFj=   0.0000000000000000       Fi(21,1,1)=   6.5812586896466475E-058  Fi(21,21,1)=   5.9448988070837365E-035  Fi(41,21,1)=   2.7636437093432159E-069
+   DBG div max=  0.18915520267169705       res_p=  0.18915520267169705     
+   SIMPLE iter           1  res_p=  0.18915520267169705       u(1,1,1)=  0.20844990390104795       p(1,1,1)=  0.50004168455033915     
+   DBG iter           2  maxU2=   4.8861613541656013       maxFi=  0.39634313538128246       maxFj=   4.2334719520521003E-003  Fi(21,1,1)=   1.8836427647693685E-009  Fi(21,21,1)=   1.1384156538624597E-005  Fi(41,21,1)=   1.6504882661137138E-008
+   DBG div max=  0.18211965451154424       res_p=  0.18211965451154424     
+   SIMPLE iter           2  res_p=  0.18211965451154424       u(1,1,1)=  0.25642732215356301       p(1,1,1)=  0.73268051383706478     
+   DBG iter           3  maxU2=   1.9521376528974872       maxFi=  0.11120133178348532       maxFj=   6.4659157943311642E-003  Fi(21,1,1)=   2.4539200282248864E-007  Fi(21,21,1)=   9.5632665957865414E-005  Fi(41,21,1)=   1.9740411060303084E-006
+   DBG div max=   2.7063007348139014E-002  res_p=   2.7063007348139014E-002
+   SIMPLE iter           3  res_p=   2.7063007348139014E-002  u(1,1,1)=  0.29629306600413219       p(1,1,1)=  0.90121739693674596     
+   SIMPLE iter           4  res_p=   2.0667172507126529E-002  u(1,1,1)=  0.32388163258398772       p(1,1,1)=   1.0416943867208734     
+   SIMPLE iter           5  res_p=   1.6300082689274437E-002  u(1,1,1)=  0.34484476160270772       p(1,1,1)=   1.1597481322075982     
+ DEBUG T iter          50 min   299.99999999999676      max   300.00000000000250     
+ DEBUG T iter         100 min   299.99999999999113      max   300.00000000000392     
+   SIMPLE iter         100  res_p=   1.6562460654723194E-004  u(1,1,1)=  0.39154648008375859       p(1,1,1)=   2.5580195974407478     
+ DEBUG T iter         150 min   299.99999999998755      max   300.00000000000443     
+ DEBUG T iter         200 min   299.99999999998658      max   300.00000000000523     
+   SIMPLE iter         200  res_p=   3.2656419796491936E-004  u(1,1,1)=  0.38992362581509027       p(1,1,1)=   1.6473882868861891     
+ DEBUG T iter         250 min   299.99999999998704      max   300.00000000000546     
+ DEBUG T iter         300 min   299.99999999998846      max   300.00000000000563     
+   SIMPLE iter         300  res_p=   1.0043803614657632E-004  u(1,1,1)=  0.39205396415302368       p(1,1,1)=   1.1877383734402132     
+ DEBUG T iter         350 min   299.99999999998806      max   300.00000000000568     
+ DEBUG T iter         400 min   299.99999999998812      max   300.00000000000546     
+   SIMPLE iter         400  res_p=   2.5770980901387939E-005  u(1,1,1)=  0.39287612674939332       p(1,1,1)=   1.0979131766247348     
+ DEBUG T iter         450 min   299.99999999998772      max   300.00000000000529     
+ DEBUG T iter         500 min   299.99999999998778      max   300.00000000000495     
+   SIMPLE iter         500  res_p=   7.0287080592038061E-006  u(1,1,1)=  0.39302190947516047       p(1,1,1)=   1.0973934102730285     
+ Low-speed solver Block           1  SIMPLE iterations:         515  res_p:   4.8916213675930916E-006
+   GS iter           1  res=   739.06616815929647       Ts(1,1,1)=   724.97875106244749       Ts(nx-1,ny-1,1)=   348.62204519238082     
+   GS iter           2  res=   496.30260198346184       Ts(1,1,1)=   761.64490817637954       Ts(nx-1,ny-1,1)=   319.23389292809088     
+   GS iter           3  res=   360.22371028217879       Ts(1,1,1)=   696.40437440982021       Ts(nx-1,ny-1,1)=   347.28750808225038     
+   GS iter           4  res=   243.33720302607799       Ts(1,1,1)=   762.48624461613690       Ts(nx-1,ny-1,1)=   333.10166777753011     
+   GS iter           5  res=   176.68492039716762       Ts(1,1,1)=   749.57386918012469       Ts(nx-1,ny-1,1)=   347.03944575312710     
+ Solid solver Block           2  GS iterations:      200001  final res:   1.5916157281026244E-012
+   DBG: Ts(1,1,1)=   776.19047619047672       Ts(nx/2,ny/2,1)=   585.71428571428805       Ts(nx-1,ny-1,1)=   347.61904761904839     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+  -1.5959455978986625E-016   2.6020852139652106E-018   2.5343225781848666E-018
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   1.0759340721291184E-016   2.9747797107571028E-018   3.8163916471489756E-017
+ Kstep, t=           1   1.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_2.dat
+ write VTK files ......
+ write VTK files OK

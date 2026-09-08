@@ -6,7 +6,7 @@ $control_ec
   If_viscous=0
   Iflag_turbulence_model=0
   Kstep_save=1
-  t_end=1.d0
+  t_end=10.d0
   CFL=1.0d0
   Time_Method=0
   T_inf=288.15d0

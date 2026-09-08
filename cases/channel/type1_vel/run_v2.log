@@ -1,0 +1,73 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is         6400
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        6400
+ Total Grid number=       13202
+ Max grid number is        13202  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        13202  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+ creat main mesh OK, Num_Cell=        6400
+  read main mesh ...
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+   DBG iter           1  maxU2=   1.6447944459839443       maxFi=   2.5000000000000022E-002  maxFj=   0.0000000000000000       Fi(21,1,1)=   2.8950248021396498E-022  Fi(21,21,1)=   8.5106817960463076E-020  Fi(41,21,1)=   1.4973138372431838E-039
+   DBG div max=   2.0535688284688630E-002  res_p=   2.0535688284688630E-002
+   SIMPLE iter           1  res_p=   2.0535688284688630E-002  u(1,1,1)=   1.0942241979654606       p(1,1,1)=   4.3238055167249136     
+   DBG iter           2  maxU2=   1.6447944459839443       maxFi=   4.1043249358440274E-002  maxFj=   4.3373807006707836E-003  Fi(21,1,1)=   7.6852963741447935E-005  Fi(21,21,1)=   2.3198353160605849E-004  Fi(41,21,1)=   1.9038946467212281E-009
+   DBG div max=   1.6658087267283007E-002  res_p=   1.6658087267283007E-002
+   SIMPLE iter           2  res_p=   1.6658087267283007E-002  u(1,1,1)=  0.32894730620861135       p(1,1,1)=   4.7107496828756421     
+   DBG iter           3  maxU2=   1.0738078939332658       maxFi=   2.5000000000000022E-002  maxFj=   1.3324378322773944E-002  Fi(21,1,1)=   1.6830064097302271E-003  Fi(21,21,1)=   4.7066256310225266E-003  Fi(41,21,1)=   5.0910054240103349E-006
+   DBG div max=   7.1033327390214330E-003  res_p=   7.1033327390214330E-003
+   SIMPLE iter           3  res_p=   7.1033327390214330E-003  u(1,1,1)=  0.81427198900301634       p(1,1,1)=   5.8537365526320055     
+   SIMPLE iter           4  res_p=   6.7164618113568211E-003  u(1,1,1)=  0.40901264336683457       p(1,1,1)=   6.0923689849919249     
+   SIMPLE iter           5  res_p=   6.5512908555145268E-003  u(1,1,1)=  0.68207085919372734       p(1,1,1)=   6.4345882303310633     
+ DEBUG T iter          50 min   299.99999999999955      max   300.00000000000040     
+ DEBUG T iter         100 min   299.99999999999943      max   300.00000000000051     
+   SIMPLE iter         100  res_p=   6.6177468789927793E-002  u(1,1,1)=  0.50357787367735718       p(1,1,1)=   5.5056403323354592     
+ DEBUG T iter         150 min   299.99999999999972      max   300.00000000000040     
+Note: The following floating-point exceptions are signalling: IEEE_INVALID_FLAG IEEE_OVERFLOW_FLAG IEEE_DENORMAL
+ DEBUG T NaN at iter         182  cell         125          37           1  T(i-1)   300.00000000000023       T(i+1)                       NaN  T(j-1)   300.00000000000000       T(j+1)                       NaN  p                       NaN  Fi(i,j)   2.6845924894490787E+017
+--------------------------------------------------------------------------
+mpirun has exited due to process rank 0 with PID 0 on
+node DESKTOP-68P2P7O exiting improperly. There are three reasons this could occur:
+
+1. this process did not call "init" before exiting, but others in
+the job did. This can cause a job to hang indefinitely while it waits
+for all processes to call "init". By rule, if one process calls "init",
+then ALL processes must call "init" prior to termination.
+
+2. this process called "init", but exited without calling "finalize".
+By rule, all processes that call "init" MUST call "finalize" prior to
+exiting or it will be considered an "abnormal termination"
+
+3. this process called "MPI_Abort" or "orte_abort" and the mca parameter
+orte_create_session_dirs is set to false. In this case, the run-time cannot
+detect that the abort call was an abnormal termination. Hence, the only
+error message you will receive is this one.
+
+This may have caused other processes in the application to be
+terminated by signals sent by mpirun (as reported here).
+
+You can avoid this message by specifying -quiet on the mpirun command line.
+--------------------------------------------------------------------------

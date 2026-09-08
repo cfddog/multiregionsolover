@@ -1,0 +1,78 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            4 Total Cell number is         8760
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        8760
+ Total Grid number=       18406
+ Max grid number is        18406  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        18406  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           4
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1005.0000000000000       k=   2.5999999999999999E-002
+   Block           2 : Block_type=           0  rho=   0.0000000000000000       Cp=   0.0000000000000000       k=   0.0000000000000000     
+   Block           3 : Block_type=           0  rho=   0.0000000000000000       Cp=   0.0000000000000000       k=   0.0000000000000000     
+   Block           4 : Block_type=           0  rho=   0.0000000000000000       Cp=   0.0000000000000000       k=   0.0000000000000000     
+ creat main mesh OK, Num_Cell=        8760
+  read main mesh ...
+ read Mesh3d.dat OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ Convert bc3d_interface.inp to bc3d_interface.inc ...
+ Convert bc3d_interface.inp to bc3d_interface.inc OK
+ read bc3d_interface.inc (Interface link file)......
+ read bc3d_interface.inc OK
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           2           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           3           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           4           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+   DBG iter           1  maxU2=   800.00000000000000       maxFi=   2.6389521118780360E-002  maxFj=  0.92409321861935834       Fi(21,1,1)=   0.0000000000000000       Fi(21,21,1)=   0.0000000000000000       Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=  0.92415970978686657       res_p=  0.92415970978686657     
+   SIMPLE iter           1  res_p=  0.92415970978686657       u(1,1,1)=   1.2051291700672553       p(1,1,1)=  -1.5117916390093309E-003
+   DBG iter           2  maxU2=   800.00000000000000       maxFi=   1.7850759938932768       maxFj=  0.91288002869041696       Fi(21,1,1)=   0.0000000000000000       Fi(21,21,1)=   0.0000000000000000       Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=   1.7747833364231325       res_p=   1.7747833364231325     
+   SIMPLE iter           2  res_p=   1.7747833364231325       u(1,1,1)=  0.55948284297222328       p(1,1,1)=  -1.7262039864372719E-002
+   DBG iter           3  maxU2=   800.00000000000000       maxFi=   2.5226580278854169       maxFj=   2.0629031327918277       Fi(21,1,1)=   0.0000000000000000       Fi(21,21,1)=   0.0000000000000000       Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=   2.4840877532618690       res_p=   2.4840877532618690     
+   SIMPLE iter           3  res_p=   2.4840877532618690       u(1,1,1)=  0.55907846556226448       p(1,1,1)= -0.20569456381893461     
+   SIMPLE iter           4  res_p=   17.336925774475883       u(1,1,1)=   1.7454996523021404       p(1,1,1)= -0.88396060532538856     
+   SIMPLE iter           5  res_p=   65.042137095118491       u(1,1,1)=   13.792430283168894       p(1,1,1)=  -26.543368287079559     
+ DEBUG T NaN at iter          20  cell          14           1           1  T(i-1)   300.00000000000000       T(i+1)                       NaN  T(j-1)   300.00000000000000       T(j+1)                       NaN  p                       NaN  Fi(i,j)  -14635.910963047278     
+Note: The following floating-point exceptions are signalling: IEEE_INVALID_FLAG IEEE_OVERFLOW_FLAG IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
+--------------------------------------------------------------------------
+mpirun has exited due to process rank 0 with PID 0 on
+node DESKTOP-68P2P7O exiting improperly. There are three reasons this could occur:
+
+1. this process did not call "init" before exiting, but others in
+the job did. This can cause a job to hang indefinitely while it waits
+for all processes to call "init". By rule, if one process calls "init",
+then ALL processes must call "init" prior to termination.
+
+2. this process called "init", but exited without calling "finalize".
+By rule, all processes that call "init" MUST call "finalize" prior to
+exiting or it will be considered an "abnormal termination"
+
+3. this process called "MPI_Abort" or "orte_abort" and the mca parameter
+orte_create_session_dirs is set to false. In this case, the run-time cannot
+detect that the abort call was an abnormal termination. Hence, the only
+error message you will receive is this one.
+
+This may have caused other processes in the application to be
+terminated by signals sent by mpirun (as reported here).
+
+You can avoid this message by specifying -quiet on the mpirun command line.
+--------------------------------------------------------------------------

@@ -1,0 +1,34 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+At line 610 of file sub_geometry.f90 (unit = 99, file = 'Mesh3d.x')
+Fortran runtime error: End of file
+
+Error termination. Backtrace:
+ Check if Multi-Grid can be used ...
+#0  0x7f69d6623e59 in ???
+#1  0x7f69d6624a71 in ???
+#2  0x7f69d66256dc in ???
+#3  0x7f69d68bb6c3 in ???
+#4  0x7f69d68bc177 in ???
+#5  0x7f69d68bc25c in ???
+#6  0x7f69d68be802 in ???
+#7  0x7f69d68bf0f2 in ???
+#8  0x58114cc05157 in check_mesh_multigrid_
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/sub_geometry.f90:610
+#9  0x58114cb69033 in MAIN__
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/opencfd_ec3d_v1.16a.f90:151
+#10  0x58114cb6839e in main
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/opencfd_ec3d_v1.16a.f90:127
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun detected that one or more processes exited with non-zero status, thus causing
+the job to be terminated. The first process to do so was:
+
+  Process name: [[42680,1],0]
+  Exit code:    2
+--------------------------------------------------------------------------

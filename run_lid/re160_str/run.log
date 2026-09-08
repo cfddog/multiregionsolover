@@ -1,0 +1,102 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is        25600
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=       25600
+ Total Grid number=       51842
+ Max grid number is        51842  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        51842  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+ creat main mesh OK, Num_Cell=       25600
+  read main mesh ...
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+   DBG iter           1  maxU2=   2.0000000000000000       maxFi=   1.2982716785367669E-003  maxFj=   0.0000000000000000       Fi(21,1,1)=   0.0000000000000000       Fi(21,21,1)=   0.0000000000000000       Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=   8.4482348849717085E-004  res_p=   8.4482348849717085E-004
+   SIMPLE iter           1  res_p=   8.4482348849717085E-004  u(1,1,1)=   3.1876127338385545E-319  p(1,1,1)=   1.3873857400868044E-319
+   DBG iter           2  maxU2=   1.4546900997970105       maxFi=   1.0645681447251142E-003  maxFj=   1.5808889063311570E-004  Fi(21,1,1)=   0.0000000000000000       Fi(21,21,1)=   0.0000000000000000       Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=   5.6156020841019081E-004  res_p=   5.6156020841019081E-004
+   SIMPLE iter           2  res_p=   5.6156020841019081E-004  u(1,1,1)=   8.6234163065922055E-093  p(1,1,1)=  -4.1135758747258152E-094
+   DBG iter           3  maxU2=   1.5848937765288509       maxFi=   1.1698644079414502E-003  maxFj=   2.3038969495679627E-004  Fi(21,1,1)=   1.0067078357477101E-068  Fi(21,21,1)=   2.7088608823710232E-051  Fi(41,21,1)=   1.5212119938374261E-040
+   DBG div max=   4.3996833450606174E-004  res_p=   4.3996833450606174E-004
+   SIMPLE iter           3  res_p=   4.3996833450606174E-004  u(1,1,1)=   9.0060303526676876E-041  p(1,1,1)=  -6.8569691114490639E-041
+   SIMPLE iter           4  res_p=   3.4431968481476847E-004  u(1,1,1)=   5.3931228462623379E-028  p(1,1,1)=  -5.3303100798774354E-028
+   SIMPLE iter           5  res_p=   2.7521389140509585E-004  u(1,1,1)=   7.2651754507545316E-022  p(1,1,1)=  -7.7795578490580140E-022
+ DEBUG T iter          50 min   299.99999999999989      max   300.00000000000011     
+ DEBUG T iter         100 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter         100  res_p=   4.5933412440255167E-006  u(1,1,1)=  -2.7242646175217955E-004  p(1,1,1)=  -7.0761974477678352E-003
+ DEBUG T iter         150 min   299.99999999999989      max   300.00000000000011     
+ DEBUG T iter         200 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter         200  res_p=   3.3769069980675233E-006  u(1,1,1)=   7.3549444076713766E-005  p(1,1,1)=  -4.0432760202673609E-004
+ DEBUG T iter         250 min   299.99999999999989      max   300.00000000000011     
+ DEBUG T iter         300 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter         300  res_p=   3.3619861590876692E-006  u(1,1,1)=   8.5910020857023396E-006  p(1,1,1)=   2.2687127356821393E-003
+ DEBUG T iter         350 min   299.99999999999989      max   300.00000000000011     
+ DEBUG T iter         400 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter         400  res_p=   2.9728459077745569E-006  u(1,1,1)=  -1.6846420603290567E-005  p(1,1,1)=   3.8230480269088756E-003
+ DEBUG T iter         450 min   299.99999999999989      max   300.00000000000011     
+ DEBUG T iter         500 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter         500  res_p=   2.3131349253426980E-006  u(1,1,1)=  -1.2219291956675999E-005  p(1,1,1)=   5.8549519063368673E-003
+ DEBUG T iter         550 min   299.99999999999989      max   300.00000000000011     
+ DEBUG T iter         600 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter         600  res_p=   1.7403360240279050E-006  u(1,1,1)=  -1.2364763117963488E-005  p(1,1,1)=   7.7352526452485731E-003
+ DEBUG T iter         650 min   299.99999999999989      max   300.00000000000011     
+ DEBUG T iter         700 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter         700  res_p=   1.2880826987336086E-006  u(1,1,1)=  -1.2667750142749074E-005  p(1,1,1)=   9.6546527568316925E-003
+ DEBUG T iter         750 min   299.99999999999989      max   300.00000000000011     
+ DEBUG T iter         800 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter         800  res_p=   9.0367224036299980E-007  u(1,1,1)=  -1.1735896759427172E-005  p(1,1,1)=   1.1532010322638316E-002
+ DEBUG T iter         850 min   299.99999999999977      max   300.00000000000011     
+ DEBUG T iter         900 min   299.99999999999977      max   300.00000000000011     
+   SIMPLE iter         900  res_p=   6.4829690368090574E-007  u(1,1,1)=  -1.0182366847249630E-005  p(1,1,1)=   1.3208957413106277E-002
+ DEBUG T iter         950 min   299.99999999999966      max   300.00000000000011     
+ DEBUG T iter        1000 min   299.99999999999966      max   300.00000000000011     
+   SIMPLE iter        1000  res_p=   4.6653879478652897E-007  u(1,1,1)=  -8.6196941902208741E-006  p(1,1,1)=   1.4643579768756946E-002
+ DEBUG T iter        1050 min   299.99999999999966      max   300.00000000000011     
+ DEBUG T iter        1100 min   299.99999999999966      max   300.00000000000011     
+   SIMPLE iter        1100  res_p=   3.3624206304178929E-007  u(1,1,1)=  -7.2152125431796991E-006  p(1,1,1)=   1.5849431729250234E-002
+ DEBUG T iter        1150 min   299.99999999999977      max   300.00000000000011     
+ DEBUG T iter        1200 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter        1200  res_p=   2.4893232824889366E-007  u(1,1,1)=  -6.1041698064002272E-006  p(1,1,1)=   1.6861633569436717E-002
+ DEBUG T iter        1250 min   299.99999999999989      max   300.00000000000011     
+ DEBUG T iter        1300 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter        1300  res_p=   1.7761321602360880E-007  u(1,1,1)=  -5.1354916817876178E-006  p(1,1,1)=   1.7710366391718291E-002
+ DEBUG T iter        1350 min   299.99999999999989      max   300.00000000000023     
+ DEBUG T iter        1400 min   299.99999999999989      max   300.00000000000011     
+   SIMPLE iter        1400  res_p=   1.3211859459195605E-007  u(1,1,1)=  -4.3086382530118816E-006  p(1,1,1)=   1.8421670113946218E-002
+ DEBUG T iter        1450 min   299.99999999999989      max   300.00000000000011     
+ Low-speed solver Block           1  SIMPLE iterations:        1486  res_p:   9.9965110685830412E-008
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000        0.0000000000000000        0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        0.0000000000000000        0.0000000000000000     
+ Kstep, t=           1   1.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ write VTK files ......
+ write VTK files OK

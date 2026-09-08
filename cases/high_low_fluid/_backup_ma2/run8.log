@@ -1,0 +1,89 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            4 Total Cell number is         8760
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        8760
+ Total Grid number=       18406
+ Max grid number is        18406  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        18406  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           4
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1005.0000000000000       k=   2.5999999999999999E-002
+   Block           2 : Block_type=           0  rho=   0.0000000000000000       Cp=   0.0000000000000000       k=   0.0000000000000000     
+   Block           3 : Block_type=           0  rho=   0.0000000000000000       Cp=   0.0000000000000000       k=   0.0000000000000000     
+   Block           4 : Block_type=           0  rho=   0.0000000000000000       Cp=   0.0000000000000000       k=   0.0000000000000000     
+ creat main mesh OK, Num_Cell=        8760
+  read main mesh ...
+ read Mesh3d.dat OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ Convert bc3d_interface.inp to bc3d_interface.inc ...
+ Convert bc3d_interface.inp to bc3d_interface.inc OK
+ read bc3d_interface.inc (Interface link file)......
+ read bc3d_interface.inc OK
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           2           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           3           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           4           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+   DBG iter           1  maxU2=   800.00000000000000       maxFi=   1.3298318436256884E-004  maxFj=   58.995176714415329       Fi(21,1,1)=   0.0000000000000000       Fi(21,21,1)=   0.0000000000000000       Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=   58.995176714415329       res_p=   58.995176714415329     
+   SIMPLE iter           1  res_p=   58.995176714415329       u(1,1,1)=   49.892914955883683       p(1,1,1)=  -176.47023461516784     
+   DBG iter           2  maxU2=   17295.661438666077       maxFi=   37.731211051667728       maxFj=   1308.7175685889410       Fi(21,1,1)=   0.0000000000000000       Fi(21,21,1)=   0.0000000000000000       Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=   711.73707216212654       res_p=   711.73707216212654     
+   SIMPLE iter           2  res_p=   711.73707216212654       u(1,1,1)=   373.43489535750649       p(1,1,1)=  -502528.51366831397     
+   DBG iter           3  maxU2=   136297.59781024724       maxFi=   366.72067442809430       maxFj=   3727.2259607268802       Fi(21,1,1)=   0.0000000000000000       Fi(21,21,1)=   0.0000000000000000       Fi(41,21,1)=   0.0000000000000000     
+   DBG div max=   1740.4709101701437       res_p=   1740.4709101701437     
+   SIMPLE iter           3  res_p=   1740.4709101701437       u(1,1,1)=   2846.2662810438633       p(1,1,1)=  -35037495.649814792     
+   SIMPLE iter           4  res_p=   2069.4686137080175       u(1,1,1)=   11644.223619992465       p(1,1,1)=  -39483085.523115657     
+   SIMPLE iter           5  res_p=   6886.7460425947775       u(1,1,1)=  -7877.5010519940715       p(1,1,1)=  -61559623.602656186     
+ DEBUG T iter          50 min   24.407526429449199      max   648.80519292781196     
+ DEBUG T iter         100 min   18.384413247921607      max   641.78835382106081     
+   SIMPLE iter         100  res_p=                       NaN  u(1,1,1)=                       NaN  p(1,1,1)=                       NaN
+ Low-speed solver Block           1  SIMPLE iterations:         121  res_p:                       NaN
+Note: The following floating-point exceptions are signalling: IEEE_INVALID_FLAG IEEE_OVERFLOW_FLAG IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+  -3.0835100680123066E-002   15.249999999999993        0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   7.7087751700307666E-003   3.8124999999999982       -1.4277030073802464E-002
+ NaN in Residual is found !, In block           3
+ location i,j,k,m=           6           1           1           5
+ Stop
+--------------------------------------------------------------------------
+mpirun has exited due to process rank 0 with PID 0 on
+node DESKTOP-68P2P7O exiting improperly. There are three reasons this could occur:
+
+1. this process did not call "init" before exiting, but others in
+the job did. This can cause a job to hang indefinitely while it waits
+for all processes to call "init". By rule, if one process calls "init",
+then ALL processes must call "init" prior to termination.
+
+2. this process called "init", but exited without calling "finalize".
+By rule, all processes that call "init" MUST call "finalize" prior to
+exiting or it will be considered an "abnormal termination"
+
+3. this process called "MPI_Abort" or "orte_abort" and the mca parameter
+orte_create_session_dirs is set to false. In this case, the run-time cannot
+detect that the abort call was an abnormal termination. Hence, the only
+error message you will receive is this one.
+
+This may have caused other processes in the application to be
+terminated by signals sent by mpirun (as reported here).
+
+You can avoid this message by specifying -quiet on the mpirun command line.
+--------------------------------------------------------------------------

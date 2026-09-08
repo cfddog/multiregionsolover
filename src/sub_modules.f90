@@ -259,6 +259,22 @@
    real(PRE_EC),save:: LS_alpha_p, LS_alpha_u, LS_alpha_T, LS_Tol  ! low-speed under-relaxation + tolerance
    real(PRE_EC),save:: Porous_T_ref, Porous_alpha_Ts, Porous_Tol    ! porous: initial/frame T ref, Ts relaxation, SIMPLE tolerance
    integer,save:: Porous_Max_Iter                                   ! porous SIMPLE inner iterations per solver call
+ !---- interface-19 staggered (segmented) coupling controls --------------------
+ ! Iflag_Couple_Scheme = 0 : per-step simultaneous coupling (default)
+ !                       1 : staggered segmented coupling for FLUID<->POROUS (19):
+ !                           gas chunk (compressible only, code-19 face = isothermal
+ !                           wall at fp_Tw) -> extract q_w -> porous chunk (hot-end
+ !                           heat flux q_w, coolant supply below) -> return fp_Tw.
+   integer,save:: Iflag_Couple_Scheme=0
+   integer,save:: Kstep_Couple_Comp=1000    ! compressible steps per gas chunk
+   integer,save:: Niter_Couple_Outer=60     ! max outer staggered iterations
+   integer,save:: Porous_Chunk_Iter=10      ! porous SIMPLE solver calls per porous chunk
+   integer,save:: Niter_Couple_Warm=0       ! outer iters with the FULL gas chunk (warm start)
+   integer,save:: Kstep_Couple_Min=1        ! gas-chunk step floor after warm-up (auto shrink)
+   real(PRE_EC),save:: Twall_Couple_Init=300.d0  ! first gas-chunk interface wall T [K]
+   real(PRE_EC),save:: Tol_Couple_Tw=2.d-2       ! outer convergence: max|dT_w| [K]
+ ! per-interface-face arrays used by the staggered coupling (face-cell indexed)
+   real(PRE_EC),save,allocatable,dimension(:,:):: fp_Tw, fp_Tw_old, fp_qw, fp_pw
  !-----------mpi data ----------------------------------------------------------- 
    integer:: my_id,Total_proc !
    integer,pointer,dimension(:):: B_Proc, B_n !

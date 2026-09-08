@@ -1,0 +1,197 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is         6400
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        6400
+ Total Grid number=       13122
+ Max grid number is        13122  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        13122  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+ creat main mesh OK, Num_Cell=        6400
+  read main mesh ...
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+  read flow data:  flow3d.dat
+ read flow3d.dat OK
+ Init data OK, Kstep,tt=           0   0.0000000000000000     
+  Start ......
+   SIMPLE iter           1  res_p=   1.2829577703067570       u(1,1,1)=  -2.5383250572560277E-003  p(1,1,1)=   2.5016300580502375E-005
+   SIMPLE iter           2  res_p=   3.6883595560879874       u(1,1,1)=  -6.9279087940453173E-003  p(1,1,1)=   8.4086082899384441E-005
+   SIMPLE iter           3  res_p=   3.9819234876612559       u(1,1,1)=  -1.1394454084198783E-002  p(1,1,1)=   1.6972509281589713E-004
+   SIMPLE iter           4  res_p=   4.7185753199511353       u(1,1,1)=  -1.4901900020181540E-002  p(1,1,1)=   2.7093861020496574E-004
+   SIMPLE iter           5  res_p=   5.0256005167733742       u(1,1,1)=  -1.7236331868351159E-002  p(1,1,1)=   3.7935503686627138E-004
+ DEBUG T iter          50 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter         100 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter         100  res_p=   6.6680538375407972       u(1,1,1)=   8.6603613435771026E-003  p(1,1,1)=  -2.6454563273243530E-003
+ DEBUG T iter         150 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter         200 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter         200  res_p=   6.7854024479041239       u(1,1,1)=  -2.8131107883370278E-003  p(1,1,1)=  -3.6808411290881115E-003
+ DEBUG T iter         250 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter         300 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter         300  res_p=   6.8508493804490511       u(1,1,1)=  -7.5085558476106033E-003  p(1,1,1)=  -5.4934925310611655E-004
+ DEBUG T iter         350 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter         400 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter         400  res_p=   6.8799962864012443       u(1,1,1)=  -9.2976144347325113E-003  p(1,1,1)=   3.6200882673600547E-003
+ DEBUG T iter         450 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter         500 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter         500  res_p=   6.8632749368580575       u(1,1,1)=  -9.7643170731890015E-003  p(1,1,1)=   8.3250894752479859E-003
+ DEBUG T iter         550 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter         600 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter         600  res_p=   6.8051256404713936       u(1,1,1)=  -8.4276713529232421E-003  p(1,1,1)=   1.2621225830538048E-002
+ DEBUG T iter         650 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter         700 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter         700  res_p=   6.7752264345714108       u(1,1,1)=  -8.4889627983720482E-003  p(1,1,1)=   1.6530342679508900E-002
+ DEBUG T iter         750 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter         800 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter         800  res_p=   6.7685583551967019       u(1,1,1)=  -1.0484267907423541E-002  p(1,1,1)=   2.1005893199456740E-002
+ DEBUG T iter         850 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter         900 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter         900  res_p=   6.7898126286603500       u(1,1,1)=  -1.2651581244043539E-002  p(1,1,1)=   2.6683247032171349E-002
+ DEBUG T iter         950 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        1000 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        1000  res_p=   6.7930871435852058       u(1,1,1)=  -1.3651401520302416E-002  p(1,1,1)=   3.2952023106585418E-002
+ DEBUG T iter        1050 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        1100 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        1100  res_p=   6.7939302044138907       u(1,1,1)=  -1.4594658181020816E-002  p(1,1,1)=   3.9730500520787505E-002
+ DEBUG T iter        1150 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        1200 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        1200  res_p=   6.7831214429932150       u(1,1,1)=  -1.4698833630529954E-002  p(1,1,1)=   4.6714309515950937E-002
+ DEBUG T iter        1250 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        1300 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        1300  res_p=   6.7641028491595812       u(1,1,1)=  -1.5261066307269748E-002  p(1,1,1)=   5.3809229479137431E-002
+ DEBUG T iter        1350 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        1400 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        1400  res_p=   6.7435996482877911       u(1,1,1)=  -1.5123421451386714E-002  p(1,1,1)=   6.0942180559712268E-002
+ DEBUG T iter        1450 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        1500 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        1500  res_p=   6.7367665078261956       u(1,1,1)=  -1.5893435244198187E-002  p(1,1,1)=   6.8243524766826463E-002
+ DEBUG T iter        1550 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        1600 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        1600  res_p=   6.7514685055523911       u(1,1,1)=  -1.7318089888116450E-002  p(1,1,1)=   7.6149355061964297E-002
+ DEBUG T iter        1650 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        1700 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        1700  res_p=   6.7450440680388422       u(1,1,1)=  -1.8057588498121859E-002  p(1,1,1)=   8.4423157705028146E-002
+ DEBUG T iter        1750 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        1800 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        1800  res_p=   6.7487768976553912       u(1,1,1)=  -1.8035894535277715E-002  p(1,1,1)=   9.3015994082586595E-002
+ DEBUG T iter        1850 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        1900 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        1900  res_p=   6.7339948437281416       u(1,1,1)=  -1.8252444183070229E-002  p(1,1,1)=  0.10152423715372365     
+ DEBUG T iter        1950 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        2000 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        2000  res_p=   6.7186686410214369       u(1,1,1)=  -1.8034266920028522E-002  p(1,1,1)=  0.11004935837645184     
+ DEBUG T iter        2050 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        2100 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        2100  res_p=   6.7076636291886755       u(1,1,1)=  -1.8028376332045952E-002  p(1,1,1)=  0.11854941008489865     
+ DEBUG T iter        2150 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        2200 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        2200  res_p=   6.7000005381804550       u(1,1,1)=  -1.8614437832636128E-002  p(1,1,1)=  0.12709024645815548     
+ DEBUG T iter        2250 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        2300 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        2300  res_p=   6.7140968912955916       u(1,1,1)=  -2.0511650314114574E-002  p(1,1,1)=  0.13640888058218464     
+ DEBUG T iter        2350 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        2400 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        2400  res_p=   6.7083055416721820       u(1,1,1)=  -2.0122101206774691E-002  p(1,1,1)=  0.14591545953308704     
+ DEBUG T iter        2450 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        2500 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        2500  res_p=   6.7096606330708823       u(1,1,1)=  -2.0251746066200425E-002  p(1,1,1)=  0.15541052567975952     
+ DEBUG T iter        2550 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        2600 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        2600  res_p=   6.7023279459809348       u(1,1,1)=  -2.0431849361511465E-002  p(1,1,1)=  0.16500927551618957     
+ DEBUG T iter        2650 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        2700 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        2700  res_p=   6.6885316040954956       u(1,1,1)=  -1.9864360777270561E-002  p(1,1,1)=  0.17446259167361031     
+ DEBUG T iter        2750 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        2800 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        2800  res_p=   6.6716667950053967       u(1,1,1)=  -1.9086195371369130E-002  p(1,1,1)=  0.18344516996658439     
+ DEBUG T iter        2850 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        2900 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        2900  res_p=   6.6647161274970275       u(1,1,1)=  -2.0236413737473372E-002  p(1,1,1)=  0.19271248403512825     
+ DEBUG T iter        2950 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        3000 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        3000  res_p=   6.6710832464019010       u(1,1,1)=  -2.1030281021250818E-002  p(1,1,1)=  0.20250984035305536     
+ DEBUG T iter        3050 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        3100 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        3100  res_p=   6.6714334451430917       u(1,1,1)=  -2.0692778342318204E-002  p(1,1,1)=  0.21221595378102040     
+ DEBUG T iter        3150 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        3200 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        3200  res_p=   6.6921135442953030       u(1,1,1)=  -2.1141625628725215E-002  p(1,1,1)=  0.22216158961459045     
+ DEBUG T iter        3250 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        3300 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        3300  res_p=   6.6641155434266350       u(1,1,1)=  -1.9954127193714748E-002  p(1,1,1)=  0.23164929337901924     
+ DEBUG T iter        3350 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        3400 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        3400  res_p=   6.6505383247076706       u(1,1,1)=  -1.8788995508915593E-002  p(1,1,1)=  0.24071079297289741     
+ DEBUG T iter        3450 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        3500 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        3500  res_p=   6.6317909484154418       u(1,1,1)=  -1.9442904496592903E-002  p(1,1,1)=  0.24962263360515854     
+ DEBUG T iter        3550 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        3600 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        3600  res_p=   6.6294686616178735       u(1,1,1)=  -1.9410790975580433E-002  p(1,1,1)=  0.25876999605850054     
+ DEBUG T iter        3650 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        3700 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        3700  res_p=   6.6354079268212018       u(1,1,1)=  -2.0394861045478961E-002  p(1,1,1)=  0.26809860931628737     
+ DEBUG T iter        3750 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        3800 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        3800  res_p=   6.6455635792012213       u(1,1,1)=  -2.0296007156669731E-002  p(1,1,1)=  0.27776091789896062     
+ DEBUG T iter        3850 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        3900 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        3900  res_p=   6.6329706043522894       u(1,1,1)=  -1.9554788912499652E-002  p(1,1,1)=  0.28703559698978443     
+ DEBUG T iter        3950 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        4000 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        4000  res_p=   6.6292659261464788       u(1,1,1)=  -1.9194808317312625E-002  p(1,1,1)=  0.29616198638976432     
+ DEBUG T iter        4050 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        4100 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        4100  res_p=   6.6072246372158485       u(1,1,1)=  -1.9020438439138948E-002  p(1,1,1)=  0.30505648095516841     
+ DEBUG T iter        4150 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        4200 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        4200  res_p=   6.6014352328484431       u(1,1,1)=  -1.7909843830382667E-002  p(1,1,1)=  0.31376861652934734     
+ DEBUG T iter        4250 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        4300 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        4300  res_p=   6.5956559907795356       u(1,1,1)=  -1.8333215319228734E-002  p(1,1,1)=  0.32220501785477645     
+ DEBUG T iter        4350 min   300.00000000000000      max   300.00000000000000     
+ DEBUG T iter        4400 min   300.00000000000000      max   300.00000000000000     
+   SIMPLE iter        4400  res_p=   42.218680049347014       u(1,1,1)=  -1.5428074877209312E-002  p(1,1,1)=  0.33082217255056712     
+Note: The following floating-point exceptions are signalling: IEEE_INVALID_FLAG IEEE_OVERFLOW_FLAG IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
+ DEBUG T NaN at iter        4438  cell          80          76           1  T(i-1)   300.00000000000000       T(i+1)   300.00000000000000       T(j-1)   300.00000000000000       T(j+1)                       NaN  p                       NaN  Fi(i,j)   2871642162.2617683     
+--------------------------------------------------------------------------
+mpirun has exited due to process rank 0 with PID 0 on
+node DESKTOP-68P2P7O exiting improperly. There are three reasons this could occur:
+
+1. this process did not call "init" before exiting, but others in
+the job did. This can cause a job to hang indefinitely while it waits
+for all processes to call "init". By rule, if one process calls "init",
+then ALL processes must call "init" prior to termination.
+
+2. this process called "init", but exited without calling "finalize".
+By rule, all processes that call "init" MUST call "finalize" prior to
+exiting or it will be considered an "abnormal termination"
+
+3. this process called "MPI_Abort" or "orte_abort" and the mca parameter
+orte_create_session_dirs is set to false. In this case, the run-time cannot
+detect that the abort call was an abnormal termination. Hence, the only
+error message you will receive is this one.
+
+This may have caused other processes in the application to be
+terminated by signals sent by mpirun (as reported here).
+
+You can avoid this message by specifying -quiet on the mpirun command line.
+--------------------------------------------------------------------------

@@ -1,0 +1,68 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            4 Total Cell number is         8760
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        8760
+ Total Grid number=       18406
+ Max grid number is        18406  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        18406  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           4
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1005.0000000000000       k=   2.5999999999999999E-002
+   Block           2 : Block_type=           0  rho=   0.0000000000000000       Cp=   0.0000000000000000       k=   0.0000000000000000     
+   Block           3 : Block_type=           0  rho=   0.0000000000000000       Cp=   0.0000000000000000       k=   0.0000000000000000     
+   Block           4 : Block_type=           0  rho=   0.0000000000000000       Cp=   0.0000000000000000       k=   0.0000000000000000     
+ creat main mesh OK, Num_Cell=        8760
+  read main mesh ...
+ read Mesh3d.dat OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ Convert bc3d_interface.inp to bc3d_interface.inc ...
+ Convert bc3d_interface.inp to bc3d_interface.inc OK
+ read bc3d_interface.inc (Interface link file)......
+ read bc3d_interface.inc OK
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           2           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           3           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           4           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+
+Program received signal SIGSEGV: Segmentation fault - invalid memory reference.
+
+Backtrace for this error:
+#0  0x70fe22c23e59 in ???
+#1  0x70fe22c22e75 in ???
+#2  0x70fe2284532f in ???
+	at ./signal/../sysdeps/unix/sysv/linux/x86_64/libc_sigaction.c:0
+#3  0x6387120c3ba8 in umessage_send_mpi_
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/sub_update_buffer_mpi.f90:108
+#4  0x6387120c407c in update_buffer_onemesh_
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/sub_update_buffer_mpi.f90:25
+#5  0x63871205b73a in init_flow_zero_
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/sub_init.f90:438
+#6  0x6387120675b1 in init_flow_
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/sub_init.f90:286
+#7  0x63871205a8d4 in MAIN__
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/opencfd_ec3d_v1.16a.f90:156
+#8  0x63871205a39e in main
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/opencfd_ec3d_v1.16a.f90:127
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun noticed that process rank 0 with PID 0 on node DESKTOP-68P2P7O exited on signal 11 (Segmentation fault).
+--------------------------------------------------------------------------

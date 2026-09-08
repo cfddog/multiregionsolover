@@ -131,6 +131,16 @@
     Porous_alpha_Ts=0.7d0   ! under-relaxation for the Ts (solid-frame) solve
     Porous_Max_Iter=5000    ! SIMPLE inner iterations per solver call
     Porous_Tol=1.d-8        ! SIMPLE convergence tolerance (pressure correction residual)
+
+!---- interface-19 staggered (segmented) coupling controls --------------------
+    Iflag_Couple_Scheme=0   ! 0 = per-step coupling; 1 = staggered segmented (gas chunk / porous chunk)
+    Kstep_Couple_Comp=1000  ! compressible steps per gas chunk
+    Niter_Couple_Outer=60   ! max outer staggered iterations
+    Porous_Chunk_Iter=10    ! porous SIMPLE solver calls per porous chunk
+    Niter_Couple_Warm=0     ! outer iters with the FULL gas chunk (warm start, auto-shrink afterwards)
+    Kstep_Couple_Min=1      ! gas-chunk step floor after warm-up (auto shrink)
+    Twall_Couple_Init=300.d0 ! first gas-chunk interface wall temperature [K]
+    Tol_Couple_Tw=2.d-2     ! outer convergence: max|dT_w| [K]
 end
 
 !------read parameter (Namelist type)---------------- 
@@ -159,7 +169,10 @@ end
 		LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, &
 		LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, &
 		LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm, &
-		Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol
+		Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, &
+		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
+		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
+		Twall_Couple_Init, Tol_Couple_Tw
 
 
 	open(99,file="control.ec")
@@ -313,6 +326,8 @@ end
     rpara(57)=Porous_T_ref
     rpara(58)=Porous_alpha_Ts
     rpara(59)=Porous_Tol
+    rpara(60)=Twall_Couple_Init
+    rpara(61)=Tol_Couple_Tw
 
 
 
@@ -352,6 +367,12 @@ end
     Ipara(36)=Porous_Max_Iter
     Ipara(37)=Iflag_vtk_onefile
     Ipara(38)=Iflag_vtk_SI
+    Ipara(39)=Iflag_Couple_Scheme
+    Ipara(40)=Kstep_Couple_Comp
+    Ipara(41)=Niter_Couple_Outer
+    Ipara(42)=Porous_Chunk_Iter
+    Ipara(43)=Niter_Couple_Warm
+    Ipara(44)=Kstep_Couple_Min
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -413,6 +434,8 @@ end
     Porous_T_ref=rpara(57)
     Porous_alpha_Ts=rpara(58)
     Porous_Tol=rpara(59)
+    Twall_Couple_Init=rpara(60)
+    Tol_Couple_Tw=rpara(61)
 
 
 
@@ -451,6 +474,12 @@ end
     Porous_Max_Iter=Ipara(36)
     Iflag_vtk_onefile=Ipara(37)
     Iflag_vtk_SI=Ipara(38)
+    Iflag_Couple_Scheme=Ipara(39)
+    Kstep_Couple_Comp=Ipara(40)
+    Niter_Couple_Outer=Ipara(41)
+    Porous_Chunk_Iter=Ipara(42)
+    Niter_Couple_Warm=Ipara(43)
+    Kstep_Couple_Min=Ipara(44)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
