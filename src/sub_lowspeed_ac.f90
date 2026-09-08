@@ -53,8 +53,8 @@
 
    call lowspeed_inlet_velocity(B, uin_x, uin_y, uin_z)
    Uref = sqrt(uin_x*uin_x + uin_y*uin_y + uin_z*uin_z)
+   if(Uref < 1.d-12) Uref = max(abs(LS_U_lid), 1.d-3)      ! lid-driven cavity etc.
    if(Uref < 1.d-12) Uref = sqrt(abs(LS_P_in-LS_P_out)/max(LS_rho,1.d-20))
-   if(Uref < 1.d-12) Uref = max(abs(LS_U_lid), 1.d-3)
    if(Uref < 1.d-12) Uref = 1.d0
    beta = max(AC_beta, 1.d-8) * Uref * Uref
    U2   = max(Uref*Uref, 1.d-20)
