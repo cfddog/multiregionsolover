@@ -1,0 +1,89 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is         6400
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        6400
+ Total Grid number=       13122
+ Max grid number is        13122  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        13122  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+ porous.inp not found: porous blocks use defaults (eps=0.9, dp=1e-3 m, hv=0)
+ creat main mesh OK, Num_Cell=        6400
+  read main mesh ...
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          81          81           2  beta=   1.0000000000000000       CFL=   20.000000000000000       dual=           0
+   AC iter           1  res_q=   0.0000000000000000       res_m=   174.07798453351180     
+   AC iter           1  res_q=   0.0000000000000000       res_m=   174.07798453351180     
+   AC iter        2000  res_q=  0.57828206347931477       res_m=  0.12217542744945947     
+   AC iter        4000  res_q=  0.15125650561145138       res_m=   4.2655759564040809E-002
+   AC iter        6000  res_q=   4.5261667343026397E-002  res_m=   1.5942867735313709E-002
+   AC iter        8000  res_q=   5.0514510029618653E-002  res_m=   7.4638429105138102E-003
+   AC iter       10000  res_q=   3.5315751765752024E-002  res_m=   5.0906432806026650E-003
+   AC iter       12000  res_q=   2.0167691444669608E-002  res_m=   3.7614601350799302E-003
+   AC iter       14000  res_q=   1.6132434530349675E-002  res_m=   2.5955161354140298E-003
+   AC iter       16000  res_q=   1.0574039844667640E-002  res_m=   1.7037469719585175E-003
+   AC iter       18000  res_q=   6.7251138178147591E-003  res_m=   1.3090350238978790E-003
+   AC iter       20000  res_q=   4.8266359294874281E-003  res_m=   9.3088563980308747E-004
+   AC iter       22000  res_q=   3.2667513472033238E-003  res_m=   6.3966756524716647E-004
+   AC iter       24000  res_q=   2.1345131343197491E-003  res_m=   4.5768550541480055E-004
+   AC iter       26000  res_q=   1.4517900438523808E-003  res_m=   3.2435471273542131E-004
+   AC iter       28000  res_q=   9.7523174304753042E-004  res_m=   2.2596466522349610E-004
+   AC iter       30000  res_q=   6.4151950232177761E-004  res_m=   1.5858839089330281E-004
+   AC iter       32000  res_q=   4.2547367181852122E-004  res_m=   1.1102098117479941E-004
+   AC iter       34000  res_q=   2.8045877297208497E-004  res_m=   7.7162507269186255E-005
+   AC iter       36000  res_q=   1.8260531930197537E-004  res_m=   5.3630767802181243E-005
+   AC iter       38000  res_q=   1.1848569548014997E-004  res_m=   3.7185046943926120E-005
+   AC iter       40000  res_q=   7.6257724888861595E-005  res_m=   2.5691297844042207E-005
+   AC iter       42000  res_q=   4.8483314360226852E-005  res_m=   1.7716791890827517E-005
+   AC iter       44000  res_q=   3.0493983633592835E-005  res_m=   1.2333050612635934E-005
+   AC iter       46000  res_q=   1.8905363487482646E-005  res_m=   8.6182823380243228E-006
+   AC iter       48000  res_q=   1.1492277520801493E-005  res_m=   6.1743704426031110E-006
+   AC iter       50000  res_q=   8.7131714653979183E-006  res_m=   4.4785346556274240E-006
+   AC iter       52000  res_q=   6.5950563519838782E-006  res_m=   3.2615679033971877E-006
+   AC iter       54000  res_q=   4.9487699218162209E-006  res_m=   2.3653354761237557E-006
+   AC iter       56000  res_q=   3.6851088111893940E-006  res_m=   1.7086780077737828E-006
+   AC iter       58000  res_q=   2.7260476351803459E-006  res_m=   1.2322656421907064E-006
+   AC iter       60000  res_q=   2.0048263646271315E-006  res_m=   8.8621103670107212E-007
+   AC iter       62000  res_q=   1.4666276832349909E-006  res_m=   6.3514103380472603E-007
+   AC iter       64000  res_q=   1.0677852722094559E-006  res_m=   4.5369861600625396E-007
+   AC iter       66000  res_q=   7.7400885438518490E-007  res_m=   3.2307367833226587E-007
+   AC iter       68000  res_q=   5.5878454503933886E-007  res_m=   2.2936633884705783E-007
+   AC iter       70000  res_q=   4.0188419746353939E-007  res_m=   1.6236530375167265E-007
+   AC iter       72000  res_q=   2.8801608807885464E-007  res_m=   1.1461219842863116E-007
+   AC iter       74000  res_q=   2.0571880669342088E-007  res_m=   8.0758533235237979E-008
+  AC solver block           1 : iterations =       74445  final res_q=   9.9259444191877485E-008  res_m=   5.1911308015687718E-008
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000        0.0000000000000000        0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        0.0000000000000000        0.0000000000000000     
+ Kstep, t=           1   1.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ write VTK files ......
+ write VTK files OK
