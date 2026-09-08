@@ -19,6 +19,7 @@
    real(PRE_EC), allocatable, dimension(:,:,:,:) :: DU4   ! delta per sweep
    real(PRE_EC), allocatable, dimension(:,:,:)   :: DTAC  ! pseudo time step
    real(PRE_EC), allocatable, dimension(:,:,:)   :: SIG   ! spectral sum
+   real(PRE_EC), allocatable, dimension(:,:,:)   :: dragc ! porous drag coeff (1/s, per cell)
    integer :: ac_nxw=0, ac_nyw=0, ac_nzw=0, ac_lap=0
   end module lows_ac_work
 
@@ -44,12 +45,14 @@
 
    if(.not. allocated(XW) .or. ac_nxw/=nx .or. ac_nyw/=ny .or. ac_nzw/=nz &
       .or. ac_lap /= LAP) then
-     if(allocated(XW)) deallocate(XW,RAC,DU4,DTAC,SIG)
+     if(allocated(XW)) deallocate(XW,RAC,DU4,DTAC,SIG,dragc)
      allocate( XW(4, 1-LAP:nx+LAP-1, 1-LAP:ny+LAP-1, 1-LAP:nz+LAP-1) )
      allocate( RAC(4, nx, ny, nz), DU4(4, nx, ny, nz) )
-     allocate( DTAC(nx, ny, nz), SIG(nx, ny, nz) )
+     allocate( DTAC(nx, ny, nz), SIG(nx, ny, nz), dragc(nx, ny, nz) )
      ac_nxw=nx; ac_nyw=ny; ac_nzw=nz; ac_lap=LAP
+     dragc = 0.d0
    endif
+   dragc = 0.d0   ! clear residual drag coefficient (porous AC sets it per iteration)
 
    call lowspeed_inlet_velocity(B, uin_x, uin_y, uin_z)
    Uref = sqrt(uin_x*uin_x + uin_y*uin_y + uin_z*uin_z)
@@ -567,7 +570,9 @@
      i = plane - k - j
      if(i .lt. 1 .or. i .gt. B%nx-1) cycle
      alfa(1) = B%Vol(i,j,k)/max(DTAC(i,j,k),1.d-30) + w*SIG(i,j,k)
-     alfa(2) = alfa(1); alfa(3) = alfa(1); alfa(4) = alfa(1)
+     alfa(2) = alfa(1) + dragc(i,j,k)*B%Vol(i,j,k)
+     alfa(3) = alfa(1) + dragc(i,j,k)*B%Vol(i,j,k)
+     alfa(4) = alfa(1) + dragc(i,j,k)*B%Vol(i,j,k)
      if(isdual .eq. 1) then
        alfa(2) = alfa(2) + Sfac1*B%Vol(i,j,k)
        alfa(3) = alfa(3) + Sfac1*B%Vol(i,j,k)
@@ -615,7 +620,9 @@
      i = plane - k - j
      if(i .lt. 1 .or. i .gt. B%nx-1) cycle
      alfa(1) = B%Vol(i,j,k)/max(DTAC(i,j,k),1.d-30) + w*SIG(i,j,k)
-     alfa(2) = alfa(1); alfa(3) = alfa(1); alfa(4) = alfa(1)
+     alfa(2) = alfa(1) + dragc(i,j,k)*B%Vol(i,j,k)
+     alfa(3) = alfa(1) + dragc(i,j,k)*B%Vol(i,j,k)
+     alfa(4) = alfa(1) + dragc(i,j,k)*B%Vol(i,j,k)
      if(isdual .eq. 1) then
        alfa(2) = alfa(2) + Sfac1*B%Vol(i,j,k)
        alfa(3) = alfa(3) + Sfac1*B%Vol(i,j,k)

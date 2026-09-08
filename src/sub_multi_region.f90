@@ -26,7 +26,11 @@
        call lowspeed_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
      endif
    case(BLOCK_POROUS)
-     call porous_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+     if(LS_Algorithm .eq. 3) then
+       call porous_ac_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+     else
+       call porous_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+     endif
    case default
      call Residual_one_block(nMesh, mBlock, Sfac, Sfac1)
    end select

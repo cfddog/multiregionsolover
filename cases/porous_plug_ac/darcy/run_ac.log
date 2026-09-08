@@ -1,0 +1,58 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is          800
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=         800
+ Total Grid number=        1722
+ Max grid number is         1722  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is         1722  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           3  rho=   2500.0000000000000       Cp=   800.00000000000000       k=   300.00000000000000     
+ Read porous.inp OK
+   Porous Block           1 : eps=  0.90000000000000002       dp=  0.10000000000000001       hv=   0.0000000000000000       rho_s=   2500.0000000000000       k_s=   300.00000000000000     
+ creat main mesh OK, Num_Cell=         800
+  read main mesh ...
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+  AC porous solver (LS_Algorithm=3) block           1  eps=  0.90000000000000002       dp=  0.10000000000000001       hv=   0.0000000000000000       beta=  0.20000000000000001       CFL=   20.000000000000000     
+   AC-porous iter           1  res_q=   0.0000000000000000       res_m=   12164.916666666672     
+   AC-porous iter           1  res_q=   0.0000000000000000       res_m=   12164.916666666672     
+   AC-porous iter       20000  res_q=   2.2324330169570548E-002  res_m=   8.6552589339561711E-002
+   AC-porous iter       40000  res_q=   7.1630252633449079E-004  res_m=   2.7772509886405681E-003
+   AC-porous iter       60000  res_q=   2.2982659647029567E-005  res_m=   8.9108491898093792E-005
+   AC-porous iter       80000  res_q=   7.3727205815479314E-007  res_m=   2.8585552571792926E-006
+  AC porous solver block           1 : iterations =       99496  final res_q=   2.5787974276415730E-008  res_m=   9.9985243748502091E-008
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+  -3.5527136788005009E-014   0.0000000000000000        0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   1.7763568394002505E-014   0.0000000000000000       -3.1263880373444408E-013
+ Kstep, t=           1   1.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
