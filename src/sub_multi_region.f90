@@ -20,7 +20,11 @@
    case(BLOCK_SOLID)
      call solid_solver_one_block(nMesh, mBlock)
    case(BLOCK_LOWSPEED)
-     call lowspeed_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+     if(LS_Algorithm .eq. 3) then
+       call lowspeed_ac_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+     else
+       call lowspeed_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+     endif
    case(BLOCK_POROUS)
      call porous_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
    case default

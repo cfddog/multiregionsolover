@@ -18,8 +18,7 @@ __pycache__/
 .deep-copilot/
 
 # 编译日志(src/)
-/src/build.log
-/src/build_new.log
+/src/build*.log
 
 # 算例运行产生的监控/临时文件
 cases/**/Residual.dat

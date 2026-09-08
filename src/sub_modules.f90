@@ -229,7 +229,16 @@
 
    integer,save:: LS_Inlet_Type, LS_Max_Iter    ! low-speed solver: inlet type (1=velocity,2=mass flow,3=pressure), SIMPLE inner iterations
    integer,save:: LS_Scheme=1    ! low-speed convection scheme: 1=1st-order upwind, 2=2nd-order upwind, 3=MUSCL(Van Leer)
-   integer,save:: LS_Algorithm=1 ! low-speed pressure-velocity coupling: 1=SIMPLE, 2=SIMPLEC
+   integer,save:: LS_Algorithm=1 ! low-speed pressure-velocity coupling: 1=SIMPLE, 2=SIMPLEC, 3=AC-FV (artificial compressibility)
+
+!---- Artificial-compressibility (AC) low-speed solver controls (LS_Algorithm=3)
+   integer,save:: AC_Max_Iter=40000  ! AC pseudo-time iterations per solver call
+   integer,save:: AC_Print=500       ! print residual every AC_Print iterations
+   real(PRE_EC),save:: AC_beta=10.d0 ! artificial compressibility: beta = AC_beta*U_ref^2
+   real(PRE_EC),save:: AC_CFL=2.d0   ! inviscid CFL for the pseudo time step
+   real(PRE_EC),save:: AC_CFLv=0.5d0 ! viscous CFL limit for the pseudo time step
+   real(PRE_EC),save:: AC_Tol=1.d-7  ! convergence: dimensionless res_q & res_m < AC_Tol
+   real(PRE_EC),save:: AC_w=1.d0     ! LU-SGS relaxation (>=0.5)
 
    integer,save:: FD_Flux,FD_scheme !
    integer,save:: KRK=0 !

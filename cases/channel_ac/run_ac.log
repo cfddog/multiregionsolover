@@ -1,0 +1,71 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is         6400
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        6400
+ Total Grid number=       13202
+ Max grid number is        13202  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        13202  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+ porous.inp not found: porous blocks use defaults (eps=0.9, dp=1e-3 m, hv=0)
+ creat main mesh OK, Num_Cell=        6400
+  read main mesh ...
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=         161          41           2  beta=   1.0000000000000000       CFL=   20.000000000000000       dual=           0
+   AC iter           1  res_q=   0.0000000000000000       res_m=   64.000000000000369     
+   AC iter           1  res_q=   0.0000000000000000       res_m=   64.000000000000369     
+   AC iter        2000  res_q=   8.4810101985640166E-002  res_m=   4.6955059586341746E-002
+   AC iter        4000  res_q=   7.3434453567443631E-002  res_m=   2.7186619657762198E-002
+   AC iter        6000  res_q=   3.7296575127392248E-002  res_m=   1.8645377951102694E-002
+   AC iter        8000  res_q=   1.4868642114730719E-002  res_m=   6.1956807092844561E-003
+   AC iter       10000  res_q=   7.3769592039488489E-003  res_m=   2.9502296108615701E-003
+   AC iter       12000  res_q=   3.1078255452274403E-003  res_m=   1.3120291208665088E-003
+   AC iter       14000  res_q=   1.4342919043272620E-003  res_m=   5.7513202997379234E-004
+   AC iter       16000  res_q=   6.7458517251234589E-004  res_m=   2.7264860459973070E-004
+   AC iter       18000  res_q=   3.0985275879247395E-004  res_m=   1.2542314105594527E-004
+   AC iter       20000  res_q=   1.4629654859488254E-004  res_m=   5.8706201490822382E-005
+   AC iter       22000  res_q=   6.8759341544100412E-005  res_m=   2.7693416950190019E-005
+   AC iter       24000  res_q=   3.2308597330832491E-005  res_m=   1.2992710715453649E-005
+   AC iter       26000  res_q=   1.5249151455454309E-005  res_m=   6.1277862600682833E-006
+   AC iter       28000  res_q=   7.1831406572853437E-006  res_m=   2.8885814467566761E-006
+   AC iter       30000  res_q=   3.3862789933225696E-006  res_m=   1.3610740494972850E-006
+   AC iter       32000  res_q=   1.5969219752110030E-006  res_m=   6.4190834303722554E-007
+   AC iter       34000  res_q=   7.5279734668143613E-007  res_m=   3.0262010331845993E-007
+   AC iter       36000  res_q=   3.5496087874564856E-007  res_m=   1.4267870582606607E-007
+   AC iter       38000  res_q=   1.6736489000246448E-007  res_m=   6.7276048533913628E-008
+  AC solver block           1 : iterations =       39370  final res_q=   9.9996551317094584E-008  res_m=   4.0196150832678465E-008
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000        0.0000000000000000        0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        0.0000000000000000        0.0000000000000000     
+ Kstep, t=           1   1.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ write VTK files ......
+ write VTK files OK

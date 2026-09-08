@@ -124,7 +124,16 @@
     LS_Max_Iter=5000    ! SIMPLE inner iterations per solver call
     LS_Tol=1.d-8        ! SIMPLE convergence tolerance (pressure correction residual)
     LS_Scheme=1         ! convection scheme: 1=1st-order upwind, 2=2nd-order upwind, 3=MUSCL(Van Leer)
-   LS_Algorithm=1      ! pressure-velocity coupling: 1=SIMPLE, 2=SIMPLEC
+   LS_Algorithm=1      ! pressure-velocity coupling: 1=SIMPLE, 2=SIMPLEC, 3=AC-FV
+
+!---- AC (artificial compressibility) solver defaults (LS_Algorithm=3) --------
+    AC_Max_Iter=40000   ! pseudo-time iterations per solver call
+    AC_Print=500        ! print interval
+    AC_beta=10.d0       ! beta = AC_beta*U_ref^2
+    AC_CFL=2.d0         ! inviscid CFL
+    AC_CFLv=0.5d0       ! viscous CFL
+    AC_Tol=1.d-7        ! convergence tolerance (dimensionless residual)
+    AC_w=1.d0           ! LU-SGS relaxation
 
 !---- Porous-media solver parameters (SI units) --------------------------------
     Porous_T_ref=288.15d0   ! initial/reference solid-frame temperature [K]
@@ -169,6 +178,7 @@ end
 		LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, &
 		LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, &
 		LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm, &
+		AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, &
 		Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, &
 		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
 		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
@@ -328,6 +338,11 @@ end
     rpara(59)=Porous_Tol
     rpara(60)=Twall_Couple_Init
     rpara(61)=Tol_Couple_Tw
+    rpara(62)=AC_beta
+    rpara(63)=AC_CFL
+    rpara(64)=AC_CFLv
+    rpara(65)=AC_Tol
+    rpara(66)=AC_w
 
 
 
@@ -373,6 +388,8 @@ end
     Ipara(42)=Porous_Chunk_Iter
     Ipara(43)=Niter_Couple_Warm
     Ipara(44)=Kstep_Couple_Min
+    Ipara(45)=AC_Max_Iter
+    Ipara(46)=AC_Print
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -436,6 +453,11 @@ end
     Porous_Tol=rpara(59)
     Twall_Couple_Init=rpara(60)
     Tol_Couple_Tw=rpara(61)
+    AC_beta=rpara(62)
+    AC_CFL=rpara(63)
+    AC_CFLv=rpara(64)
+    AC_Tol=rpara(65)
+    AC_w=rpara(66)
 
 
 
@@ -480,6 +502,8 @@ end
     Porous_Chunk_Iter=Ipara(42)
     Niter_Couple_Warm=Ipara(43)
     Kstep_Couple_Min=Ipara(44)
+    AC_Max_Iter=Ipara(45)
+    AC_Print=Ipara(46)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
