@@ -9,6 +9,11 @@ work.*
 *.swp
 *~
 
+# Python 缓存与临时监控文件
+__pycache__/
+*.pyc
+/snapf.log
+
 # AI 助手/工具本地状态
 .deep-copilot/
 
