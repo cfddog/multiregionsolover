@@ -32,6 +32,14 @@
    `cases/porous_ltne_1d/validation_ltne_ac{,_101,_201}.png`。
 9. **plug/darcy <1% 定量收口**:统一压差拟合窗口与出口压力口径,溯源 AC 与 SIMPLE
    (u_bar 8.06e-3 vs 7.85e-3 ≈ +2.7%)差异;随后做 LTNE 热态 plug 定性/定量。
+   ✅ **完成(2026-09-11)**:根因=AC 的 β 配置——`β=AC_beta·Uref²`,Uref 误取
+   `LS_U_in=0.01`(压差驱动下仅作标度)使存档运行实为 β=0.2(日志 `beta=0.2`),而非
+   文档假设的 β≈500;小 β 使 AC-Rusanov 连续方程数值耗散过大、粗网格稳态解偏移。
+   plug AC `LS_U_in=0.01→0.5`(β≈500)后解≈理想(40×20:u_bar=7.958e-3、
+   dp/dx=−3.1259e-2≈−Δp/L,5 172 步收敛);SIMPLE@40×20 自身距理想 −1.44%,故
+   同网格两者差 ~1.4%;**80×40 同网格验收 AC vs SIMPLE:u_bar +0.20%、dp/dx −0.21%
+   → <1% ✅**。记录:`cases/porous_plug_ac/hstudy/`(h20/h40/h80 收敛表+图)、
+   `docs/工作日志.md` 2026-09-11 条目。
 10. **beavers_joseph 接口(16)AC 双块复测**(阶段 2)✅/部分:粗网格
     (`cases/beavers_joseph/run_ac`,fluid 81×21 / porous 81×25)在 `LS_Algorithm=3` 下
     可收敛(res_m≈2.3e-4@3e5 外步),dp/dx 双块一致、Darcy 平台 −1.5%,剖面 L2≈3%;

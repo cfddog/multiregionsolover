@@ -3,7 +3,7 @@ $control_ec
   Ma=0.1d0
   Re=1000.d0
   AoA=0.d0
-  If_viscous=1
+  If_viscous=0
   Iflag_turbulence_model=0
   Kstep_save=1
   t_end=1.d0
@@ -71,7 +71,7 @@ $control_ec
   LS_Cp=1.0d0
   LS_T_ref=300.d0
   LS_Inlet_Type=3
-  LS_U_in=0.5d0
+  LS_U_in=0.01d0
   LS_V_in=0.d0
   LS_W_in=0.d0
   LS_Mdot_in=0.d0
@@ -85,14 +85,9 @@ $control_ec
   LS_Max_Iter=5000
   LS_Tol=1.d-8
   LS_Scheme=1
-  LS_Algorithm=3
+  LS_Algorithm=1
   Porous_alpha_Ts=0.7d0
   Porous_Max_Iter=2000
   Porous_Tol=1.d-9
   Porous_T_ref=300.d0
-AC_CFL=20.d0
-AC_beta=2000.d0
-AC_Max_Iter=300000
-AC_Print=20000
-AC_Tol=1.d-7
 $end
