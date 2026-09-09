@@ -1,0 +1,2 @@
+Mesh3d.dat/.x generated: nx=101, ny=2, nz=2, Lx=0.01 m
+dx = 1.000e-04 m   (100 cells along wall thickness)

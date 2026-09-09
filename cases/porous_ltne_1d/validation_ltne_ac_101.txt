@@ -1,0 +1,13 @@
+case: L=0.01 m, eps=0.3, ks=13.4, hv=2.000e+06 W/m3K, G=2.0, cp=1007.0
+kse=(1-eps)ks = 9.3800 W/mK   G*cp = 2014.0 W/m2K
+   station       Tf_num        Tf_an       Ts_num        Ts_an  Ts-Tf_num
+       y=0     310.0433     310.5019     512.3147     516.8580   202.2714
+     y=L/4     534.1320     539.9192     591.8512     596.5552    57.7192
+     y=L/2     689.4121     693.1973     762.6398     766.3366    73.2278
+    y=3L/4     919.5481     921.6772    1033.4494    1035.9715   113.9013
+       y=L    1280.0553    1280.6965    1458.6777    1460.5869   178.6225
+Tf RMS err  = 3.9727e+00 K   max|err| = 6.3546e+00 K
+Ts RMS err  = 3.6851e+00 K   max|err| = 4.8045e+00 K
+rel err (Tf, vs dTf) = 6.550e-03
+energy balance: q=2.000e+06; out=Gcp dTf+ hc dTs =1.980e+06; rel gap=9.751e-03
+saved validation_ltne.png

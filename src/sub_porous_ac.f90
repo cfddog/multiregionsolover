@@ -125,11 +125,108 @@
   end subroutine ac_porous_drag_res
 
 !===============================================================================
-! LTNE scalar pair (placeholder; implemented when validating porous_ltne_1d)
+! AC-porous LTNE two-temperature scalar pair (Tf / Ts), solved after the AC
+! flow has converged.
+!
+! The face mass fluxes are reconstructed from the converged AC velocity field
+! and the coupled steady system is iterated with the SAME finite-volume
+! discretisation as the validated SIMPLE porous LTNE path (sub_porous.f90):
+!   fluid :  rho*cp u.grad(Tf)  = div(k_f,eff grad Tf) + hv*(Ts - Tf)
+!   frame :  div(k_s,eff grad Ts) + hv*(Tf - Ts) = 0
+!   k_f,eff = LS_k*eps   ;  k_s,eff = (1-eps)*solid_k
+! including the porous boundary ghost conventions (Tf inlet/outlet/wall ghosts
+! and the solid_bc.inp frame BCs: isothermal / heat-flux / Robin extrapolation).
 !===============================================================================
   subroutine ac_porous_ltne(nMesh, mBlock)
    use Global_var
+   use const_var
+   use porous_work
    implicit none
    integer :: nMesh, mBlock
-   if(my_id .eq. 0) print*, ' AC-porous LTNE scalar solver: to be implemented'
+   Type (Block_TYPE),pointer:: B
+   integer :: nx,ny,nz, i,j,k, iter
+   real(PRE_EC) :: rho, dTf, dTs, Tfmin, Tfmax, Tsmin, Tsmax
+   real(PRE_EC), allocatable :: Tfold(:,:,:), Tsold(:,:,:)
+
+   interface
+     subroutine porous_boundary_block(nMesh, mBlock)
+       use precision_EC
+       implicit none
+       integer, intent(in) :: nMesh, mBlock
+     end subroutine porous_boundary_block
+     subroutine porous_energy(nMesh, mBlock)
+       use precision_EC
+       implicit none
+       integer, intent(in) :: nMesh, mBlock
+     end subroutine porous_energy
+     subroutine porous_energy_Ts(nMesh, mBlock)
+       use precision_EC
+       implicit none
+       integer, intent(in) :: nMesh, mBlock
+     end subroutine porous_energy_Ts
+   end interface
+
+   B => Mesh(nMesh)%Block(mBlock)
+   nx = B%nx; ny = B%ny; nz = B%nz
+   rho = max(LS_rho, 1.d-20)
+
+!  boundary ghosts + boundary-face mass fluxes (recomputed inside the sweep
+!  loop too, so the frame thermal BCs track the evolving Ts)
+   call porous_boundary_block(nMesh, mBlock)
+
+!  interior face mass fluxes (kg/s) from the converged AC velocity field.
+!  Fi/Fj/Fk carry the flux in the +coordinate direction, exactly as in
+!  porous_face_flux: Fi(i,j,k) = rho*Si(i,j,k)*u on the face between cells
+!  i-1 and i.  (For a converged divergence-free AC field the plain average of
+!  the two adjacent cell velocities is the consistent face value.)
+   do k = 1, nz-1
+   do j = 1, ny-1
+   do i = 2, nx-1
+     Fi(i,j,k) = rho*B%Si(i,j,k)*0.5d0*(B%U(2,i-1,j,k)+B%U(2,i,j,k))
+   enddo; enddo; enddo
+   do k = 1, nz-1
+   do j = 2, ny-1
+   do i = 1, nx-1
+     Fj(i,j,k) = rho*B%Sj(i,j,k)*0.5d0*(B%U(3,i,j-1,k)+B%U(3,i,j,k))
+   enddo; enddo; enddo
+   do k = 2, nz-1
+   do j = 1, ny-1
+   do i = 1, nx-1
+     Fk(i,j,k) = rho*B%Sk(i,j,k)*0.5d0*(B%U(4,i,j,k-1)+B%U(4,i,j,k))
+   enddo; enddo; enddo
+
+!  coupled Gauss-Seidel sweeps (INNER sweeps inside porous_energy / _Ts);
+!  stop on the change of both temperatures over a 100-sweep window
+   allocate(Tfold(nx,ny,nz), Tsold(nx,ny,nz))
+   Tfold = 0.d0; Tsold = 0.d0
+   do iter = 1, max(Porous_Max_Iter, 2000)
+     if(mod(iter,100) .eq. 1) then
+       do k = 1, nz-1; do j = 1, ny-1; do i = 1, nx-1
+         Tfold(i,j,k) = B%U(5,i,j,k); Tsold(i,j,k) = B%Ts(i,j,k)
+       enddo; enddo; enddo
+     endif
+     call porous_boundary_block(nMesh, mBlock)
+     call porous_energy(nMesh, mBlock)
+     call porous_energy_Ts(nMesh, mBlock)
+     if(mod(iter,100) .eq. 0) then
+       dTf = 0.d0; dTs = 0.d0
+       do k = 1, nz-1; do j = 1, ny-1; do i = 1, nx-1
+         dTf = max(dTf, abs(B%U(5,i,j,k)-Tfold(i,j,k)))
+         dTs = max(dTs, abs(B%Ts(i,j,k)-Tsold(i,j,k)))
+       enddo; enddo; enddo
+       if(my_id .eq. 0 .and. mod(iter,2000) .eq. 0) then
+         Tfmin = minval(B%U(5,1:nx-1,1:ny-1,1:nz-1))
+         Tfmax = maxval(B%U(5,1:nx-1,1:ny-1,1:nz-1))
+         Tsmin = minval(B%Ts(1:nx-1,1:ny-1,1:nz-1))
+         Tsmax = maxval(B%Ts(1:nx-1,1:ny-1,1:nz-1))
+         print*, '  AC-porous LTNE iter', iter, ' dTf=', dTf, ' dTs=', dTs, &
+                 ' Tf[', Tfmin, ',', Tfmax, ']  Ts[', Tsmin, ',', Tsmax, ']'
+       endif
+       if(dTf .lt. 1.d-3 .and. dTs .lt. 1.d-3) exit
+     endif
+   enddo
+   deallocate(Tfold, Tsold)
+   if(my_id .eq. 0) print*, ' AC-porous LTNE block', mBlock, ': sweeps =', iter, &
+       ' final dTf=', dTf, ' dTs=', dTs
   end subroutine ac_porous_ltne
+

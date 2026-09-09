@@ -90,3 +90,34 @@ conda run -n num_python python3 plot_validation/pv_bj.py
   （剪应力）与压力；入口/出口采用压力型 BC。
 - ε/dp/hv 目前为整块常数；如需更一般的 3 区块（流体-多孔-流体）或非共形
   界面需扩展耦合（L1/L2/L3 映射与通量对偶）。
+
+
+## run_ac —— LS_Algorithm=3(AC)双块复测(2026-09-10,粗网格)
+
+`run_ac/`:流体块 81×21×2 + 多孔块 81×25×2(与 `run_coarse` 同网格),
+`control.ec` 改 `LS_Algorithm=3` + `AC_CFL=20/AC_beta=1000(β≈1.1e-2)/
+AC_Max_Iter=1`,默认时间分支每块求解后即时交换接口 16 ghost
+(`opencfd_ec3d_v1.16a.f90`,`LS_Algorithm=3` 时块 Gauss–Seidel 排序),t_end=3e5 外步
+(=每块 3e5 次 LU-SGS 扫掠的整耦合系统伪时间推进)。残差收敛
+(res_q≈3.1e-5 / res_m≈2.3e-4,曲线见 `residual_history.txt`)。
+
+与解析对比(`pv_bj.py --case run_ac`,x=Lx/2):
+
+| 量 | AC | 解析(AC 拟合 dp/dx) | 相对 |
+|---|---|---|---|
+| dp/dx 拟合 (fluid/porous) | −5.92e-4 / −5.99e-4 Pa/m | — | 双块一致 |
+| Darcy 平台 uD | 9.78e-4 m/s | 9.92e-4 | −1.5 % |
+| u(y) 剖面 L2 / L∞ | 3.3e-2 / 7.8e-2 | — | (粗网格) |
+| 界面滑移 u_i(线性外推) | 3.60e-3 m/s | 3.13e-3 | +15 % |
+| BJ α_eff | 0.68 | 1.0(有限床/粗网格亦 <1) | — |
+
+图 `validation_bj_ac.png`。**结论**:AC 接口16 双块可稳定收敛并复现 BJ 的
+dp/dx 一致、Darcy 平台与剖面趋势;界面滑移存在 AC 系统性偏高(单元层面 ~6%,
+外推口径 ~15%)——与 `porous_plug_ac/darcy` 的 AC 速度偏高 +2.7% 属同一已知
+问题(见 `docs/工作日志.md` 2026-09-09/10 条目与 `docs/AC-FV-后续工作.md` §9),
+需待 plug/darcy <1% 收口后复核细网格;对比用 SIMPLE 粗网格参考
+`run_coarse/validation_bj_coarse.png`(u_i 误差仅 1.6%)。
+
+复现:`cd run_ac && python3 ../gen_case.py --nx 81 --nyf 21 --nyp 25 --lx 8 &&
+(按上方 control.ec 改 LS_Algorithm/AC_*/t_end)&& mpirun -np 1 ../../../src/opencfd-ec1.16a.out
+&& python3 ../plot_validation/pv_bj.py --case .`。

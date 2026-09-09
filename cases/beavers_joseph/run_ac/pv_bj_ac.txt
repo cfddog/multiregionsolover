@@ -1,0 +1,8 @@
+pressure fit: dp/dx fluid=-5.916774e-04  porous=-5.991597e-04  mean=-5.954185e-04 Pa/m
+uD(an)=9.923642e-04  u_int(an)=3.134926e-03  lambda=0.18257  kappa*Hp=6.57
+deep-bed BJ(alpha=1): u_int=3.137279e-03 ; finite-bed vs deep-bed diff=-0.0750%
+profile station x=4.000 : L2(fluid)=4.468e-02  L2(porous)=1.906e-02  L2(total)=3.325e-02  Linf(total)=7.795e-02
+interface: u_i(cfd)=3.599893e-03 (an=3.134926e-03, err=14.832%)
+Darcy plateau uD: cfd=9.776949e-04  an=9.923642e-04
+du/dy|0 = 9.784018e-03 1/s ;  BJ alpha_eff = lam*du/dy/(u_i-uD) = 0.6812 (theory 1.0)
+saved ./validation_bj_ac.png

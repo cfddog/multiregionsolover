@@ -105,6 +105,25 @@ conda run -n num_python python3 validate_ltne.py
 
 ## 8. 文件
 
+## 9. AC 版验证(LS_Algorithm=3,2026-09-10)
+
+`run_ac/`(nx=401)、`run_ac_g201/`、`run_ac_g101/`:`control.ec` 改 `LS_Algorithm=3`
++ `AC_*`,AC 流场(速度入口 2 m/s)约 **4.5k 伪时间步收敛**,随后自动执行
+`src/sub_porous_ac.f90::ac_porous_ltne`(AC 速度重建面质量流,复用 SIMPLE 温度扫掠)
+收敛 Tf/Ts(100 步窗口 ΔT<1e-3 K 停)。各网格闭式解对比:
+
+| nx | Tf RMS (K) | rel err | Ts RMS (K) | 能量缺口 | (SIMPLE Tf RMS) |
+|---|---|---|---|---|---|
+| 101 | 3.97 | 0.66 % | 3.69 | 0.98 % | 4.19 |
+| 201 | 2.21 | 0.35 % | 2.08 | 0.52 % | 2.25 |
+| 401 | **1.22** | **0.19 %** | 1.17 | 0.28 % | 1.17 |
+
+与 SIMPLE 结果及一阶收敛趋势一致(流体一阶迎风的数值扩散为误差主源);
+图 `validation_ltne_ac.png`(401)、`validation_ltne_ac_101/201.png`,
+明细见各目录 `validation_ltne_ac.txt`。复现:`cd run_ac && cp ../material.in ../porous.inp ../solid_bc.inp .
+&& ../gen_case.py 401 2 2 && mpirun -np 1 ../../../src/opencfd-ec1.16a.out`。
+
+
 - `gen_case.py`：生成 `Mesh3d.dat/.x`、`bc3d.inp`（i- 入口码 5，i+ 出口码 6，
   j±/k± 对称码 3）
 - `material.in`：块 1 类型 3，不锈钢骨架

@@ -26,10 +26,18 @@
 ## AC-porous 续接(2026-09-09 新增,与 `docs/工作日志.md` 2026-09-09 条目联动)
 8. **AC 版 LTNE 双温度标量对**:实现 `src/sub_porous_ac.f90::ac_porous_ltne`(AC 面通量的
    Tf 对流-扩散 + hv 源 + `(1−ε)k_s` 骨架导热 + 骨架面热边界 ghost),验证
-   `porous_ltne_1d` 两温度闭式解(目标 ≤0.5%);当前占位。
+   `porous_ltne_1d` 两温度闭式解(目标 ≤0.5%)。✅ **已完成(2026-09-10)**:
+   `cases/porous_ltne_1d/run_ac[_g101|_g201]`,`nx=401` 时 Tf RMS=1.22 K / rel≈0.19%、
+   Ts RMS=1.17 K、能量缺口 0.28% —— 与 SIMPLE 参考(0.18%)一致;图
+   `cases/porous_ltne_1d/validation_ltne_ac{,_101,_201}.png`。
 9. **plug/darcy <1% 定量收口**:统一压差拟合窗口与出口压力口径,溯源 AC 与 SIMPLE
    (u_bar 8.06e-3 vs 7.85e-3 ≈ +2.7%)差异;随后做 LTNE 热态 plug 定性/定量。
-10. **beavers_joseph 接口(16)AC 双块复测**(阶段 2);并把"阻力主导下 AC 收敛慢于
-    SIMPLE"的结论量化后记入考核总结 §方法对比。
+10. **beavers_joseph 接口(16)AC 双块复测**(阶段 2)✅/部分:粗网格
+    (`cases/beavers_joseph/run_ac`,fluid 81×21 / porous 81×25)在 `LS_Algorithm=3` 下
+    可收敛(res_m≈2.3e-4@3e5 外步),dp/dx 双块一致、Darcy 平台 −1.5%,剖面 L2≈3%;
+    但界面滑移 u_i 偏高 ~15%(线性外推口径,单元层面偏高 ~6%),与 plug/darcy 的 AC
+    速度偏高 +2.7%(待办 9)属同一系统性差,细网格收口待其解决后复核;另把“阻力主导
+    下 AC 收敛慢于 SIMPLE”量化(本条目收敛曲线 `run_ac/residual_history.txt`)
+    记入考核总结 §方法对比。
 11. 补充实验教训:阻力主导工况需大 β(`AC_beta=2000,β≈U²·2000` 才在 ~1e5 步内收敛);
     建议后续加入阻力相关对角预条件 / β 自适应。
