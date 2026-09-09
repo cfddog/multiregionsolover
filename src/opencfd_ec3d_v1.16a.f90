@@ -159,12 +159,13 @@
    if(my_id .eq. 0) print*, " Start ......"
 
 !------------------------------------------------------------------------
-! Staggered segmented coupling (interface 19, FLUID<->POROUS thermal):
-! gas chunk (compressible only) -> extract q_w -> porous chunk -> return T_w.
-! Otherwise the standard per-step simultaneous multi-block time loop runs.
+! Staggered segmented coupling: dispatches by detected cross-region pair
+! (11 FLUID<->SOLID CHT, 12 FLUID<->LOWSPEED matching block-GS, 13
+! LOWSPEED<->SOLID CHT, 19 FLUID<->POROUS thermal).  Otherwise the
+! standard per-step simultaneous multi-block time loop runs.
    if(Iflag_Couple_Scheme == 1) then
      if(my_id .eq. 0) print*, ' Staggered segmented coupling mode (Iflag_Couple_Scheme=1) ...'
-     call run_staggered_fluid_porous(1)
+     call run_staggered_multiregion(1)
      call mpi_finalize(ierr)
      stop
    endif

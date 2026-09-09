@@ -150,6 +150,9 @@
     Kstep_Couple_Min=1      ! gas-chunk step floor after warm-up (auto shrink)
     Twall_Couple_Init=300.d0 ! first gas-chunk interface wall temperature [K]
     Tol_Couple_Tw=2.d-2     ! outer convergence: max|dT_w| [K]
+    Tol_Couple_p=1.d1       ! 12 (fluid-fluid): outer convergence max|dp_w| [Pa]
+    Tol_Couple_u=1.d-2      ! 12 (fluid-fluid): outer convergence max|du_w| [m/s]
+    Iflag_Couple_WallFlux=0 ! 11/13 CHT split: 0=couple-based, 1=isothermal-Tw/qw wall-flux
 end
 
 !------read parameter (Namelist type)---------------- 
@@ -182,7 +185,7 @@ end
 		Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, &
 		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
 		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
-		Twall_Couple_Init, Tol_Couple_Tw
+		Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux
 
 
 	open(99,file="control.ec")
@@ -338,6 +341,8 @@ end
     rpara(59)=Porous_Tol
     rpara(60)=Twall_Couple_Init
     rpara(61)=Tol_Couple_Tw
+    rpara(67)=Tol_Couple_p
+    rpara(68)=Tol_Couple_u
     rpara(62)=AC_beta
     rpara(63)=AC_CFL
     rpara(64)=AC_CFLv
@@ -390,6 +395,7 @@ end
     Ipara(44)=Kstep_Couple_Min
     Ipara(45)=AC_Max_Iter
     Ipara(46)=AC_Print
+    Ipara(47)=Iflag_Couple_WallFlux
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -458,6 +464,8 @@ end
     AC_CFLv=rpara(64)
     AC_Tol=rpara(65)
     AC_w=rpara(66)
+    Tol_Couple_p=rpara(67)
+    Tol_Couple_u=rpara(68)
 
 
 
@@ -504,6 +512,7 @@ end
     Kstep_Couple_Min=Ipara(44)
     AC_Max_Iter=Ipara(45)
     AC_Print=Ipara(46)
+    Iflag_Couple_WallFlux=Ipara(47)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)

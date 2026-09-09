@@ -49,3 +49,27 @@
     记入考核总结 §方法对比。
 11. 补充实验教训:阻力主导工况需大 β(`AC_beta=2000,β≈U²·2000` 才在 ~1e5 步内收敛);
     建议后续加入阻力相关对角预条件 / β 自适应。
+12. **接口 19(可压↔多孔)分段交错 + AC 试跑**(2026-09-11):`cases/high_low_fluid_800K/
+    run_ac_staggered` —— 在 4 块 code-19 网格(Block1 按 interface19_phaseA 改 POROUS)
+    上用 `LS_Algorithm=3`(AC-porous)+ `Iflag_Couple_Scheme=1` 跑“1000 步暖机 3 轮后
+    减半精修”交错调度。代码改动(向后兼容):`run_staggered_fluid_porous` 的 code-19
+    配对搜索推广到全部 FLUID 块(原只查第一个 FLUID 块,此网格界面在 Block3);
+    多孔段改经 `solver_one_block` 分派(LS_Algorithm=3 → porous AC)。12 轮外层调度/
+    数据流正常、无 NaN;T_w 300→306–308 K、q_w 2.09e6→0.76e6 W/m² 单调收敛趋势,
+    但未达 `Tol_Couple_Tw`(无骨架热沉+hv=0,属 staggered_tw README 已知限制)。
+    AC-porous 段 20 000 伪步未达 AC_Tol(退化 LS 网格),每段跑满 AC_Max_Iter。
+13. **分段交错推广到 11/12/13(AC)**:`Iflag_Couple_Scheme=1` 改为 `run_staggered_multiregion`
+    自动按块类型分派:19(原 FLUID↔POROUS)、11(FLUID↔SOLID CHT)、13(LOWSPEED(AC)↔SOLID
+    CHT)、12(FLUID↔LOWSPEED 匹配式块 GS)。新增:LS-AC 温度方程 `ac_lowspeed_energy`
+    (LS_k>0,重建面质量流+`lowspeed_energy` GS)、判敛 `Tol_Couple_p/Tol_Couple_u`。
+    - ✅ 12 试跑:`cases/high_low_fluid_800K/run_ac_staggered_12`(高速 300→减半与 LS-AC
+      至收敛,界面 T/p/|u| 度量正常,无 NaN)。
+    - ~ 11/13 调度路径试跑:`cases/fluid_solid/run_staggered_11`、`cases/bl_cht/
+      run_staggered_ac13`(跑通但这两个自检网格的跨类界面以物理墙式 bc=2 表示,未触发
+      couple_fluid_solid_interfaces 共轭分支;真共轭验收需 code-11/13 显式界面网格)。
+    (下一步修改建议按优先级详见 `docs/工作日志.md` 2026-09-11 追加②末尾列表。)
+14. **P0 完成(2026-09-11 追加③)**:code-11/13 真共轭验收采用“运行时界面提升”——
+    `align_interface_to_bc_msg` 把“墙码 2+真实配对”的耦合面按块类型提升为接口码
+    11/13(等),LS/AC 侧 `<0` 判断统一为 `is_interface_bc`;验收:code-11
+    `fluid_solid/run_conj_11` 外轮 2 收敛(T_w≈800 K);code-13 `bl_cht/run_conj_ac13`
+    (LS-AC)T_w 逐轮上升、q_w≈1e5 W/m² 共轭演化正常。README/日志已同步。

@@ -103,6 +103,11 @@
    enddo
    if(my_id .eq. 0) print*, ' AC solver block', mBlock, ': iterations =', iter, &
        ' final res_q=', rq, ' res_m=', rm
+!   Temperature (passive scalar / conjugate): after the flow converges, relax
+!   T (=U(5)) to steady state using the converged AC velocity field when the
+!   fluid conducts heat (LS_k > 0).  Same discretisation as SIMPLE.
+    if(LS_k .gt. 0.d0 .or. LS_T_wall .gt. 0.d0) call ac_lowspeed_energy(nMesh, mBlock)
+
   end subroutine lowspeed_ac_solver_one_block
 !===============================================================================
 ! XW <- (q,u,v,w) from the primitive state (incl. ghost cells)
@@ -141,7 +146,7 @@
      Bc => B%bc_msg(ksub)
      if(is_interface_bc(Bc%bc)) cycle
      if(associated(B%bc_msg2)) then
-       if(B%bc_msg2(ksub)%bc < 0) cycle
+       if(is_interface_bc(B%bc_msg2(ksub)%bc)) cycle
      endif
      if(Bc%bc .eq. BC_Outflow .or. Bc%bc .eq. BC_LS_Outlet .or. &
         Bc%bc .eq. BC_Farfield) flag = .true.
@@ -310,7 +315,7 @@
      Bc => B%bc_msg(ksub)
      if(is_interface_bc(Bc%bc)) cycle
      if(associated(B%bc_msg2)) then
-       if(B%bc_msg2(ksub)%bc < 0) cycle
+       if(is_interface_bc(B%bc_msg2(ksub)%bc)) cycle
      endif
      face_s = Bc%face
      ib=Bc%ib; ie=Bc%ie; jb=Bc%jb; je=Bc%je; kb=Bc%kb; ke=Bc%ke
@@ -784,7 +789,7 @@
      Bc => B%bc_msg(ksub)
      if(is_interface_bc(Bc%bc)) cycle
      if(associated(B%bc_msg2)) then
-       if(B%bc_msg2(ksub)%bc < 0) cycle
+       if(is_interface_bc(B%bc_msg2(ksub)%bc)) cycle
      endif
      face_s = Bc%face
      ib=Bc%ib; ie=Bc%ie; jb=Bc%jb; je=Bc%je; kb=Bc%kb; ke=Bc%ke
@@ -896,4 +901,105 @@
    B%p(i1,j1,k1)  = B%p(i2,j2,k2)
    B%U(1,i1,j1,k1) = LS_rho
   end subroutine ac_set_ghost_cell
+
+!===============================================================================
+! AC low-speed temperature (passive scalar) solver -- runs after the AC flow
+! has converged so the fluid temperature can couple with solids / low-speed
+! interfaces (conjugate cases, LS_k > 0).
+!
+! The face mass fluxes are reconstructed from the converged AC velocity field
+! and the steady convection-diffusion equation for T (=B%U(5)) is relaxed with
+! the SAME finite-volume discretisation as the SIMPLE path
+! (src/sub_lowspeed.f90::lowspeed_energy):
+!   rho*cp u.grad(T) = div(k_f grad T),   k_f = LS_k
+! Ghost cells: physical faces refreshed by ac_fill_ghost (isothermal walls use
+! LS_T_wall, inlets LS_T_ref, outlets/extrapolation); interface (cross-block)
+! faces are skipped by ac_fill_ghost so any manual interface ghost set by the
+! caller (e.g. staggered conjugate coupling) is preserved.
+!===============================================================================
+  subroutine ac_lowspeed_energy(nMesh, mBlock)
+   use Global_var
+   use const_var
+   use lowspeed_work
+   implicit none
+   integer :: nMesh, mBlock
+   Type (Block_TYPE),pointer:: B
+   integer :: nx,ny,nz, i,j,k, iter
+   real(PRE_EC) :: rho, uin_x, uin_y, uin_z, dT, Told_v
+   real(PRE_EC), allocatable :: Told(:,:,:)
+   interface
+     subroutine lowspeed_energy(nMesh, mBlock)
+       use precision_EC
+       implicit none
+       integer, intent(in) :: nMesh, mBlock
+     end subroutine lowspeed_energy
+   end interface
+
+   B => Mesh(nMesh)%Block(mBlock)
+   nx = B%nx; ny = B%ny; nz = B%nz
+   rho = max(LS_rho, 1.d-20)
+
+!  face-flux / deferred-correction work arrays (same shape as the SIMPLE path)
+   if(.not. allocated(Fi) .or. nxw /= nx .or. nyw /= ny .or. nzw /= nz) then
+     if(allocated(Fi)) deallocate(Fi,Fj,Fk,apu,apv,apw,su_nb,sv_nb,sw_nb,du,dv,dw,pp,conv_src)
+     allocate(Fi(nx,ny,nz), Fj(nx,ny,nz), Fk(nx,ny,nz))
+     allocate(apu(nx,ny,nz), apv(nx,ny,nz), apw(nx,ny,nz))
+     allocate(su_nb(nx,ny,nz), sv_nb(nx,ny,nz), sw_nb(nx,ny,nz))
+     allocate(du(nx,ny,nz), dv(nx,ny,nz), dw(nx,ny,nz))
+     allocate(pp(0:nx,0:ny,0:nz))
+     allocate(conv_src(nx,ny,nz))
+     nxw=nx; nyw=ny; nzw=nz
+   endif
+   Fi=0.d0; Fj=0.d0; Fk=0.d0; conv_src=0.d0
+
+!  face mass fluxes (kg/s) from the converged AC velocity field; Fi/Fj/Fk are
+!  the flux on face plane i/j/k between cell (plane-1) and (plane), so include
+!  the boundary planes 1 and nx (ny, nz) with the ghost-cell velocity -- for
+!  walls the mirror ghost gives zero net flux, matching the SIMPLE convention.
+   call lowspeed_inlet_velocity(B, uin_x, uin_y, uin_z)
+   do k = 1, nz-1
+   do j = 1, ny-1
+   do i = 1, nx
+     Fi(i,j,k) = rho*B%Si(i,j,k)*0.5d0*(B%U(2,i-1,j,k)+B%U(2,i,j,k))
+   enddo; enddo; enddo
+   do k = 1, nz-1
+   do i = 1, nx-1
+   do j = 1, ny
+     Fj(i,j,k) = rho*B%Sj(i,j,k)*0.5d0*(B%U(3,i,j-1,k)+B%U(3,i,j,k))
+   enddo; enddo; enddo
+   do j = 1, ny-1
+   do i = 1, nx-1
+   do k = 1, nz
+     Fk(i,j,k) = rho*B%Sk(i,j,k)*0.5d0*(B%U(4,i,j,k-1)+B%U(4,i,j,k))
+   enddo; enddo; enddo
+
+!  relax the steady temperature equation (lowspeed_energy, same discretisation
+!  as SIMPLE) until the change over a window is small
+   allocate(Told(nx,ny,nz)); Told = 0.d0
+   dT = 0.d0
+   do iter = 1, max(LS_Max_Iter, 2000)
+     if(mod(iter,50) .eq. 1) then
+       do k = 1, nz-1; do j = 1, ny-1; do i = 1, nx-1
+         Told(i,j,k) = B%U(5,i,j,k)
+       enddo; enddo; enddo
+     endif
+     call ac_fill_ghost(nMesh, mBlock, uin_x, uin_y, uin_z)  ! refresh physical T ghosts
+     call lowspeed_energy(nMesh, mBlock)
+     if(mod(iter,50) .eq. 0) then
+       dT = 0.d0
+       do k = 1, nz-1; do j = 1, ny-1; do i = 1, nx-1
+         dT = max(dT, abs(B%U(5,i,j,k)-Told(i,j,k)))
+       enddo; enddo; enddo
+       if(my_id .eq. 0 .and. mod(iter,1000) .eq. 0) then
+         print*, '  AC-lowspeed T iter', iter, ' max|dT|/50=', dT, &
+                 ' T[', minval(B%U(5,1:nx-1,1:ny-1,1:nz-1)), ',', &
+                       maxval(B%U(5,1:nx-1,1:ny-1,1:nz-1)), '] K'
+       endif
+       if(dT .lt. 1.d-3) exit
+     endif
+   enddo
+   deallocate(Told)
+   if(my_id .eq. 0) print*, ' AC-lowspeed T block', mBlock, ': sweeps =', iter, &
+       ' final max|dT|(50-window)=', dT
+  end subroutine ac_lowspeed_energy
 

@@ -330,6 +330,7 @@
      call set_solid_ghost_BC(nMesh, mBlock)
 !    Exchange Ts buffer for periodic/internal interfaces
      call update_Ts_buffer_onemesh(nMesh)
+     call apply_solid_qw_override(nMesh, mBlock)   ! wall-flux split mode: re-impose interface q_w ghost
 
      res = 0.d0
      do k = 1, nz-1
@@ -482,6 +483,50 @@
              " Ts(nx-1,ny-1,1)=", B%Ts(nx-1,ny-1,1)
    endif
   end subroutine solid_solver_one_block
+
+!==============================================================================
+! Solid GS interface heat-flux override (wall-flux CHT split mode).
+! When stg_ow_block==mBlock, re-impose the interface Ts ghost from fp_qw each GS
+! sweep so the steady conduction solve keeps the conjugate heat flux boundary
+! (otherwise set_solid_ghost_BC would overwrite the interface ghost with the
+! physical wall BC).  Supports j- (2) and j+ (5) solid faces.
+!==============================================================================
+  subroutine apply_solid_qw_override(nMesh, mBlock)
+   use Global_Var
+   use const_var
+   implicit none
+   integer:: nMesh, mBlock
+   Type (Block_TYPE),pointer:: B
+   integer:: i, k, n1, js, jg
+   real(PRE_EC):: qw, dx
+
+   if(stg_ow_block .le. 0) return
+   if(stg_ow_block .ne. mBlock) return
+   B => Mesh(nMesh)%Block(mBlock)
+   if(stg_ow_face .eq. 2) then
+     js = stg_ow_jb
+   else if(stg_ow_face .eq. 5) then
+     js = stg_ow_je - 1
+   else
+     return
+   endif
+   do k = stg_ow_kb, stg_ow_ke-1
+   do i = stg_ow_ib, stg_ow_ie-1
+     qw = fp_qw(i-stg_ow_ib+1, k-stg_ow_kb+1)
+     do n1 = 0, LAP-1
+       if(stg_ow_face .eq. 2) then
+         jg = stg_ow_jb - 1 - n1
+       else
+         jg = stg_ow_je + n1
+       endif
+       dx = sqrt( (B%xc(i,js,k)-B%xc(i,jg,k))**2 &
+                + (B%yc(i,js,k)-B%yc(i,jg,k))**2 &
+                + (B%zc(i,js,k)-B%zc(i,jg,k))**2 ) * Lscale
+       B%Ts(i,jg,k) = B%Ts(i,js,k) + qw*dx/max(B%solid_k,1.d-30)
+     enddo
+   enddo; enddo
+  end subroutine apply_solid_qw_override
+
 
 !----------------------------------------------------------------------
 ! Fluid-solid interface coupling
@@ -1468,7 +1513,7 @@
    use const_var
    implicit none
    integer:: nMesh
-   integer:: mf, mp, mBlock, ksub, nb, mb, it, step, pc, NVAR1
+   integer:: mf, mp, mBlock, mBlock2, ksub, nb, mb, it, step, pc, NVAR1
    integer:: nstep, nhalve
    integer:: face_s, face1, ib,ie,jb,je,kb,ke, ib1,ie1,jb1,je1,kb1,ke1
    Type (Block_TYPE),pointer:: Bf, Bp, B, Bn
@@ -1494,34 +1539,42 @@
      print*, 'run_staggered_fluid_porous: need one BLOCK_FLUID and one BLOCK_POROUS block, got', mf, mp
      return
    endif
-   Bf => Mesh(nMesh)%Block(mf)
    Bp => Mesh(nMesh)%Block(mp)
    NVAR1 = Mesh(nMesh)%NVAR
 
-!  ---- find the FLUID code-19 subface (coupling region) ---------------------
+!  ---- find the FLUID code-19 subface (coupling region).  In multi-block gas
+!       topologies (e.g. high_low_fluid_800K, 4 blocks: one porous + three
+!       compressible) the code-19 subface may live on any one of the
+!       BLOCK_FLUID blocks, not necessarily the first one -- scan them all.
    found = .false.
-   do ksub=1, Bf%subface
-     Bc2 => Bf%bc_msg2(ksub)
-     if(.not. is_interface_bc(Bc2%bc)) cycle
-     nb = Bc2%nb1
-     if(nb <= 0) cycle
-     mb = 0
-     do mBlock=1, Mesh(nMesh)%Num_Block
-       if(Mesh(nMesh)%Block(mBlock)%Block_no == nb) then
-         Bn => Mesh(nMesh)%Block(mBlock); mb = mBlock; exit
+   do mb=1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mb)
+     if(B%Block_type /= BLOCK_FLUID) cycle
+     do ksub=1, B%subface
+       Bc2 => B%bc_msg2(ksub)
+       if(.not. is_interface_bc(Bc2%bc)) cycle
+       nb = Bc2%nb1
+       if(nb <= 0) cycle
+       mBlock2 = 0
+       do mBlock=1, Mesh(nMesh)%Num_Block
+         if(Mesh(nMesh)%Block(mBlock)%Block_no == nb) then
+           Bn => Mesh(nMesh)%Block(mBlock); mBlock2 = mBlock; exit
+         endif
+       enddo
+       if(mBlock2 == 0) cycle
+       if(Bn%Block_type /= BLOCK_POROUS) cycle
+       face_s = Bc2%face; face1 = Bc2%face1
+       if(face_s /= 2 .or. face1 /= 5) then
+         if(my_id == 0) print*, 'run_staggered: supports gas j- (face=2) vs porous j+ (face1=5) only; got', face_s, face1
+         return
        endif
+       ib=Bc2%ib; ie=Bc2%ie; jb=Bc2%jb; je=Bc2%je; kb=Bc2%kb; ke=Bc2%ke
+       ib1=Bc2%ib1; ie1=Bc2%ie1; jb1=Bc2%jb1; je1=Bc2%je1; kb1=Bc2%kb1; ke1=Bc2%ke1
+       Bf => Mesh(nMesh)%Block(mb); mf = mb
+       found = .true.
+       exit
      enddo
-     if(mb == 0) cycle
-     if(Bn%Block_type /= BLOCK_POROUS) cycle
-     face_s = Bc2%face; face1 = Bc2%face1
-     if(face_s /= 2 .or. face1 /= 5) then
-       if(my_id == 0) print*, 'run_staggered: supports gas j- (face=2) vs porous j+ (face1=5) only; got', face_s, face1
-       return
-     endif
-     ib=Bc2%ib; ie=Bc2%ie; jb=Bc2%jb; je=Bc2%je; kb=Bc2%kb; ke=Bc2%ke
-     ib1=Bc2%ib1; ie1=Bc2%ie1; jb1=Bc2%jb1; je1=Bc2%je1; kb1=Bc2%kb1; ke1=Bc2%ke1
-     found = .true.
-     exit
+     if(found) exit
    enddo
    if(.not. found) then
      print*, 'run_staggered_fluid_porous: no FLUID-POROUS (code 19) interface found'
@@ -1649,7 +1702,7 @@
        enddo; enddo
        do mBlock=1, Mesh(nMesh)%Num_Block
          B => Mesh(nMesh)%Block(mBlock)
-         if(B%Block_type == BLOCK_POROUS) call porous_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+         if(B%Block_type == BLOCK_POROUS) call solver_one_block(nMesh, mBlock, Sfac, Sfac1)
        enddo
      enddo
 
@@ -1747,3 +1800,614 @@
       enddo
     end subroutine set_porous_Ts_flux
   end subroutine run_staggered_fluid_porous
+!==============================================================================
+! Staggered segmented coupling for FLUID<->SOLID / LOWSPEED(AC)<->SOLID
+! (interface codes 11 / 13), conjugate-heat-transfer (CHT) variant.
+!
+! Same outer driver as interface 19: warm-up fluid/LS chunks of
+! Kstep_Couple_Comp steps (halved after Niter_Couple_Warm) alternating with
+! fully-converged solid chunks.  Interface ghosts are refreshed by the standard
+! per-step conjugate couple (couple_compressible_fluid_solid_face for 11,
+! couple_lowspeed_fluid_solid_face for 13) at every chunk step; the solid chunk
+! is a full Gauss-Seidel steady solve under the current interface ghost.
+! Convergence is monitored on the interface temperature T_w recovered from the
+! solid ghost (T_i = (Ts_js + Ts_jg)/2).
+!
+! paircode = 11 : BLOCK_FLUID(compressible) <-> BLOCK_SOLID
+!          = 13 : BLOCK_LOWSPEED(AC)       <-> BLOCK_SOLID
+!==============================================================================
+  subroutine run_staggered_fluid_solid(nMesh, paircode)
+   use Global_Var
+   use const_var
+   implicit none
+   integer:: nMesh, paircode
+   integer:: ftype, s1, f1, mBlock, mBlock2, ksub, nb, it, step, i1, i, k
+   integer:: nstep, nhalve
+   integer:: face_s, face1, ib,ie,jb,je,kb,ke, ib1,ie1,jb1,je1,kb1,ke1
+   integer:: js, jg, nf, nk
+   real(PRE_EC):: Sfac, Sfac1, twmax, T_i, qw, dx_s, tmpu
+   logical:: found, converged, wfmode
+   Type (Block_TYPE),pointer:: Bs, Bf, B, Bn
+   TYPE (BC_MSG_TYPE),pointer:: Bc2
+
+   ftype = BLOCK_FLUID
+   if(paircode .eq. 13) ftype = BLOCK_LOWSPEED
+   wfmode = (Iflag_Couple_WallFlux == 1)   ! CHT split: isothermal-Tw wall / q_w-flux solid
+
+   s1 = 0; f1 = 0
+   do mBlock = 1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(B%Block_type == BLOCK_SOLID .and. s1 == 0) s1 = mBlock
+     if(B%Block_type == ftype .and. f1 == 0) f1 = mBlock
+   enddo
+   if(s1 == 0 .or. f1 == 0) then
+     print*, 'run_staggered_fluid_solid: need one BLOCK_SOLID and one fluid block'// &
+             ' (type ', ftype, '), got', s1, f1
+     return
+   endif
+   Bs => Mesh(nMesh)%Block(s1)
+
+!  find the solid-side interface subface to the fluid block.  Accept both the
+!  explicit interface markers (bc<0 or 11..19) and the link-style entries used
+!  by some grids (physical wall code with neighbour fields nb1/face1 set).
+   found = .false.
+   do ksub = 1, Bs%subface
+     Bc2 => Bs%bc_msg2(ksub)
+     if(.not. is_interface_bc(Bc2%bc)) then
+       if(Bc2%nb1 <= 0 .or. Bc2%face1 <= 0) cycle
+     endif
+     nb = Bc2%nb1
+     if(nb <= 0) cycle
+     mBlock2 = 0
+     do mBlock = 1, Mesh(nMesh)%Num_Block
+       if(Mesh(nMesh)%Block(mBlock)%Block_no == nb) then
+         Bn => Mesh(nMesh)%Block(mBlock); mBlock2 = mBlock; exit
+       endif
+     enddo
+     if(mBlock2 == 0) cycle
+     if(Bn%Block_type /= ftype) cycle
+     face_s = Bc2%face; face1 = Bc2%face1
+     if(paircode .eq. 11) then
+       if(face_s /= 2 .or. face1 /= 1) then
+         if(my_id == 0) print*, 'run_staggered_fluid_solid(11): supports solid j- (2) vs'// &
+             ' comp i- (1) only; got', face_s, face1
+         return
+       endif
+     else
+       if(.not. (face_s == 2 .or. face_s == 5)) then
+         if(my_id == 0) print*, 'run_staggered_lowspeed_solid(13): supports solid j-/'// &
+             'j+ (2/5) only; got', face_s
+         return
+       endif
+       if(.not. (face1 == 2 .or. face1 == 5)) then
+         if(my_id == 0) print*, 'run_staggered_lowspeed_solid(13): fluid face must be'// &
+             ' j- or j+ (2/5), got', face1
+         return
+       endif
+     endif
+     ib=Bc2%ib; ie=Bc2%ie; jb=Bc2%jb; je=Bc2%je; kb=Bc2%kb; ke=Bc2%ke
+     ib1=Bc2%ib1; ie1=Bc2%ie1; jb1=Bc2%jb1; je1=Bc2%je1; kb1=Bc2%kb1; ke1=Bc2%ke1
+     Bf => Mesh(nMesh)%Block(mBlock2); f1 = mBlock2
+     found = .true.
+     exit
+   enddo
+   if(.not. found) then
+     print*, 'run_staggered_fluid_solid: no FLUID/LOWSPEED - SOLID (code ', paircode, &
+             ') interface found'
+     return
+   endif
+
+   nf = ie - ib
+   nk = ke - kb
+   if(.not. allocated(fp_Tw)) then
+     allocate(fp_Tw(1:nf,1:nk), fp_Tw_old(1:nf,1:nk), fp_qw(1:nf,1:nk))
+     allocate(fp_pw(1:nf,1:nk), fp_u(1:nf,1:nk), fp_pw_old(1:nf,1:nk), fp_u_old(1:nf,1:nk))
+   else
+     if(size(fp_Tw,1) /= nf .or. size(fp_Tw,2) /= nk) then
+       deallocate(fp_Tw, fp_Tw_old, fp_qw, fp_pw, fp_u, fp_pw_old, fp_u_old)
+       allocate(fp_Tw(1:nf,1:nk), fp_Tw_old(1:nf,1:nk), fp_qw(1:nf,1:nk))
+       allocate(fp_pw(1:nf,1:nk), fp_u(1:nf,1:nk), fp_pw_old(1:nf,1:nk), fp_u_old(1:nf,1:nk))
+     endif
+   endif
+   fp_Tw = Twall_Couple_Init
+   fp_Tw_old = fp_Tw; fp_qw = 0.d0; fp_pw = 0.d0; fp_u = 0.d0
+   fp_pw_old = 0.d0; fp_u_old = 0.d0
+
+   Mesh(nMesh)%tt = 0.d0
+   Mesh(nMesh)%Kstep = 0
+   if(my_id == 0) then
+     print*, ' run_staggered_fluid_solid(paircode=', paircode, '): solid block', s1, &
+             ' fluid block', f1, ' Kstep_Couple_Comp=', Kstep_Couple_Comp, &
+             ' Niter_Couple_Outer=', Niter_Couple_Outer, ' Twall_Couple_Init=', Twall_Couple_Init
+   endif
+
+   converged = .false.
+   outer: do it = 1, Niter_Couple_Outer
+     fp_Tw_old = fp_Tw
+!    adaptive chunk length: full Kstep_Couple_Comp for the first
+!    Niter_Couple_Warm outer iterations, then halve down to Kstep_Couple_Min
+     nstep = Kstep_Couple_Comp
+     if(it > Niter_Couple_Warm) then
+       nhalve = it - Niter_Couple_Warm
+       do i1 = 1, nhalve
+         nstep = max(Kstep_Couple_Min, nstep/2)
+       enddo
+     endif
+     nstep = max(1, nstep)
+!    code 13: the low-speed flow side is solved by the AC solver "to
+!    convergence" per outer round (one solver_one_block call); the chunk-step
+!    schedule applies to the compressible case (11) only.
+     if(paircode .eq. 13) nstep = 1
+     if(my_id == 0) print*, ' outer iter', it, ': flow chunk steps =', nstep
+
+!   ==================== (1) FLUID / LS CHUNK ========================
+      if(.not. wfmode) call couple_fluid_solid_interfaces(nMesh)   ! seed interface ghosts before the chunk
+     do step = 1, nstep
+        if(wfmode) call stagger_fill_flow_wall
+       call comput_Sfac(Sfac, Sfac1)
+       call Set_Un(nMesh)
+       do mBlock = 1, Mesh(nMesh)%Num_Block
+         B => Mesh(nMesh)%Block(mBlock)
+         if(B%Block_type == ftype) call solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+       enddo
+        if(.not. wfmode) call couple_fluid_solid_interfaces(nMesh)
+       call couple_solid_solid_interfaces(nMesh)
+       call couple_lowspeed_porous_interfaces(nMesh)
+       if(IFLAG_LIMIT_FLOW == 1) call limit_flow(nMesh)
+       call Boundary_condition_onemesh(nMesh)
+       call update_buffer_onemesh(nMesh)
+       call update_Ts_buffer_onemesh(nMesh)
+       Mesh(nMesh)%tt = Mesh(nMesh)%tt + dt_global
+       Mesh(nMesh)%Kstep = Mesh(nMesh)%Kstep + 1
+       if(my_id == 0 .and. mod(Mesh(nMesh)%Kstep, Kstep_show) == 0) then
+         call comput_force
+         call output_Res(nMesh)
+       endif
+       if(my_id == 0 .and. mod(Mesh(nMesh)%Kstep, Kstep_save) == 0) then
+         call output_flow
+         call output_Ts
+         call output_vtk
+       endif
+     enddo
+      if(wfmode) then
+        call stagger_fill_flow_wall
+        call stagger_extract_flow_qw
+      endif
+
+     if(my_id == 0) print*, ' flow chunk done, Kstep=', Mesh(nMesh)%Kstep, &
+         ' tt=', Mesh(nMesh)%tt
+
+!   ==================== (2) SOLID CHUNK (steady GS) =================
+      if(wfmode) then
+        stg_ow_block = s1; stg_ow_face = face_s
+        stg_ow_ib=ib; stg_ow_ie=ie; stg_ow_jb=jb; stg_ow_je=je; stg_ow_kb=kb; stg_ow_ke=ke
+      endif
+!    interface ghost is current from the last couple of the flow chunk
+     do mBlock = 1, Mesh(nMesh)%Num_Block
+       B => Mesh(nMesh)%Block(mBlock)
+       if(B%Block_type == BLOCK_SOLID) call solid_solver_one_block(nMesh, mBlock)
+     enddo
+!    refresh ghosts with the updated solid and store the interface T_w
+      if(wfmode) then
+        stg_ow_block = 0
+      else
+        call couple_fluid_solid_interfaces(nMesh)
+      endif
+
+     if(face_s == 2) then
+       js = Bc2%jb
+       jg = Bc2%jb - 1
+     else
+       js = Bc2%je - 1
+       jg = Bc2%je
+     endif
+     twmax = 0.d0
+     do k = kb, ke-1
+     do i = ib, ie-1
+       T_i = 0.5d0*(Bs%Ts(i,js,k) + Bs%Ts(i,jg,k))
+       if(face_s == 2) then
+         dx_s = Bs%y(i,jb,k) - Bs%yc(i,js,k)
+       else
+         dx_s = Bs%yc(i,js,k) - Bs%y(i,je,k)
+       endif
+       dx_s = max(abs(dx_s), 1.d-20)*Lscale
+       qw   = Bs%solid_k*(T_i - Bs%Ts(i,js,k))/dx_s
+       fp_Tw(i-ib+1,k-kb+1) = T_i
+       if(.not. wfmode) fp_qw(i-ib+1,k-kb+1) = qw
+       twmax = max(twmax, abs(T_i - fp_Tw_old(i-ib+1,k-kb+1)))
+     enddo; enddo
+     if(my_id == 0) then
+       print*, ' solid chunk done, outer iter', it, ' max|dT_w|=', twmax, ' K', &
+               '  T_w range [', minval(fp_Tw), ',', maxval(fp_Tw), ']  max|q_w|=', maxval(abs(fp_qw))
+       open(203, file='iface_couple.dat', status='replace')
+       write(203,'(A)') '# x_w(m)  T_w(K)  q_w(W/m2)  p_w(Pa)'
+       do k = kb, ke-1
+       do i = ib, ie-1
+         tmpu = 0.5d0*(Bs%x(i,js,k)+Bs%x(i+1,js,k))
+         write(203,'(4ES16.7)') tmpu*Lscale, fp_Tw(i-ib+1,k-kb+1), &
+                                fp_qw(i-ib+1,k-kb+1), 0.d0
+       enddo; enddo
+       close(203)
+     endif
+     if(it >= 2 .and. twmax < Tol_Couple_Tw) then
+       converged = .true.
+       if(my_id == 0) print*, ' Staggered CHT coupling converged at outer iter', it, &
+                              ' (max|dT_w| <', Tol_Couple_Tw, ')'
+       exit outer
+     endif
+   enddo outer
+
+   if(.not. converged) then
+     if(my_id == 0) print*, ' Staggered CHT coupling reached Niter_Couple_Outer=', &
+                            Niter_Couple_Outer, ' (not fully converged)'
+   endif
+
+   call output_flow
+   call output_Ts
+   call output_vtk
+
+  contains
+
+!   Fill the flow-side interface ghost as an isothermal wall at fp_Tw.
+!   code 13: BLOCK_LOWSPEED (mirror velocities, zero-gradient p, U5=2Tw-T);
+!   code 11: compressible wall via wall_bound_with_Tw (i- face, tangential j map).
+    subroutine stagger_fill_flow_wall
+      implicit none
+      integer:: i, k, jt, jint, jg, n1
+      real(PRE_EC):: Tw
+      if(paircode .eq. 13) then
+        do k = kb, ke-1
+        do i = ib, ie-1
+          Tw = fp_Tw(i-ib+1,k-kb+1)
+          if(face1 .eq. 2) then
+            jint = jb1
+          else
+            jint = je1-1
+          endif
+          do n1 = 0, LAP-1
+            if(face1 .eq. 2) then
+              jg = jb1-1-n1
+            else
+              jg = je1+n1
+            endif
+            Bf%U(1,i,jg,k) = LS_rho
+            Bf%U(2,i,jg,k) = -Bf%U(2,i,jint,k)
+            Bf%U(3,i,jg,k) = -Bf%U(3,i,jint,k)
+            Bf%U(4,i,jg,k) = -Bf%U(4,i,jint,k)
+            Bf%U(5,i,jg,k) = 2.d0*Tw - Bf%U(5,i,jint,k)
+            Bf%p(i,jg,k)   = Bf%p(i,jint,k)
+          enddo
+        enddo; enddo
+      else
+        do k = kb, ke-1
+        do i = ib, ie-1
+          jt = jb1 + (i - ib)
+          Tw = fp_Tw(i-ib+1,k-kb+1)
+          call wall_bound_with_Tw(Mesh(nMesh)%NVAR, Bf%U(:,ib1,jt,k), Bf%U(:,ib1-1,jt,k), &
+               Ma, gamma, Tw/T_inf, Bf%mu(ib1,jt,k), Bf%dw(ib1,jt,k), Re)
+          do n1 = 1, LAP-1
+            Bf%U(:,ib1-1-n1,jt,k) = Bf%U(:,ib1-1,jt,k)
+          enddo
+        enddo; enddo
+      endif
+    end subroutine stagger_fill_flow_wall
+
+!   Extract the interface heat flux into the solid (W/m2, >0 into wall) from the
+!   flow-side isothermal-wall ghost after the flow chunk.
+    subroutine stagger_extract_flow_qw
+      implicit none
+      integer:: i, k, jt, jint, jg
+      real(PRE_EC):: Tint, Tgh, dxg, q
+      real(PRE_EC),parameter:: R_AIR=287.d0, MU_SI0=1.716d-5, T_SI0=273.15d0, S_SI=110.4d0
+      real(PRE_EC):: d1, u1s, v1s, p1n, Tnd, Tnd_g, T1K, muSI, kgas, cp_ref
+      if(paircode .eq. 13) then
+        do k = kb, ke-1
+        do i = ib, ie-1
+          if(face1 .eq. 2) then
+            jint = jb1
+          else
+            jint = je1-1
+          endif
+          if(face1 .eq. 2) then
+            jg = jb1-1
+          else
+            jg = je1
+          endif
+          Tint = Bf%U(5,i,jint,k)
+          Tgh  = Bf%U(5,i,jg,k)
+          dxg  = sqrt( (Bf%xc(i,jint,k)-Bf%xc(i,jg,k))**2 &
+                     + (Bf%yc(i,jint,k)-Bf%yc(i,jg,k))**2 &
+                     + (Bf%zc(i,jint,k)-Bf%zc(i,jg,k))**2 )*Lscale
+          fp_qw(i-ib+1,k-kb+1) = LS_k*(Tint-Tgh)/max(dxg,1.d-30)
+        enddo; enddo
+      else
+        do k = kb, ke-1
+        do i = ib, ie-1
+          jt = jb1 + (i - ib)
+          d1  = max(Bf%U(1,ib1,jt,k),1.d-20)
+          u1s = Bf%U(2,ib1,jt,k)/d1; v1s = Bf%U(3,ib1,jt,k)/d1
+          p1n = (Bf%U(5,ib1,jt,k)-0.5d0*d1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+          Tnd = gamma*Ma*Ma*p1n/max(d1,1.d-20)
+          d1  = max(Bf%U(1,ib1-1,jt,k),1.d-20)
+          u1s = Bf%U(2,ib1-1,jt,k)/d1; v1s = Bf%U(3,ib1-1,jt,k)/d1
+          p1n = (Bf%U(5,ib1-1,jt,k)-0.5d0*d1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+          Tnd_g = gamma*Ma*Ma*p1n/max(d1,1.d-20)
+          dxg  = sqrt( (Bf%xc(ib1,jt,k)-Bf%xc(ib1-1,jt,k))**2 &
+                     + (Bf%yc(ib1,jt,k)-Bf%yc(ib1-1,jt,k))**2 &
+                     + (Bf%zc(ib1,jt,k)-Bf%zc(ib1-1,jt,k))**2 )*Lscale
+          T1K  = Tnd*T_inf
+          muSI = MU_SI0*sqrt((T1K/T_SI0)**3)*(T_SI0+S_SI)/(T1K+S_SI)
+          cp_ref = gamma*R_AIR/(gamma-1.d0)
+          kgas = muSI*cp_ref/max(PrL,1.d-30)
+          fp_qw(i-ib+1,k-kb+1) = kgas*(Tnd-Tnd_g)/max(dxg,1.d-30)*T_inf
+        enddo; enddo
+      endif
+    end subroutine stagger_extract_flow_qw
+
+  end subroutine run_staggered_fluid_solid
+!==============================================================================
+! Staggered segmented coupling for FLUID(compressible, high speed) <->
+! LOWSPEED fluid (interface code 12), two-fluid matching block-Gauss-Seidel
+! variant (chosen by the user).
+!
+! Each outer round: (1) gas chunk - advance only the BLOCK_FLUID blocks for the
+! scheduled number of steps while the low-speed blocks stay frozen; (2) LS
+! chunk - advance only the BLOCK_LOWSPEED blocks (AC, LS_Algorithm=3, to
+! convergence) while the gas stays frozen.  The standard per-step interface
+! couple couple_highlow_fluid_face (unit conversion both ways + LS velocity
+! clamping / pressure anchoring) is applied after every solver call, so the
+! advancing side sees the frozen partner state on its interface ghost.
+! Convergence is monitored on the low-speed top-row interface temperature,
+! pressure and velocity between outer rounds.
+!==============================================================================
+  subroutine run_staggered_highlow(nMesh)
+   use Global_Var
+   use const_var
+   implicit none
+   integer:: nMesh
+   integer:: mf, ml, mBlock, mBlock2, ksub, nb, it, step, i1, i, k
+   integer:: nstep, nhalve, nf, nk
+   integer:: face_s, face1, ib,ie,jb,je,kb,ke, ib1,ie1,jb1,je1,kb1,ke1, jc_l
+   real(PRE_EC):: Sfac, Sfac1, dtw, dpw, duw, xw, uu, vv
+   logical:: found, converged
+   Type (Block_TYPE),pointer:: Bf, Bp, B, Bn
+   TYPE (BC_MSG_TYPE),pointer:: Bc2
+
+   mf = 0; ml = 0
+   do mBlock = 1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(B%Block_type == BLOCK_FLUID .and. mf == 0) mf = mBlock
+     if(B%Block_type == BLOCK_LOWSPEED .and. ml == 0) ml = mBlock
+   enddo
+   if(mf == 0 .or. ml == 0) then
+     print*, 'run_staggered_highlow: need one BLOCK_FLUID and one BLOCK_LOWSPEED,'// &
+             ' got', mf, ml
+     return
+   endif
+   Bf => Mesh(nMesh)%Block(mf)
+
+!  find the code-12 subface on a BLOCK_FLUID block (couple_highlow is applied
+!  once from the compressible side); support the j- vs j+ conformal pair.
+   found = .false.
+   do mBlock = 1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(B%Block_type /= BLOCK_FLUID) cycle
+     do ksub = 1, B%subface
+       Bc2 => B%bc_msg2(ksub)
+       if(.not. is_interface_bc(Bc2%bc)) cycle
+       nb = Bc2%nb1
+       if(nb <= 0) cycle
+       mBlock2 = 0
+       do mBlock2 = 1, Mesh(nMesh)%Num_Block
+         if(Mesh(nMesh)%Block(mBlock2)%Block_no == nb) exit
+       enddo
+       if(mBlock2 > Mesh(nMesh)%Num_Block) cycle
+       Bn => Mesh(nMesh)%Block(mBlock2)
+       if(Bn%Block_type /= BLOCK_LOWSPEED) cycle
+       face_s = Bc2%face; face1 = Bc2%face1
+       if(face_s /= 2 .or. face1 /= 5) then
+         if(my_id == 0) print*, 'run_staggered_highlow: supports comp j- (2) vs LS j+ (5)'// &
+             ' only; got', face_s, face1
+         return
+       endif
+       ib=Bc2%ib; ie=Bc2%ie; jb=Bc2%jb; je=Bc2%je; kb=Bc2%kb; ke=Bc2%ke
+       ib1=Bc2%ib1; ie1=Bc2%ie1; jb1=Bc2%jb1; je1=Bc2%je1; kb1=Bc2%kb1; ke1=Bc2%ke1
+       Bf => Mesh(nMesh)%Block(mBlock)
+       Bp => Mesh(nMesh)%Block(mBlock2)
+       mf = mBlock; ml = mBlock2
+       found = .true.
+       exit
+     enddo
+     if(found) exit
+   enddo
+   if(.not. found) then
+     print*, 'run_staggered_highlow: no FLUID-LOWSPEED (code 12) interface found'
+     return
+   endif
+   jc_l = Bc2%je1 - 1          ! low-speed first interior row below its j+ face
+
+   nf = ie - ib
+   nk = ke - kb
+   if(.not. allocated(fp_Tw)) then
+     allocate(fp_Tw(1:nf,1:nk), fp_Tw_old(1:nf,1:nk), fp_qw(1:nf,1:nk))
+     allocate(fp_pw(1:nf,1:nk), fp_u(1:nf,1:nk), fp_pw_old(1:nf,1:nk), fp_u_old(1:nf,1:nk))
+   else
+     if(size(fp_Tw,1) /= nf .or. size(fp_Tw,2) /= nk) then
+       deallocate(fp_Tw, fp_Tw_old, fp_qw, fp_pw, fp_u, fp_pw_old, fp_u_old)
+       allocate(fp_Tw(1:nf,1:nk), fp_Tw_old(1:nf,1:nk), fp_qw(1:nf,1:nk))
+       allocate(fp_pw(1:nf,1:nk), fp_u(1:nf,1:nk), fp_pw_old(1:nf,1:nk), fp_u_old(1:nf,1:nk))
+     endif
+   endif
+   fp_Tw = 0.d0; fp_pw = 0.d0; fp_u = 0.d0; fp_Tw_old = 0.d0
+   fp_pw_old = 0.d0; fp_u_old = 0.d0; fp_qw = 0.d0
+
+   Mesh(nMesh)%tt = 0.d0
+   Mesh(nMesh)%Kstep = 0
+   if(my_id == 0) then
+     print*, ' run_staggered_highlow(12): gas block', mf, ' LS block', ml, &
+             ' Kstep_Couple_Comp=', Kstep_Couple_Comp, ' Niter_Couple_Outer=', Niter_Couple_Outer
+   endif
+
+   converged = .false.
+   outer: do it = 1, Niter_Couple_Outer
+     fp_Tw_old = fp_Tw; fp_pw_old = fp_pw; fp_u_old = fp_u
+     nstep = Kstep_Couple_Comp
+     if(it > Niter_Couple_Warm) then
+       nhalve = it - Niter_Couple_Warm
+       do i1 = 1, nhalve
+         nstep = max(Kstep_Couple_Min, nstep/2)
+       enddo
+     endif
+     nstep = max(1, nstep)
+     if(my_id == 0) print*, ' outer iter', it, ': gas chunk steps =', nstep
+
+!   ============ (1) GAS CHUNK: compressible only ==================
+     do step = 1, nstep
+       call comput_Sfac(Sfac, Sfac1)
+       call Set_Un(nMesh)
+       do mBlock = 1, Mesh(nMesh)%Num_Block
+         B => Mesh(nMesh)%Block(mBlock)
+         if(B%Block_type == BLOCK_FLUID) call solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+       enddo
+       call couple_fluid_solid_interfaces(nMesh)
+       call couple_solid_solid_interfaces(nMesh)
+       call couple_lowspeed_porous_interfaces(nMesh)
+       if(IFLAG_LIMIT_FLOW == 1) call limit_flow(nMesh)
+       call Boundary_condition_onemesh(nMesh)
+       call update_buffer_onemesh(nMesh)
+       call update_Ts_buffer_onemesh(nMesh)
+       Mesh(nMesh)%tt = Mesh(nMesh)%tt + dt_global
+       Mesh(nMesh)%Kstep = Mesh(nMesh)%Kstep + 1
+       if(my_id == 0 .and. mod(Mesh(nMesh)%Kstep, Kstep_show) == 0) then
+         call comput_force
+         call output_Res(nMesh)
+       endif
+       if(my_id == 0 .and. mod(Mesh(nMesh)%Kstep, Kstep_save) == 0) then
+         call output_flow
+         call output_Ts
+         call output_vtk
+       endif
+     enddo
+     if(my_id == 0) print*, ' gas chunk done, Kstep=', Mesh(nMesh)%Kstep, &
+         ' tt=', Mesh(nMesh)%tt
+
+!   ============ (2) LS CHUNK: AC to convergence ====================
+     call comput_Sfac(Sfac, Sfac1)
+     call Set_Un(nMesh)
+     do mBlock = 1, Mesh(nMesh)%Num_Block
+       B => Mesh(nMesh)%Block(mBlock)
+       if(B%Block_type == BLOCK_LOWSPEED) call solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+     enddo
+     call couple_fluid_solid_interfaces(nMesh)
+     call couple_solid_solid_interfaces(nMesh)
+     call couple_lowspeed_porous_interfaces(nMesh)
+     if(IFLAG_LIMIT_FLOW == 1) call limit_flow(nMesh)
+     call Boundary_condition_onemesh(nMesh)
+     call update_buffer_onemesh(nMesh)
+     call update_Ts_buffer_onemesh(nMesh)
+     if(my_id == 0) print*, ' LS (AC) chunk done'
+
+!   ============ (3) RECORD interface metrics & convergence =========
+     dtw = 0.d0; dpw = 0.d0; duw = 0.d0
+     do k = kb, ke-1
+     do i = ib, ie-1
+       fp_Tw(i-ib+1,k-kb+1) = Bp%U(5,i,jc_l,k)
+       fp_pw(i-ib+1,k-kb+1) = Bp%p(i,jc_l,k)
+       uu = Bp%U(2,i,jc_l,k); vv = Bp%U(3,i,jc_l,k)
+       fp_u(i-ib+1,k-kb+1) = sqrt(uu*uu + vv*vv)
+       dtw = max(dtw, abs(fp_Tw(i-ib+1,k-kb+1)-fp_Tw_old(i-ib+1,k-kb+1)))
+       dpw = max(dpw, abs(fp_pw(i-ib+1,k-kb+1)-fp_pw_old(i-ib+1,k-kb+1)))
+       duw = max(duw, abs(fp_u(i-ib+1,k-kb+1)-fp_u_old(i-ib+1,k-kb+1)))
+     enddo; enddo
+     if(my_id == 0) then
+       print*, ' highlow interface metrics, outer iter', it, ': max|dT|=', dtw, &
+               ' K max|dp|=', dpw, ' Pa max|du|=', duw, ' m/s'
+       print*, '   LS top-row T[', minval(fp_Tw), ',', maxval(fp_Tw), '] K  p[', &
+               minval(fp_pw), ',', maxval(fp_pw), '] Pa'
+       open(204, file='iface_highlow.dat', status='replace')
+       write(204,'(A)') '# x_w(m)  T_w(K)  p_w(Pa)  |u|_w(m/s)'
+       do k = kb, ke-1
+       do i = ib, ie-1
+         xw = 0.5d0*(Bf%x(i,jb,k)+Bf%x(i+1,jb,k))
+         write(204,'(4ES16.7)') xw*Lscale, fp_Tw(i-ib+1,k-kb+1), &
+                                fp_pw(i-ib+1,k-kb+1), fp_u(i-ib+1,k-kb+1)
+       enddo; enddo
+       close(204)
+     endif
+     if(it >= 2 .and. dtw < Tol_Couple_Tw .and. dpw < Tol_Couple_p .and. &
+        duw < Tol_Couple_u) then
+       converged = .true.
+       if(my_id == 0) print*, ' Staggered highlow coupling converged at outer iter', it
+       exit outer
+     endif
+   enddo outer
+
+   if(.not. converged) then
+     if(my_id == 0) print*, ' Staggered highlow coupling reached Niter_Couple_Outer=', &
+                            Niter_Couple_Outer, ' (not fully converged)'
+   endif
+
+   call output_flow
+   call output_Ts
+   call output_vtk
+  end subroutine run_staggered_highlow
+!==============================================================================
+! Staggered segmented coupling dispatcher.  Detects which cross-region pair
+! exists in the mesh (single pair assumed) and routes to the matching driver:
+!   19 FLUID<->POROUS    run_staggered_fluid_porous   (wall+q_w thermal)
+!   11 FLUID<->SOLID     run_staggered_fluid_solid    (CHT, code 11)
+!   13 LOWSPEED<->SOLID  run_staggered_fluid_solid    (CHT/AC, code 13)
+!   12 FLUID<->LOWSPEED  run_staggered_highlow        (matching block GS/AC)
+!==============================================================================
+  subroutine run_staggered_multiregion(nMesh)
+   use Global_Var
+   use const_var
+   implicit none
+   integer:: nMesh
+   integer:: mBlock, ksub, nb, mBlock2, npairs
+   logical:: has11, has12, has13, has19
+   logical:: hasF, hasL, hasS, hasP
+   Type (Block_TYPE),pointer:: B, Bn
+   TYPE (BC_MSG_TYPE),pointer:: Bc2
+
+
+   hasF = .false.; hasL = .false.; hasS = .false.; hasP = .false.
+   do mBlock = 1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(B%Block_type == BLOCK_FLUID) hasF = .true.
+     if(B%Block_type == BLOCK_LOWSPEED) hasL = .true.
+     if(B%Block_type == BLOCK_SOLID) hasS = .true.
+     if(B%Block_type == BLOCK_POROUS) hasP = .true.
+   enddo
+   has11 = hasF .and. hasS
+   has12 = hasF .and. hasL
+   has13 = hasL .and. hasS
+   has19 = hasF .and. hasP
+   npairs = 0
+   if(has11) npairs = npairs+1
+   if(has12) npairs = npairs+1
+   if(has13) npairs = npairs+1
+   if(has19) npairs = npairs+1
+   if(my_id == 0) print*, ' run_staggered_multiregion: block types F/L/S/P =', hasF, hasL, hasS, hasP
+   if(my_id == 0) print*, ' run_staggered_multiregion: pairs 11/12/13/19 =', &
+                          has11, has12, has13, has19
+   if(npairs == 0) then
+     if(my_id == 0) print*, ' run_staggered_multiregion: no cross-region block combination - abort'
+     return
+   endif
+   if(npairs > 1) then
+     if(my_id == 0) print*, ' run_staggered_multiregion: multiple cross-region combos present,', &
+         ' staggered driver supports a single pair (11/12/13/19) - abort'
+     return
+   endif
+
+   if(has19) then
+     call run_staggered_fluid_porous(nMesh)
+   else if(has11) then
+     call run_staggered_fluid_solid(nMesh, 11)
+   else if(has13) then
+     call run_staggered_fluid_solid(nMesh, 13)
+   else if(has12) then
+     call run_staggered_highlow(nMesh)
+   endif
+  end subroutine run_staggered_multiregion

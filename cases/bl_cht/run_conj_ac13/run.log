@@ -1,0 +1,130 @@
+nohup: ignoring input
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            2 Total Cell number is        13600
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=       13600
+ Total Grid number=       27892
+ Max grid number is        27892  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        27892  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           2
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1000.0000000000000       k=   1.4286000000000001     
+   Block           2 : Block_type=           1  rho=   7800.0000000000000       Cp=   460.00000000000000       k=   50.000000000000000     
+ porous.inp not found: porous blocks use defaults (eps=0.9, dp=1e-3 m, hv=0)
+ creat main mesh OK, Num_Cell=       13600
+  read main mesh ...
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ Convert bc3d_interface.inp to bc3d_interface.inc ...
+ Convert bc3d_interface.inp to bc3d_interface.inc OK
+ read bc3d_interface.inc (Interface link file)......
+ read bc3d_interface.inc OK
+ Read solid_bc.inp OK
+   Block           2  (solid):           1  thermal BC faces
+     face           2  Tw=   800.00000000000000       Qw=   0.0000000000000000     
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           2           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+  Staggered segmented coupling mode (Iflag_Couple_Scheme=1) ...
+  run_staggered_multiregion: block types F/L/S/P = F T T F
+  run_staggered_multiregion: pairs 11/12/13/19 = F F T F
+  run_staggered_fluid_solid(paircode=          13 ): solid block           2  fluid block           1  Kstep_Couple_Comp=         100  Niter_Couple_Outer=           3  Twall_Couple_Init=   300.00000000000000     
+  outer iter           1 : flow chunk steps =           1
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=         151          85           2  beta=   10.000000000000000       CFL=   20.000000000000000       dual=           0
+   AC iter           1  res_q=   0.0000000000000000       res_m=   0.0000000000000000     
+   AC iter           1  res_q=   0.0000000000000000       res_m=   0.0000000000000000     
+  AC solver block           1 : iterations =          20  final res_q=   0.0000000000000000       res_m=   0.0000000000000000     
+  AC-lowspeed T block           1 : sweeps =          50  final max|dT|(50-window)=   2.7284841053187847E-012
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+  -1.5959455978986625E-016   2.6020852139652106E-018   2.5343225781848666E-018
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   1.0759340721291184E-016   2.9747797107571028E-018   3.8163916471489756E-017
+ Kstep, t=           1   1.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+  flow chunk done, Kstep=           1  tt=   1.0000000000000000     
+   GS iter           1  res=   739.06616815929647       Ts(1,1,1)=   724.97875106244749       Ts(nx-1,ny-1,1)=   348.62204519238082     
+   GS iter           2  res=   496.30260198346184       Ts(1,1,1)=   761.64490817637954       Ts(nx-1,ny-1,1)=   319.23389292809088     
+   GS iter           3  res=   360.22371028217879       Ts(1,1,1)=   696.40437440982021       Ts(nx-1,ny-1,1)=   347.28750808225038     
+   GS iter           4  res=   243.33720302607799       Ts(1,1,1)=   762.48624461613690       Ts(nx-1,ny-1,1)=   333.10166777753011     
+   GS iter           5  res=   176.68492039716762       Ts(1,1,1)=   749.57386918012469       Ts(nx-1,ny-1,1)=   347.03944575312710     
+ Solid solver Block           2  GS iterations:         200  final res:   1.7053025658242404E-012
+   DBG: Ts(1,1,1)=   776.19047619047706       Ts(nx/2,ny/2,1)=   585.71428571428874       Ts(nx-1,ny-1,1)=   347.61904761904822     
+  solid chunk done, outer iter           1  max|dT_w|=   37.036872428715924       K  T_w range [   337.03687242871530      ,   337.03687242871592      ]  max|q_w|=   105821.75190332682     
+  outer iter           2 : flow chunk steps =           1
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=         151          85           2  beta=   10.000000000000000       CFL=   20.000000000000000       dual=           0
+   AC iter           1  res_q=   0.0000000000000000       res_m=   0.0000000000000000     
+   AC iter           1  res_q=   0.0000000000000000       res_m=   0.0000000000000000     
+  AC solver block           1 : iterations =          20  final res_q=   0.0000000000000000       res_m=   0.0000000000000000     
+   AC-lowspeed T iter        1000  max|dT|/50=   1.1782397962072650       T[   299.99999999999727      ,   372.95421946821193      ] K
+  AC-lowspeed T block           1 : sweeps =        1850  final max|dT|(50-window)=   5.8624993602052200E-004
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+  -1.5959455978986625E-016   2.6020852139652106E-018   2.5343225781848666E-018
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   1.0759340721291184E-016   2.9747797107571028E-018   3.8163916471489756E-017
+ Kstep, t=           2   2.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+  flow chunk done, Kstep=           2  tt=   2.0000000000000000     
+   GS iter           1  res=   43.514148853925235       Ts(1,1,1)=   776.19047619047706       Ts(nx-1,ny-1,1)=   391.01616794075539     
+   GS iter           2  res=   32.158718399535530       Ts(1,1,1)=   776.19047619047728       Ts(nx-1,ny-1,1)=   393.96869410820568     
+   GS iter           3  res=   23.767022478969977       Ts(1,1,1)=   776.19047619047672       Ts(nx-1,ny-1,1)=   395.78542205866654     
+   GS iter           4  res=   17.565013302537636       Ts(1,1,1)=   776.19047619047728       Ts(nx-1,ny-1,1)=   397.01170017271278     
+   GS iter           5  res=   12.981350722867660       Ts(1,1,1)=   776.19047619047672       Ts(nx-1,ny-1,1)=   397.90040545228459     
+ Solid solver Block           2  GS iterations:         200  final res:   1.5916157281026244E-012
+   DBG: Ts(1,1,1)=   778.84998469896573       Ts(nx/2,ny/2,1)=   610.86030561678717       Ts(nx-1,ny-1,1)=   400.75192155161778     
+  solid chunk done, outer iter           2  max|dT_w|=   57.632406646004938       K  T_w range [   386.51217384249281      ,   394.66927907472041      ]  max|q_w|=   91213.707613067556     
+  outer iter           3 : flow chunk steps =           1
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=         151          85           2  beta=   10.000000000000000       CFL=   20.000000000000000       dual=           0
+   AC iter           1  res_q=   0.0000000000000000       res_m=   0.0000000000000000     
+   AC iter           1  res_q=   0.0000000000000000       res_m=   0.0000000000000000     
+  AC solver block           1 : iterations =          20  final res_q=   0.0000000000000000       res_m=   0.0000000000000000     
+   AC-lowspeed T iter        1000  max|dT|/50=  0.67252995339453037       T[   299.99999999999727      ,   414.62066541280768      ] K
+  AC-lowspeed T block           1 : sweeps =        1800  final max|dT|(50-window)=   7.6203980182754094E-004
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+  -1.5959455978986625E-016   2.6020852139652106E-018   2.5343225781848666E-018
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   1.0759340721291184E-016   2.9747797107571028E-018   3.8163916471489756E-017
+ Kstep, t=           3   3.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+  flow chunk done, Kstep=           3  tt=   3.0000000000000000     
+   GS iter           1  res=   35.556920858112278       Ts(1,1,1)=   778.84998469896618       Ts(nx-1,ny-1,1)=   436.21983872384635     
+   GS iter           2  res=   26.278490295641632       Ts(1,1,1)=   778.84998469896595       Ts(nx-1,ny-1,1)=   438.63455630189543     
+   GS iter           3  res=   19.421195977711534       Ts(1,1,1)=   778.84998469896584       Ts(nx-1,ny-1,1)=   440.11896614596242     
+   GS iter           4  res=   14.353330905373355       Ts(1,1,1)=   778.84998469896618       Ts(nx-1,ny-1,1)=   441.12111672497338     
+   GS iter           5  res=   10.607826097353268       Ts(1,1,1)=   778.84998469896573       Ts(nx-1,ny-1,1)=   441.84730592647179     
+ Solid solver Block           2  GS iterations:         200  final res:   1.7053025658242404E-012
+   DBG: Ts(1,1,1)=   780.98505311644692       Ts(nx/2,ny/2,1)=   631.38498194510498       Ts(nx-1,ny-1,1)=   444.17740152152578     
+  solid chunk done, outer iter           3  max|dT_w|=   43.113085223077121       K  T_w range [   423.86426806301444      ,   437.78128299850761      ]  max|q_w|=   104159.44961929247     
+  Staggered CHT coupling reached Niter_Couple_Outer=           3  (not fully converged)
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_2.dat
+ write VTK files ......
+ write VTK files OK
+Note: The following floating-point exceptions are signalling: IEEE_DENORMAL

@@ -282,8 +282,17 @@
    integer,save:: Kstep_Couple_Min=1        ! gas-chunk step floor after warm-up (auto shrink)
    real(PRE_EC),save:: Twall_Couple_Init=300.d0  ! first gas-chunk interface wall T [K]
    real(PRE_EC),save:: Tol_Couple_Tw=2.d-2       ! outer convergence: max|dT_w| [K]
+   real(PRE_EC),save:: Tol_Couple_p=1.d1         ! 12 (fluid-fluid) outer conv.: max|dp_w| [Pa]
+   real(PRE_EC),save:: Tol_Couple_u=1.d-2        ! 12 (fluid-fluid) outer conv.: max|du_w| [m/s]
+   integer,save:: Iflag_Couple_WallFlux=0  ! CHT split: 0=couple-based, 1=isothermal-Tw/qw wall-flux
  ! per-interface-face arrays used by the staggered coupling (face-cell indexed)
    real(PRE_EC),save,allocatable,dimension(:,:):: fp_Tw, fp_Tw_old, fp_qw, fp_pw
+   real(PRE_EC),save,allocatable,dimension(:,:):: fp_u
+   real(PRE_EC),save,allocatable,dimension(:,:):: fp_pw_old, fp_u_old
+ ! solid GS q_w override descriptor (wall-flux CHT split mode)
+   integer,save:: stg_ow_block=0
+   integer,save:: stg_ow_face=0
+   integer,save:: stg_ow_ib=0, stg_ow_ie=0, stg_ow_jb=0, stg_ow_je=0, stg_ow_kb=0, stg_ow_ke=0
  !-----------mpi data ----------------------------------------------------------- 
    integer:: my_id,Total_proc !
    integer,pointer,dimension(:):: B_Proc, B_n !

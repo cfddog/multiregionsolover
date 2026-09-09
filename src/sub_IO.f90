@@ -1405,9 +1405,10 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 !----------------------------------------------------------------------
   subroutine align_interface_to_bc_msg
    use Global_Var
+   use const_var
    implicit none
-   integer:: m, k, l, kk, nsub
-   Type (Block_TYPE),pointer:: B
+   integer:: m, k, l, kk, nsub, nbty
+   Type (Block_TYPE),pointer:: B, Bn
    TYPE (BC_MSG_TYPE),pointer:: Bc1, Bc2
    integer,allocatable:: perm(:)
    logical,allocatable:: used(:)
@@ -1450,8 +1451,38 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 !    bc3d.inp is authoritative for boundary TYPES: bc_msg2 only supplies
 !    the interface pairing (ranges, face1, L1..L3, nb1) from the
 !    auto-generated bc3d_interface file, whose own bc codes are ignored.
-     do k=1, nsub
-       B%bc_msg2(k)%bc = B%bc_msg(k)%bc
-     enddo
-   enddo
+      do k=1, nsub
+        B%bc_msg2(k)%bc = B%bc_msg(k)%bc
+!       Wall-placeholder pairing faces (physical code 2 with a real interface
+!       connection in bc3d_interface) are promoted to the canonical cross-class
+!       interface code so every is_interface_bc consumer (boundary ghost fill,
+!       solid ghost, LS/AC, couples, staggered drivers) treats them as interfaces.
+!       Grids already typing the face as an interface in bc3d.inp are untouched.
+        Bc2 => B%bc_msg2(k)
+        if(Bc2%nb1 > 0 .and. Bc2%face1 > 0 .and. .not. is_interface_bc(Bc2%bc)) then
+          nbty = -1
+          do kk=1, Mesh(1)%Num_Block
+            if(Mesh(1)%Block(kk)%Block_no == Bc2%nb1) then
+              Bn => Mesh(1)%Block(kk); nbty = Bn%Block_type; exit
+            endif
+          enddo
+          if(nbty >= 0) then
+            if((B%Block_type == BLOCK_FLUID   .and. nbty == BLOCK_SOLID) .or. &
+               (B%Block_type == BLOCK_SOLID   .and. nbty == BLOCK_FLUID)) Bc2%bc = BC_Interface_FluidSolid
+            if((B%Block_type == BLOCK_LOWSPEED .and. nbty == BLOCK_SOLID) .or. &
+               (B%Block_type == BLOCK_SOLID   .and. nbty == BLOCK_LOWSPEED)) Bc2%bc = BC_Interface_LowSolid
+            if((B%Block_type == BLOCK_FLUID   .and. nbty == BLOCK_LOWSPEED) .or. &
+               (B%Block_type == BLOCK_LOWSPEED .and. nbty == BLOCK_FLUID)) Bc2%bc = BC_Interface_FluidLow
+            if((B%Block_type == BLOCK_FLUID   .and. nbty == BLOCK_POROUS) .or. &
+               (B%Block_type == BLOCK_POROUS  .and. nbty == BLOCK_FLUID)) Bc2%bc = BC_Interface_FluidPorous
+            if((B%Block_type == BLOCK_LOWSPEED .and. nbty == BLOCK_POROUS) .or. &
+               (B%Block_type == BLOCK_POROUS  .and. nbty == BLOCK_LOWSPEED)) Bc2%bc = BC_Interface_LowPorous
+            if((B%Block_type == BLOCK_SOLID   .and. nbty == BLOCK_POROUS) .or. &
+               (B%Block_type == BLOCK_POROUS  .and. nbty == BLOCK_SOLID)) Bc2%bc = BC_Interface_SolidPorous
+          endif
+        endif
+      enddo
+    enddo
+
+
   end subroutine align_interface_to_bc_msg 
