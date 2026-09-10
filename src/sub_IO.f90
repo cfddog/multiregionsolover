@@ -10,6 +10,8 @@
     integer:: NB,m,nx,ny,nz,i,j,k,mt,Num_data
 	  integer:: Send_to_ID,tag,ierr, status(MPI_status_size)
     integer,allocatable,dimension(:):: NI,NJ,NK
+    integer*8:: fsize, npts_sum, hdr_bytes, tot_comb
+    logical:: x_combined
 
      MP=>Mesh(1)
  
@@ -21,11 +23,28 @@
      allocate( NI(NB),NJ(NB),NK(NB) )
      read(99,*) (NI(k), NJ(k), NK(k), k=1,NB)
     elseif( Mesh_File_Format .eq. 2) then !
-!    Mesh3d.x format: binary, each block stores x,y,z in one unformatted record
+!    Mesh3d.x binary PLOT3D.  Two layouts appear in the wild and are told
+!    apart by the total file size (8 bytes of Fortran record framing per
+!    record):
+!      separate : each block stores x,y,z in THREE records (repo convention)
+!      combined : each block stores x,y,z in ONE   record (Pointwise)
      open(99,file="Mesh3d.x",form="unformatted")
      read(99) NB
      allocate( NI(NB),NJ(NB),NK(NB) )
      read(99) (NI(k), NJ(k), NK(k), k=1,NB)
+     npts_sum = 0
+     do k=1,NB
+       npts_sum = npts_sum + int(NI(k),8)*int(NJ(k),8)*int(NK(k),8)
+     enddo
+     hdr_bytes = 20_8 + 12_8*NB
+     inquire(file="Mesh3d.x", size=fsize)
+     tot_comb  = hdr_bytes + 8_8*NB + 24_8*npts_sum
+     x_combined = (fsize .eq. tot_comb)
+     if(x_combined) then
+       print*, " Mesh3d.x layout: combined (x,y,z in one record per block)"
+     else
+       print*, " Mesh3d.x layout: separate (x,y,z in three records per block)"
+     endif
     else !
      open(99,file="Mesh3d.dat",form="unformatted")
      read(99) NB !
@@ -44,10 +63,16 @@
                   (((Ux(i,j,k,2),i=1,nx),j=1,ny),k=1,nz) , &
                   (((Ux(i,j,k,3),i=1,nx),j=1,ny),k=1,nz)
      elseif( Mesh_File_Format .eq. 2) then
-!      Mesh3d.x: each block stores x,y,z in three separate records
-       read(99) (((Ux(i,j,k,1),i=1,nx),j=1,ny),k=1,nz)
-       read(99) (((Ux(i,j,k,2),i=1,nx),j=1,ny),k=1,nz)
-       read(99) (((Ux(i,j,k,3),i=1,nx),j=1,ny),k=1,nz)
+!      Mesh3d.x: x,y,z in one combined record (Pointwise) or three records
+       if(x_combined) then
+         read(99) (((Ux(i,j,k,1),i=1,nx),j=1,ny),k=1,nz) , &
+                  (((Ux(i,j,k,2),i=1,nx),j=1,ny),k=1,nz) , &
+                  (((Ux(i,j,k,3),i=1,nx),j=1,ny),k=1,nz)
+       else
+         read(99) (((Ux(i,j,k,1),i=1,nx),j=1,ny),k=1,nz)
+         read(99) (((Ux(i,j,k,2),i=1,nx),j=1,ny),k=1,nz)
+         read(99) (((Ux(i,j,k,3),i=1,nx),j=1,ny),k=1,nz)
+       endif
 	 else
        read(99)   (((Ux(i,j,k,1),i=1,nx),j=1,ny),k=1,nz) , &
                   (((Ux(i,j,k,2),i=1,nx),j=1,ny),k=1,nz) , &
@@ -605,7 +630,16 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
            G(i,j,k,3)=B%z(i,j,k)
          enddo; enddo; enddo
 !        Flow data (cell-centered primitive variables)
-          if(Block_Type_List(m) == BLOCK_LOWSPEED .or. Block_Type_List(m) == BLOCK_POROUS) then
+          if(Block_Type_List(m) == BLOCK_SOLID) then
+!          solid block: temperature = skeleton Ts [K], other fields zero
+            do k=0,nz; do j=0,ny; do i=0,nx
+              U(i,j,k,1)=0.d0; U(i,j,k,2)=0.d0; U(i,j,k,3)=0.d0
+              U(i,j,k,4)=0.d0; U(i,j,k,5)=0.d0; U(i,j,k,6)=0.d0
+            enddo; enddo; enddo
+            do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+              U(i,j,k,5) = B%Ts(i,j,k)
+            enddo; enddo; enddo
+          else if(Block_Type_List(m) == BLOCK_LOWSPEED .or. Block_Type_List(m) == BLOCK_POROUS) then
             do k=0,nz; do j=0,ny; do i=0,nx
               U(i,j,k,1) = B%U(1,i,j,k)      ! rho
               U(i,j,k,2) = B%U(2,i,j,k)      ! u
@@ -642,7 +676,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 !      SI conversion: compressible (non-dimensional) block -> physical units
        if(Iflag_vtk_SI .eq. 1) then
-         if(Block_Type_List(m) /= BLOCK_LOWSPEED .and. Block_Type_List(m) /= BLOCK_POROUS) then
+         if(Block_Type_List(m) == BLOCK_FLUID) then
            do k=0,nz; do j=0,ny; do i=0,nx
              U(i,j,k,1) = U(i,j,k,1)*sc_rho
              U(i,j,k,2) = U(i,j,k,2)*sc_u
@@ -703,6 +737,8 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 
 !    --- Solid temperature VTK (all solid blocks) ---
+!    (skipped in single-file mode: solid Ts is already inside flow3d.vtk)
+     if(Iflag_vtk_onefile .eq. 0) then
      do m=1, Total_block
        nx=bNi(m); ny=bNj(m); nz=bNk(m)
        npts = nx*ny*nz
@@ -755,6 +791,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
        close(99)
        deallocate(G, Ts_buf)
      enddo
+     endif
 
    else
 !    --- Non-master processes: send data for local blocks ---
@@ -783,7 +820,15 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 !      Send flow data (cell-centered primitive variables)
        allocate(U(0:nx,0:ny,0:nz,6))
-       if(Block_Type_List(m1) == BLOCK_LOWSPEED .or. Block_Type_List(m1) == BLOCK_POROUS) then
+       if(Block_Type_List(m1) == BLOCK_SOLID) then
+         do k=0,nz; do j=0,ny; do i=0,nx
+           U(i,j,k,1)=0.d0; U(i,j,k,2)=0.d0; U(i,j,k,3)=0.d0
+           U(i,j,k,4)=0.d0; U(i,j,k,5)=0.d0; U(i,j,k,6)=0.d0
+         enddo; enddo; enddo
+         do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+           U(i,j,k,5) = B%Ts(i,j,k)
+         enddo; enddo; enddo
+       else if(Block_Type_List(m1) == BLOCK_LOWSPEED .or. Block_Type_List(m1) == BLOCK_POROUS) then
          do k=0,nz; do j=0,ny; do i=0,nx
            U(i,j,k,1) = B%U(1,i,j,k)
            U(i,j,k,2) = B%U(2,i,j,k)
@@ -813,7 +858,8 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
        call MPI_Send(U, flow_size, OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
        deallocate(U)
 
-!      Send solid Ts data if this is a solid block
+!      Send solid Ts data if this is a solid block (per-block VTK mode only)
+       if(Iflag_vtk_onefile .eq. 0) then
        if(B%Block_type == BLOCK_SOLID .or. B%Block_type == BLOCK_POROUS) then
          allocate(G(nx,ny,nz,3))
          do k=1,nz; do j=1,ny; do i=1,nx
@@ -830,6 +876,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
          tag = m*4+1
          call MPI_Send(Ts_buf, (nx-1)*(ny-1)*(nz-1), OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
          deallocate(G, Ts_buf)
+       endif
        endif
      enddo
    endif
@@ -900,7 +947,15 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
          G(i,j,k,2)=B%y(i,j,k)
          G(i,j,k,3)=B%z(i,j,k)
        enddo; enddo; enddo
-       if(Block_Type_List(m) == BLOCK_LOWSPEED .or. Block_Type_List(m) == BLOCK_POROUS) then
+       if(Block_Type_List(m) == BLOCK_SOLID) then
+         do k=0,nz; do j=0,ny; do i=0,nx
+           U(i,j,k,1)=0.d0; U(i,j,k,2)=0.d0; U(i,j,k,3)=0.d0
+           U(i,j,k,4)=0.d0; U(i,j,k,5)=0.d0; U(i,j,k,6)=0.d0
+         enddo; enddo; enddo
+         do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
+           U(i,j,k,5) = B%Ts(i,j,k)
+         enddo; enddo; enddo
+       else if(Block_Type_List(m) == BLOCK_LOWSPEED .or. Block_Type_List(m) == BLOCK_POROUS) then
          do k=0,nz; do j=0,ny; do i=0,nx
            U(i,j,k,1) = B%U(1,i,j,k)
            U(i,j,k,2) = B%U(2,i,j,k)
@@ -937,7 +992,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 !    SI conversion: compressible (non-dimensional) block -> physical units
      if(Iflag_vtk_SI .eq. 1) then
-       if(Block_Type_List(m) /= BLOCK_LOWSPEED .and. Block_Type_List(m) /= BLOCK_POROUS) then
+       if(Block_Type_List(m) == BLOCK_FLUID) then
          do k=0,nz; do j=0,ny; do i=0,nx
            U(i,j,k,1) = U(i,j,k,1)*sc_rho
            U(i,j,k,2) = U(i,j,k,2)*sc_u

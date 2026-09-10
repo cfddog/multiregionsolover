@@ -563,8 +563,19 @@
        if(.not. is_interface_bc(Bc2%bc)) cycle
        nb = Bc2%nb1             ! Neighbor block number (global)
        if(nb <= 0) cycle
-       mb = B_n(nb)             ! Local index on this process
-       if(mb <= 0) cycle        ! Neighbor not on this process
+       if(B_proc(nb) .ne. my_id) then
+!        Neighbour on another process: cross-process conjugate (CHT) coupling.
+!        Both processes owning the pair call cht_mpi_fluid_solid_face, each with
+!        its own block and its own interface entry Bc2.
+         if((B%Block_type == BLOCK_SOLID .and. &
+             (Block_Type_List(nb) == BLOCK_FLUID .or. Block_Type_List(nb) == BLOCK_LOWSPEED)) .or. &
+            ((B%Block_type == BLOCK_FLUID .or. B%Block_type == BLOCK_LOWSPEED) .and. &
+             Block_Type_List(nb) == BLOCK_SOLID)) then
+           call cht_mpi_fluid_solid_face(nMesh, B, nb, Bc2)
+         endif
+         cycle
+       endif
+       mb = B_n(nb)
        Bn => Mesh(nMesh)%Block(mb)
 
 !      Same-class fluid-fluid interfaces are handled by the buffer exchange
@@ -810,80 +821,110 @@
 !     fluid ghost : no-slip + p zero-gradient + T = 2*T_i - T(interior)
 !   Requires conformal interface grids (node indices 1:1), as the fluid block
 !   machinery does.  One ghost layer is sufficient for the low-speed solver.
+!   Incompressible (BLOCK_LOWSPEED) fluid - solid conjugate interface.
+!   Bs = solid block, Bf = low-speed fluid block, Bc2 = interface entry as seen
+!   from the solid block (Bc2%face = solid face, Bc2%face1 = fluid face).
+!   Any of the 6x6 face combinations is supported; the tangential index
+!   correspondence follows the connection descriptors L1,L2,L3.  Both sides
+!   are in physical units (K, W/mK).
+!     solid ghost : Ts = 2*T_i - Ts(interior)
+!     fluid ghost : no-slip + p zero-gradient + T = 2*T_i - T(interior)
      subroutine couple_lowspeed_fluid_solid_face(nMesh, Bs, Bf, Bc2)
       use Global_Var
       implicit none
       integer:: nMesh
       Type (Block_TYPE),pointer:: Bs, Bf
       TYPE (BC_MSG_TYPE),pointer:: Bc2
-      integer:: face_s, face1
-      integer:: i, k, jcell_s, jcell_f, jg_s, jg_f
+      integer:: face_s, face1, nd_s, nd_f, d, m, td1, td2, c1, c2, o1, o2, n1, lo_s, lo_f
+      integer:: kbar(3), kear(3), kbar1(3), kear1(3)
+      integer:: mo(3), sg(3), Lv(3)
+      integer:: cs(3), cf(3), gs(3), gf(3), fpt(3)
+      integer:: fnode_s, fnode_f
       real(PRE_EC):: T_s, T_f, k_s, k_f, dx_s, dx_f, T_i
-      real(PRE_EC):: yf_s, yf_f
 
       face_s = Bc2%face
       face1  = Bc2%face1
+      kbar  = (/Bc2%ib,  Bc2%jb,  Bc2%kb /)
+      kear  = (/Bc2%ie,  Bc2%je,  Bc2%ke /)
+      kbar1 = (/Bc2%ib1, Bc2%jb1, Bc2%kb1/)
+      kear1 = (/Bc2%ie1, Bc2%je1, Bc2%ke1/)
+      Lv    = (/Bc2%L1,  Bc2%L2,  Bc2%L3 /)
       k_s = Bs%solid_k
       k_f = LS_k
-      if(k_s <= 0.d0 .or. k_f <= 0.d0) return   ! no conduction on either side
+      if(k_s <= 0.d0 .or. k_f <= 0.d0) return
 
-!     j-normal interfaces (2 = j-, 5 = j+); the low-speed case tested here
-      if(.not.(face_s == 2 .or. face_s == 5)) then
-        print*, 'couple_lowspeed: only j-normal interfaces implemented, face=', face_s
-        return
-      endif
-      if(face_s == 2) then
-        jcell_s = Bc2%jb            ! interior cell next to j- face
-        jg_s    = Bc2%jb - 1        ! ghost cell
-      else
-        jcell_s = Bc2%je - 1
-        jg_s    = Bc2%je
-      endif
-      if(face1 == 2) then
-        jcell_f = Bc2%jb1
-        jg_f    = Bc2%jb1 - 1
-      else if(face1 == 5) then
-        jcell_f = Bc2%je1 - 1
-        jg_f    = Bc2%je1
-      else
-        print*, 'couple_lowspeed: unsupported fluid face1=', face1
+      nd_s = mod(face_s-1,3)+1
+      do d=1,3
+        mo(d) = abs(Lv(d)); sg(d) = sign(1,Lv(d))
+      enddo
+      nd_f = mo(nd_s)
+      if(nd_f .lt. 1 .or. nd_f .gt. 3) then
+        if(my_id == 0) print*, 'couple_lowspeed: bad connection table'
         return
       endif
 
-      do k=Bc2%kb, Bc2%ke-1
-      do i=Bc2%ib, Bc2%ie-1
-        T_s = Bs%Ts(i,jcell_s,k)
-        T_f = Bf%U(5,i,jcell_f,k)
-!       distance cell-centre to face node (y direction, conformal grids)
-        if(face_s == 2) then
-          yf_s = Bs%y(i,Bc2%jb,k)
-          dx_s = Bs%yc(i,jcell_s,k) - yf_s
-        else
-          yf_s = Bs%y(i,Bc2%je,k)
-          dx_s = yf_s - Bs%yc(i,jcell_s,k)
-        endif
-        if(face1 == 2) then
-          yf_f = Bf%y(i,Bc2%jb1,k)
-          dx_f = Bf%yc(i,jcell_f,k) - yf_f
-        else
-          yf_f = Bf%y(i,Bc2%je1,k)
-          dx_f = yf_f - Bf%yc(i,jcell_f,k)
-        endif
-        dx_s = max(dx_s, 1.d-20)
-        dx_f = max(dx_f, 1.d-20)
-        T_i = (k_f*T_f/dx_f + k_s*T_s/dx_s) / (k_f/dx_f + k_s/dx_s)
+      if(face_s <= 3) then
+        cs(nd_s) = kbar(nd_s);   fnode_s = kbar(nd_s);  lo_s = 1
+      else
+        cs(nd_s) = kear(nd_s)-1; fnode_s = kear(nd_s);  lo_s = 0
+      endif
+      if(face1 <= 3) then
+        cf(nd_f) = kbar1(nd_f);   fnode_f = kbar1(nd_f);  lo_f = 1
+      else
+        cf(nd_f) = kear1(nd_f)-1; fnode_f = kear1(nd_f);  lo_f = 0
+      endif
 
-!       solid ghost (isothermal at T_i)
-        Bs%Ts(i,jg_s,k) = 2.d0*T_i - Bs%Ts(i,jcell_s,k)
+      td1 = 0; td2 = 0
+      do d=1,3
+        if(d == nd_s) cycle
+        if(td1 == 0) then; td1 = d; else; td2 = d; endif
+      enddo
 
-!       fluid ghost: no-slip isothermal wall at T_i
-        Bf%U(1,i,jg_f,k)   = LS_rho
-        Bf%U(2,i,jg_f,k)   = -Bf%U(2,i,jcell_f,k)
-        Bf%U(3,i,jg_f,k)   = -Bf%U(3,i,jcell_f,k)
-        Bf%U(4,i,jg_f,k)   = -Bf%U(4,i,jcell_f,k)
-        Bf%U(5,i,jg_f,k)   = 2.d0*T_i - Bf%U(5,i,jcell_f,k)
-        Bf%p(i,jg_f,k)     = Bf%p(i,jcell_f,k)
-      enddo; enddo
+      do c2 = kbar(td2), kear(td2)-1
+        cs(td2) = c2
+        m = mo(td2); o2 = c2 - kbar(td2)
+        if(sg(td2) > 0) then; cf(m) = kbar1(m) + o2
+        else; cf(m) = (kear1(m)-1) - o2; endif
+        do c1 = kbar(td1), kear(td1)-1
+          cs(td1) = c1
+          m = mo(td1); o1 = c1 - kbar(td1)
+          if(sg(td1) > 0) then; cf(m) = kbar1(m) + o1
+          else; cf(m) = (kear1(m)-1) - o1; endif
+
+          T_s = Bs%Ts(cs(1),cs(2),cs(3))
+          T_f = Bf%U(5,cf(1),cf(2),cf(3))
+          fpt = cs; fpt(nd_s) = fnode_s
+          dx_s = sqrt( (Bs%xc(cs(1),cs(2),cs(3))-Bs%x(fpt(1),fpt(2),fpt(3)))**2 &
+                     + (Bs%yc(cs(1),cs(2),cs(3))-Bs%y(fpt(1),fpt(2),fpt(3)))**2 &
+                     + (Bs%zc(cs(1),cs(2),cs(3))-Bs%z(fpt(1),fpt(2),fpt(3)))**2 )
+          fpt = cf; fpt(nd_f) = fnode_f
+          dx_f = sqrt( (Bf%xc(cf(1),cf(2),cf(3))-Bf%x(fpt(1),fpt(2),fpt(3)))**2 &
+                     + (Bf%yc(cf(1),cf(2),cf(3))-Bf%y(fpt(1),fpt(2),fpt(3)))**2 &
+                     + (Bf%zc(cf(1),cf(2),cf(3))-Bf%z(fpt(1),fpt(2),fpt(3)))**2 )
+          dx_s = max(dx_s,1.d-20); dx_f = max(dx_f,1.d-20)
+
+          T_i = (k_f*T_f/dx_f + k_s*T_s/dx_s) / (k_f/dx_f + k_s/dx_s)
+
+          do n1 = 1, LAP
+            gs = cs
+            if(lo_s == 1) then; gs(nd_s) = cs(nd_s) - n1
+            else; gs(nd_s) = cs(nd_s) + n1; endif
+            Bs%Ts(gs(1),gs(2),gs(3)) = 2.d0*T_i - T_s
+          enddo
+
+          do n1 = 1, LAP
+            gf = cf
+            if(lo_f == 1) then; gf(nd_f) = cf(nd_f) - n1
+            else; gf(nd_f) = cf(nd_f) + n1; endif
+            Bf%U(1,gf(1),gf(2),gf(3)) = LS_rho
+            Bf%U(2,gf(1),gf(2),gf(3)) = -Bf%U(2,cf(1),cf(2),cf(3))
+            Bf%U(3,gf(1),gf(2),gf(3)) = -Bf%U(3,cf(1),cf(2),cf(3))
+            Bf%U(4,gf(1),gf(2),gf(3)) = -Bf%U(4,cf(1),cf(2),cf(3))
+            Bf%U(5,gf(1),gf(2),gf(3)) = 2.d0*T_i - T_f
+            Bf%p(gf(1),gf(2),gf(3))   = Bf%p(cf(1),cf(2),cf(3))
+          enddo
+        enddo
+      enddo
      end subroutine couple_lowspeed_fluid_solid_face
 
 !   Compressible (BLOCK_FLUID) fluid - solid conjugate interface.
@@ -899,66 +940,327 @@
 !     k_ref  = mu_ref*cp/PrL  (cp = gamma*R/(gamma-1))
 !   so that the non-dimensional fluid conductivity equals mu* (constant Pr).
 !
-!   Implemented for the current grid topology: solid face_s = 2 (j-),
-!   fluid face1 = 1 (i-).  Other combinations are rejected with a message.
-!   Conformal interface grids with aligned index directions are required.
+!   Any of the 6x6 face combinations is supported: the normal faces are read
+!   from the connection entry and the tangential index correspondence is taken
+!   from the connection descriptors L1,L2,L3 (see Convert_bc).  Conformal
+!   interface grids with index-aligned (possibly reversed) directions required.
      subroutine couple_compressible_fluid_solid_face(nMesh, Bs, Bf, Bc2)
       use Global_Var
       implicit none
       integer:: nMesh
       Type (Block_TYPE),pointer:: Bs, Bf
       TYPE (BC_MSG_TYPE),pointer:: Bc2
-      integer:: face_s, face1
-      integer:: i, j, k, js, jg, if1, jg1
+      integer:: face_s, face1, nd_s, nd_f, d, m, td1, td2, c1, c2, o1, o2
+      integer:: n1, lo_s, lo_f
+      integer:: kbar(3), kear(3), kbar1(3), kear1(3)
+      integer:: mo(3), sg(3), Lv(3)
+      integer:: cs(3), cf(3), gs(3), gf(3), fpt(3)
+      integer:: fnode_s, fnode_f
       real(PRE_EC):: T_s, T_f, k_s_star, k_f, dx_s, dx_f, T_i_star, T_i_K
-      real(PRE_EC):: p1, d1, uu1, v1, w1
+      real(PRE_EC):: d1, uu1, v1, w1, p1
       real(PRE_EC),parameter:: R_AIR = 287.0d0, RHO_REF = 1.0d0
       real(PRE_EC):: a_ref, mu_ref, cp_ref, k_ref
 
+!     General compressible (BLOCK_FLUID) - solid (BLOCK_SOLID) conjugate
+!     interface.  Bs = solid block, Bf = compressible fluid block, Bc2 = the
+!     interface entry as seen from the solid block.  Any of the 6x6 face
+!     combinations is supported; the tangential index correspondence is taken
+!     from the connection descriptors L1,L2,L3 (as produced by convert_inp).
+!     Units: fluid non-dimensional (T*=T/T_inf, k*=mu*, lengths by Lscale);
+!     solid dimensional (K, W/mK).  The interface balance is done in the
+!     fluid non-dimensional system (common Lscale cancels in the weights).
       face_s = Bc2%face
       face1  = Bc2%face1
-      if(face_s /= 2 .or. face1 /= 1) then
-        print*, 'couple_compressible: supports solid face=2, fluid face=1 only; got', face_s, face1
+      kbar  = (/Bc2%ib,  Bc2%jb,  Bc2%kb /)
+      kear  = (/Bc2%ie,  Bc2%je,  Bc2%ke /)
+      kbar1 = (/Bc2%ib1, Bc2%jb1, Bc2%kb1/)
+      kear1 = (/Bc2%ie1, Bc2%je1, Bc2%ke1/)
+      Lv    = (/Bc2%L1,  Bc2%L2,  Bc2%L3 /)
+
+      nd_s = mod(face_s-1,3)+1
+      do d=1,3
+        mo(d) = abs(Lv(d)); sg(d) = sign(1,Lv(d))
+      enddo
+      if(mo(nd_s) .lt. 1 .or. mo(nd_s) .gt. 3) then
+        if(my_id == 0) print*, 'couple_compressible: bad connection table; face', face_s, face1
         return
       endif
+      nd_f = mo(nd_s)
+
       k_s_star = Bs%solid_k
       if(k_s_star <= 0.d0) return
-      a_ref = sqrt(gamma*R_AIR*T_inf)
+      a_ref  = sqrt(gamma*R_AIR*T_inf)
       mu_ref = RHO_REF*Ma*a_ref*max(Lscale,1.d-30)/Re
       cp_ref = gamma*R_AIR/(gamma-1.d0)
-      k_ref = mu_ref*cp_ref/max(PrL,1.d-30)
+      k_ref  = mu_ref*cp_ref/max(PrL,1.d-30)
       k_s_star = k_s_star / k_ref
 
-!     solid (Bs): j- face, interior row j=jb, ghost j=jb-1; k aligned
-      js = Bc2%jb
-      jg = Bc2%jb - 1
-!     fluid (Bf): i- face, interior col i=ib1, ghost i=ib1-1
-      if1 = Bc2%ib1
-      jg1 = Bc2%ib1 - 1
-      do k = Bc2%kb, Bc2%ke-1
-      do i = Bc2%ib, Bc2%ie-1
-        j = Bc2%jb1 + (i - Bc2%ib)     ! fluid tangential index (conformal)
-        T_s = Bs%Ts(i,js,k)
-        d1  = Bf%U(1,if1,j,k)
-        uu1 = Bf%U(2,if1,j,k)/d1
-        v1  = Bf%U(3,if1,j,k)/d1
-        w1  = Bf%U(4,if1,j,k)/d1
-        p1  = (Bf%U(5,if1,j,k) - 0.5d0*d1*(uu1*uu1+v1*v1+w1*w1))*(gamma-1.d0)
-        T_f = gamma*Ma*Ma*p1/max(d1,1.d-20)     ! non-dimensional T*
-        k_f = max(Bf%mu(if1,j,k), 1.d-30)       ! non-dimensional k = mu*
-        dx_s = max(Bs%y(i,Bc2%jb,k) - Bs%yc(i,js,k), 1.d-20)
-        dx_f = max(Bf%yc(if1,j,k) - Bf%y(Bc2%ib1,j,k), 1.d-20)
-!       interface temperature (non-dimensional balance)
-        T_i_star = (k_f*T_f/max(dx_f,1.d-30) + k_s_star*(T_s/T_inf)/max(dx_s,1.d-30)) &
-                 / (k_f/max(dx_f,1.d-30) + k_s_star/max(dx_s,1.d-30))
-!       solid ghost: isothermal at T_i (physical K)
-        T_i_K = T_i_star*T_inf
-        Bs%Ts(i,jg,k) = 2.d0*T_i_K - Bs%Ts(i,js,k)
-!       fluid ghost: no-slip isothermal wall at T_i* (compressible wall)
-        call wall_bound_with_Tw(NVAR1, Bf%U(:,if1,j,k), Bf%U(:,jg1,j,k), &
-             Ma, gamma, T_i_star, Bf%mu(if1,j,k), Bf%dw(if1,j,k), Re)
-      enddo; enddo
+!     solid/fluid interior cell (in the normal direction) and face node
+      if(face_s <= 3) then
+        cs(nd_s) = kbar(nd_s);   fnode_s = kbar(nd_s);  lo_s = 1
+      else
+        cs(nd_s) = kear(nd_s)-1; fnode_s = kear(nd_s);  lo_s = 0
+      endif
+      if(face1 <= 3) then
+        cf(nd_f) = kbar1(nd_f);   fnode_f = kbar1(nd_f);  lo_f = 1
+      else
+        cf(nd_f) = kear1(nd_f)-1; fnode_f = kear1(nd_f);  lo_f = 0
+      endif
+
+!     the two tangential directions of the solid interface
+      td1 = 0; td2 = 0
+      do d=1,3
+        if(d == nd_s) cycle
+        if(td1 == 0) then; td1 = d; else; td2 = d; endif
+      enddo
+
+      do c2 = kbar(td2), kear(td2)-1
+        cs(td2) = c2
+        m = mo(td2); o2 = c2 - kbar(td2)
+        if(sg(td2) > 0) then; cf(m) = kbar1(m) + o2
+        else; cf(m) = (kear1(m)-1) - o2; endif
+        do c1 = kbar(td1), kear(td1)-1
+          cs(td1) = c1
+          m = mo(td1); o1 = c1 - kbar(td1)
+          if(sg(td1) > 0) then; cf(m) = kbar1(m) + o1
+          else; cf(m) = (kear1(m)-1) - o1; endif
+
+          T_s = Bs%Ts(cs(1),cs(2),cs(3))
+          d1  = Bf%U(1,cf(1),cf(2),cf(3))
+          uu1 = Bf%U(2,cf(1),cf(2),cf(3))/d1
+          v1  = Bf%U(3,cf(1),cf(2),cf(3))/d1
+          w1  = Bf%U(4,cf(1),cf(2),cf(3))/d1
+          p1  = (Bf%U(5,cf(1),cf(2),cf(3)) - 0.5d0*d1*(uu1*uu1+v1*v1+w1*w1))*(gamma-1.d0)
+          T_f = gamma*Ma*Ma*p1/max(d1,1.d-20)          ! non-dimensional T*
+          k_f = max(Bf%mu(cf(1),cf(2),cf(3)), 1.d-30)  ! non-dimensional k = mu*
+
+!         normal distance cell-centre -> interface face node
+          fpt = cs; fpt(nd_s) = fnode_s
+          dx_s = sqrt( (Bs%xc(cs(1),cs(2),cs(3))-Bs%x(fpt(1),fpt(2),fpt(3)))**2 &
+                     + (Bs%yc(cs(1),cs(2),cs(3))-Bs%y(fpt(1),fpt(2),fpt(3)))**2 &
+                     + (Bs%zc(cs(1),cs(2),cs(3))-Bs%z(fpt(1),fpt(2),fpt(3)))**2 )
+          fpt = cf; fpt(nd_f) = fnode_f
+          dx_f = sqrt( (Bf%xc(cf(1),cf(2),cf(3))-Bf%x(fpt(1),fpt(2),fpt(3)))**2 &
+                     + (Bf%yc(cf(1),cf(2),cf(3))-Bf%y(fpt(1),fpt(2),fpt(3)))**2 &
+                     + (Bf%zc(cf(1),cf(2),cf(3))-Bf%z(fpt(1),fpt(2),fpt(3)))**2 )
+          dx_s = max(dx_s, 1.d-20); dx_f = max(dx_f, 1.d-20)
+
+!         interface temperature (non-dimensional heat flux balance)
+          T_i_star = (k_f*T_f/dx_f + k_s_star*(T_s/T_inf)/dx_s) &
+                   / (k_f/dx_f + k_s_star/dx_s)
+
+!         solid ghost layers: isothermal at T_i (physical K)
+          T_i_K = T_i_star*T_inf
+          do n1 = 1, LAP
+            gs = cs
+            if(lo_s == 1) then; gs(nd_s) = cs(nd_s) - n1
+            else; gs(nd_s) = cs(nd_s) + n1; endif
+            Bs%Ts(gs(1),gs(2),gs(3)) = 2.d0*T_i_K - T_s
+          enddo
+
+!         fluid ghost layers: no-slip isothermal wall at T_i*
+          do n1 = 1, LAP
+            gf = cf
+            if(lo_f == 1) then; gf(nd_f) = cf(nd_f) - n1
+            else; gf(nd_f) = cf(nd_f) + n1; endif
+            call wall_bound_with_Tw(NVAR1, Bf%U(:,cf(1),cf(2),cf(3)), &
+                 Bf%U(:,gf(1),gf(2),gf(3)), Ma, gamma, T_i_star, &
+                 Bf%mu(cf(1),cf(2),cf(3)), Bf%dw(cf(1),cf(2),cf(3)), Re)
+          enddo
+        enddo
+      enddo
      end subroutine couple_compressible_fluid_solid_face
+
+!===============================================================================
+! Cross-process compressible-fluid <-> solid conjugate coupling.
+! Called on BOTH processes that own the two blocks of an interface 11 pair when
+! the neighbour is not local.  B is the local block (solid on one side, fluid on
+! the other), Bc2 is B's own interface entry, nb the neighbour's global number.
+! Two passes:
+!   pass 1 (fluid -> solid): fluid sends (T_f*, k_f*, dx_f) per interface cell;
+!   pass 2 (solid -> fluid): solid sends T_i* back; each side fills its own ghost.
+! The cell correspondence is obtained from the connection descriptors L1,L2,L3
+! (the tangential index of the solid region is mapped to the fluid region exactly
+! as in Umessage_send_mpi, packing in the receiver's index space).
+!===============================================================================
+!===============================================================================
+! Cross-process solid <-> fluid conjugate coupling.  The fluid block may be
+! compressible (BLOCK_FLUID) or incompressible (BLOCK_LOWSPEED, AC/SIMPLE).
+! Called on BOTH processes that own the interface pair when the neighbour is
+! remote; B is the local block, Bc2 its own interface entry, nb the neighbour's
+! global block number.  Two passes with the payload in PHYSICAL units
+! (T [K], k [W/mK], dx):
+!   pass 1 (fluid -> solid): fluid sends (T_f, k_f, dx_f) per interface cell;
+!   pass 2 (solid -> fluid): solid computes T_i, sets its own ghost and sends
+!                            T_i [K] back; the fluid fills its own ghost.
+! The cell correspondence uses the connection descriptors L1,L2,L3 (packed in
+! the receiver's index space, as in Umessage_send_mpi).
+!===============================================================================
+     subroutine cht_mpi_fluid_solid_face(nMesh, B, nb, Bc2)
+      use Global_Var
+      implicit none
+      integer:: nMesh, nb
+      Type (Block_TYPE),pointer:: B
+      TYPE (BC_MSG_TYPE),pointer:: Bc2
+      integer:: kbar(3),kear(3),kbar1(3),kear1(3),Lv(3),Pv(3),inv(3)
+      integer:: sb_lo(3),sb_hi(3),fnb_lo(3),fnb_hi(3)
+      integer:: fs, ff, nd_s, nd_f, td1, td2, d, q, n1, idx, ncell, nvar1
+      integer:: c1, c2, ka, ksd, sl, lo_s, lo_f, fnode_s, fnode_f
+      integer:: cs(3), cf(3), gs(3), gf(3), fpt(3)
+      integer:: solid_blk, tag1, tag2, ierr
+      integer:: status(MPI_status_size)
+      real(PRE_EC):: T_s, T_f, kf, ks, dx_s, dx_f
+      real(PRE_EC):: d1,uu1,v1,w1,p1,Ti
+      real(PRE_EC),parameter:: R_AIR=287.0d0, RHO_REF=1.0d0
+      real(PRE_EC):: a_ref,mu_ref,cp_ref,k_ref
+      real(PRE_EC),allocatable:: sbuf(:), rbuf(:)
+
+      nvar1 = Mesh(nMesh)%NVAR
+      kbar  = (/Bc2%ib,  Bc2%jb,  Bc2%kb /)
+      kear  = (/Bc2%ie,  Bc2%je,  Bc2%ke /)
+      kbar1 = (/Bc2%ib1, Bc2%jb1, Bc2%kb1/)
+      kear1 = (/Bc2%ie1, Bc2%je1, Bc2%ke1/)
+      Lv    = (/Bc2%L1,  Bc2%L2,  Bc2%L3 /)
+      do d=1,3; Pv(d)=sign(1,Lv(d)); enddo
+      do q=1,3; inv(q)=0; enddo
+      do d=1,3
+        q=abs(Lv(d)); if(q>=1 .and. q<=3) inv(q)=d
+      enddo
+
+      if(B%Block_type == BLOCK_SOLID) then
+        sb_lo=kbar;   sb_hi=kear;    fs=Bc2%face
+        fnb_lo=kbar1; fnb_hi=kear1;  ff=Bc2%face1
+        solid_blk = B%Block_no
+      else
+        sb_lo=kbar1;  sb_hi=kear1;   fs=Bc2%face1
+        fnb_lo=kbar;  fnb_hi=kear;   ff=Bc2%face
+        solid_blk = nb
+      endif
+      nd_s = mod(fs-1,3)+1
+      nd_f = mod(ff-1,3)+1
+      td1=0; td2=0
+      do d=1,3
+        if(d==nd_s) cycle
+        if(td1==0) then; td1=d; else; td2=d; endif
+      enddo
+      ncell = (sb_hi(td2)-sb_lo(td2)) * (sb_hi(td1)-sb_lo(td1))
+      if(ncell <= 0) return
+      tag1 = 20000 + solid_blk
+      tag2 = 22000 + solid_blk
+      if(fs <= 3) then; fnode_s = sb_lo(nd_s); lo_s=1; else; fnode_s = sb_hi(nd_s); lo_s=0; endif
+      if(ff <= 3) then; fnode_f = fnb_lo(nd_f); lo_f=1; else; fnode_f = fnb_hi(nd_f); lo_f=0; endif
+
+      a_ref  = sqrt(gamma*R_AIR*T_inf)
+      mu_ref = RHO_REF*Ma*a_ref*max(Lscale,1.d-30)/Re
+      cp_ref = gamma*R_AIR/(gamma-1.d0)
+      k_ref  = mu_ref*cp_ref/max(PrL,1.d-30)
+
+!     ---------------------------------------------------------------- fluid
+      if(B%Block_type /= BLOCK_SOLID) then
+        allocate(sbuf(3*ncell))
+        idx=0
+        do c2=sb_lo(td2),sb_hi(td2)-1
+        do c1=sb_lo(td1),sb_hi(td1)-1
+          cs(td1)=c1; cs(td2)=c2; cs(nd_s)=sb_lo(nd_s)
+          if(ff <= 3) then; cf(nd_f)=fnb_lo(nd_f); else; cf(nd_f)=fnb_hi(nd_f)-1; endif
+          do q=1,3
+            if(q==nd_s) cycle
+            d=inv(q)
+            if(Pv(d)>0) then; ksd=kbar(d); else; ksd=kear(d); endif
+            ka = cs(q) - sb_lo(q)
+            sl = ksd + ka*Pv(d)
+            if(Pv(d)>0) then; cf(d)=sl; else; cf(d)=sl-1; endif
+          enddo
+          if(B%Block_type == BLOCK_LOWSPEED) then
+            T_f = B%U(5,cf(1),cf(2),cf(3))          ! [K]
+            kf  = LS_k                              ! [W/(m.K)]
+          else
+            d1=B%U(1,cf(1),cf(2),cf(3))
+            uu1=B%U(2,cf(1),cf(2),cf(3))/d1
+            v1=B%U(3,cf(1),cf(2),cf(3))/d1
+            w1=B%U(4,cf(1),cf(2),cf(3))/d1
+            p1=(B%U(5,cf(1),cf(2),cf(3))-0.5d0*d1*(uu1*uu1+v1*v1+w1*w1))*(gamma-1.d0)
+            T_f = gamma*Ma*Ma*p1/max(d1,1.d-20)*T_inf                 ! [K]
+            kf  = max(B%mu(cf(1),cf(2),cf(3)),1.d-30)*k_ref           ! [W/(m.K)]
+          endif
+          fpt=cf; fpt(nd_f)=fnode_f
+          dx_f=sqrt( (B%xc(cf(1),cf(2),cf(3))-B%x(fpt(1),fpt(2),fpt(3)))**2 &
+                   + (B%yc(cf(1),cf(2),cf(3))-B%y(fpt(1),fpt(2),fpt(3)))**2 &
+                   + (B%zc(cf(1),cf(2),cf(3))-B%z(fpt(1),fpt(2),fpt(3)))**2 )
+          dx_f=max(dx_f,1.d-20)
+          sbuf(3*idx+1)=T_f; sbuf(3*idx+2)=kf; sbuf(3*idx+3)=dx_f
+          idx=idx+1
+        enddo
+        enddo
+        call MPI_Send(sbuf, 3*ncell, OCFD_DATA_TYPE, B_proc(nb), tag1, MPI_COMM_WORLD, ierr)
+        allocate(rbuf(ncell))
+        call MPI_Recv(rbuf, ncell, OCFD_DATA_TYPE, B_proc(nb), tag2, MPI_COMM_WORLD, status, ierr)
+        idx=0
+        do c2=sb_lo(td2),sb_hi(td2)-1
+        do c1=sb_lo(td1),sb_hi(td1)-1
+          cs(td1)=c1; cs(td2)=c2; cs(nd_s)=sb_lo(nd_s)
+          if(ff <= 3) then; cf(nd_f)=fnb_lo(nd_f); else; cf(nd_f)=fnb_hi(nd_f)-1; endif
+          do q=1,3
+            if(q==nd_s) cycle
+            d=inv(q)
+            if(Pv(d)>0) then; ksd=kbar(d); else; ksd=kear(d); endif
+            ka = cs(q) - sb_lo(q)
+            sl = ksd + ka*Pv(d)
+            if(Pv(d)>0) then; cf(d)=sl; else; cf(d)=sl-1; endif
+          enddo
+          T_f = rbuf(idx+1)
+          do n1=1,LAP
+            gf=cf
+            if(lo_f==1) then; gf(nd_f)=cf(nd_f)-n1; else; gf(nd_f)=cf(nd_f)+n1; endif
+            if(B%Block_type == BLOCK_LOWSPEED) then
+              B%U(1,gf(1),gf(2),gf(3)) = LS_rho
+              B%U(2,gf(1),gf(2),gf(3)) = -B%U(2,cf(1),cf(2),cf(3))
+              B%U(3,gf(1),gf(2),gf(3)) = -B%U(3,cf(1),cf(2),cf(3))
+              B%U(4,gf(1),gf(2),gf(3)) = -B%U(4,cf(1),cf(2),cf(3))
+              B%U(5,gf(1),gf(2),gf(3)) = 2.d0*T_f - B%U(5,cf(1),cf(2),cf(3))
+              B%p(gf(1),gf(2),gf(3))   = B%p(cf(1),cf(2),cf(3))
+            else
+              call wall_bound_with_Tw(nvar1, B%U(:,cf(1),cf(2),cf(3)), &
+                   B%U(:,gf(1),gf(2),gf(3)), Ma, gamma, T_f/T_inf, &
+                   B%mu(cf(1),cf(2),cf(3)), B%dw(cf(1),cf(2),cf(3)), Re)
+            endif
+          enddo
+          idx=idx+1
+        enddo
+        enddo
+        deallocate(sbuf,rbuf)
+        return
+      endif
+
+!     ---------------------------------------------------------------- solid
+      allocate(rbuf(3*ncell))
+      call MPI_Recv(rbuf, 3*ncell, OCFD_DATA_TYPE, B_proc(nb), tag1, MPI_COMM_WORLD, status, ierr)
+      allocate(sbuf(ncell))
+      ks = B%solid_k
+      idx=0
+      do c2=sb_lo(td2),sb_hi(td2)-1
+      do c1=sb_lo(td1),sb_hi(td1)-1
+        cs(td1)=c1; cs(td2)=c2; cs(nd_s)=sb_lo(nd_s)
+        T_s = B%Ts(cs(1),cs(2),cs(3))
+        T_f = rbuf(3*idx+1); kf = rbuf(3*idx+2); dx_f = rbuf(3*idx+3)
+        fpt=cs; fpt(nd_s)=fnode_s
+        dx_s=sqrt( (B%xc(cs(1),cs(2),cs(3))-B%x(fpt(1),fpt(2),fpt(3)))**2 &
+                 + (B%yc(cs(1),cs(2),cs(3))-B%y(fpt(1),fpt(2),fpt(3)))**2 &
+                 + (B%zc(cs(1),cs(2),cs(3))-B%z(fpt(1),fpt(2),fpt(3)))**2 )
+        dx_s=max(dx_s,1.d-20)
+        Ti=(kf*T_f/dx_f + ks*T_s/dx_s)/(kf/dx_f + ks/dx_s)
+        do n1=1,LAP
+          gs=cs
+          if(lo_s==1) then; gs(nd_s)=cs(nd_s)-n1; else; gs(nd_s)=cs(nd_s)+n1; endif
+          B%Ts(gs(1),gs(2),gs(3))=2.d0*Ti - T_s
+        enddo
+        sbuf(idx+1)=Ti
+        idx=idx+1
+      enddo
+      enddo
+      call MPI_Send(sbuf, ncell, OCFD_DATA_TYPE, B_proc(nb), tag2, MPI_COMM_WORLD, ierr)
+      deallocate(rbuf,sbuf)
+     end subroutine cht_mpi_fluid_solid_face
 
 !   High-speed (BLOCK_FLUID, compressible) <-> low-speed (BLOCK_LOWSPEED)
 !   conjugate interface.  Each pair is processed ONCE from the compressible
@@ -1241,8 +1543,8 @@
        if(.not. is_interface_bc(Bc2%bc)) cycle
        nb = Bc2%nb1             ! Neighbor block number (global)
        if(nb <= 0) cycle
-       mb = B_n(nb)             ! Local index on this process
-       if(mb <= 0) cycle        ! Neighbor not on this process
+       if(B_proc(nb) .ne. my_id) cycle   ! neighbour on another process
+       mb = B_n(nb)
        Bn => Mesh(nMesh)%Block(mb)
 
 !      Determine if this is a solid-solid interface
@@ -1346,8 +1648,8 @@
        if(.not. is_interface_bc(Bc2%bc)) cycle
        nb = Bc2%nb1
        if(nb <= 0) cycle
+       if(B_proc(nb) .ne. my_id) cycle
        mb = B_n(nb)
-       if(mb <= 0) cycle
        Bn => Mesh(nMesh)%Block(mb)
 
 !      this routine couples exactly one LOWSPEED block with one POROUS block

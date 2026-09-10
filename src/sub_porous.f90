@@ -103,7 +103,7 @@
      Bc => B%bc_msg(ksub)
      if(is_interface_bc(Bc%bc)) cycle                       ! internal interface -> buffer exchange
      if(associated(B%bc_msg2)) then
-       if(B%bc_msg2(ksub)%bc < 0) cycle        ! interface connection handled elsewhere
+       if(is_interface_bc(B%bc_msg2(ksub)%bc)) cycle   ! interface connection handled elsewhere
      endif
 
      face_s = Bc%face

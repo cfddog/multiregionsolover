@@ -691,7 +691,7 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
      integer:: nMesh,ierr
      call Ts_send_mpi(nMesh)
      call Ts_recv_mpi(nMesh)
-     call MPI_Barrier(MPI_COMM_WORLD,ierr)
+!    no MPI_Barrier here: called inside the per-block solid GS (some ranks only)
    end subroutine update_Ts_buffer_onemesh
 
 !----------------------------------------------------------------------

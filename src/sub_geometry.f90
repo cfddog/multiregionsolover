@@ -647,7 +647,7 @@
      read(88,*) Bsub    !number of the subface in the Block m
      do ksub=1, Bsub
        read(88,*)  ib,ie,jb,je,kb,ke,bc
-	   if(is_interface_bc(bc)) read(88,*)
+	   if(bc .lt. 0) read(88,*)
 	   ist=min(abs(ib),abs(ie)) ; iend=max(abs(ib),abs(ie))
        jst=min(abs(jb),abs(je));  jend=max(abs(jb),abs(je))
        kst=min(abs(kb),abs(ke));  kend=max(abs(kb),abs(ke))
