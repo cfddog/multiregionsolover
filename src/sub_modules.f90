@@ -267,6 +267,7 @@
    real(PRE_EC),save:: LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, LS_T_wall, LS_U_lid ! low-speed BC parameters
    real(PRE_EC),save:: LS_alpha_p, LS_alpha_u, LS_alpha_T, LS_Tol  ! low-speed under-relaxation + tolerance
    real(PRE_EC),save:: Porous_T_ref, Porous_alpha_Ts, Porous_Tol    ! porous: initial/frame T ref, Ts relaxation, SIMPLE tolerance
+   real(PRE_EC),save:: Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in  ! porous coolant inlet velocity [m/s] + T [K]
    integer,save:: Porous_Max_Iter                                   ! porous SIMPLE inner iterations per solver call
  !---- interface-19 staggered (segmented) coupling controls --------------------
  ! Iflag_Couple_Scheme = 0 : per-step simultaneous coupling (default)

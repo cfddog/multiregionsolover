@@ -234,7 +234,11 @@
          call Set_Un(1)                                ! Un=U
          do mBlock=1,Mesh(1)%Num_Block                 ! ??????? block, ?????????
            call solver_one_block(1,mBlock,Sfac,Sfac1)
-           if(LS_Algorithm .eq. 3) call couple_lowspeed_porous_interfaces(1)
+!          NB: the low-porous interface is coupled once per step (after the
+!          block loop) so that the MPI call count is independent of how many
+!          blocks this process owns; keeping this in-loop call would make the
+!          1-proc and N-proc coupling cadence differ.
+!          if(LS_Algorithm .eq. 3) call couple_lowspeed_porous_interfaces(1)
          enddo
          call couple_fluid_solid_interfaces(1)       ! ????-???��???????
          call couple_solid_solid_interfaces(1)       ! ????-???��??????????

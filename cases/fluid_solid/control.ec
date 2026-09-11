@@ -88,11 +88,19 @@ $control_ec
   LS_Tol=5.d-6
   LS_Scheme=3
   LS_Algorithm=3
-  AC_Max_Iter=10000
+  AC_Max_Iter=5000
   AC_Print=500
   AC_beta=10.d0
   AC_CFL=2.d0
   AC_CFLv=0.5d0
   AC_Tol=1.d-7
   AC_w=1.d0
+  Porous_T_ref=300.d0
+  Porous_alpha_Ts=0.7d0
+  Porous_Max_Iter=5000
+  Porous_Tol=1.d-8
+  Porous_U_in=0.d0
+  Porous_V_in=4.532d0
+  Porous_W_in=0.d0
+  Porous_T_in=300.d0
 $end

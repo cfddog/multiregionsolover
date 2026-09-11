@@ -203,7 +203,12 @@
 
    uin_x = LS_U_in; uin_y = LS_V_in; uin_z = LS_W_in
 
-   if(LS_Inlet_Type == 2) then
+   if(Porous_U_in /= 0.d0 .or. Porous_V_in /= 0.d0 .or. Porous_W_in /= 0.d0) then
+!    dedicated porous coolant inlet velocity (overrides the low-speed LS_U_in)
+     uin_x = Porous_U_in; uin_y = Porous_V_in; uin_z = Porous_W_in
+   endif
+
+   if(LS_Inlet_Type == 2 .and. Porous_U_in == 0.d0 .and. Porous_V_in == 0.d0 .and. Porous_W_in == 0.d0) then
 !    mass-flow inlet: total inlet area then normal velocity
      A_tot = 0.d0
      do ksub=1, B%subface
@@ -321,7 +326,11 @@
        B%U(4,ig,jg,kg) = 2.d0*uin_z - B%U(4,i2,j2,k2)
        B%p(ig,jg,kg) = B%p(i2,j2,k2)
      endif
-     B%U(5,ig,jg,kg) = 2.d0*LS_T_ref - B%U(5,i2,j2,k2)
+     if(Porous_T_in > 0.d0) then
+       B%U(5,ig,jg,kg) = 2.d0*Porous_T_in - B%U(5,i2,j2,k2)
+     else
+       B%U(5,ig,jg,kg) = 2.d0*LS_T_ref - B%U(5,i2,j2,k2)
+     endif
    case(BC_Outflow, BC_LS_Outlet)  ! pressure outlet
      B%U(2,ig,jg,kg) = B%U(2,i2,j2,k2)
      B%U(3,ig,jg,kg) = B%U(3,i2,j2,k2)

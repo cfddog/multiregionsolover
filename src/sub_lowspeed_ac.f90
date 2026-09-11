@@ -893,7 +893,11 @@
      else
        B%U(2,i1,j1,k1) = uin_x; B%U(3,i1,j1,k1) = uin_y; B%U(4,i1,j1,k1) = uin_z
      endif
-     B%U(5,i1,j1,k1) = LS_T_ref
+     if(B%Block_type .eq. BLOCK_POROUS .and. Porous_T_in .gt. 0.d0) then
+       B%U(5,i1,j1,k1) = Porous_T_in
+     else
+       B%U(5,i1,j1,k1) = LS_T_ref
+     endif
    case default                                ! outlet / farfield: zero gradient
      B%U(2,i1,j1,k1) = ui; B%U(3,i1,j1,k1) = vi; B%U(4,i1,j1,k1) = wi
      B%U(5,i1,j1,k1) = B%U(5,i2,j2,k2)

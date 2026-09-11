@@ -41,6 +41,10 @@
    endif
 
    call lowspeed_inlet_velocity(B, uin_x, uin_y, uin_z)
+!  dedicated porous coolant inlet (overrides the low-speed LS_U_in if set)
+   if(Porous_U_in /= 0.d0 .or. Porous_V_in /= 0.d0 .or. Porous_W_in /= 0.d0) then
+     uin_x = Porous_U_in; uin_y = Porous_V_in; uin_z = Porous_W_in
+   endif
    Uref = sqrt(uin_x*uin_x + uin_y*uin_y + uin_z*uin_z)
    if(Uref < 1.d-12) Uref = max(abs(LS_U_lid), 1.d-3)
    if(Uref < 1.d-12) Uref = sqrt(abs(LS_P_in-LS_P_out)/max(LS_rho,1.d-20))

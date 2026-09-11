@@ -140,6 +140,10 @@
     Porous_alpha_Ts=0.7d0   ! under-relaxation for the Ts (solid-frame) solve
     Porous_Max_Iter=5000    ! SIMPLE inner iterations per solver call
     Porous_Tol=1.d-8        ! SIMPLE convergence tolerance (pressure correction residual)
+    Porous_U_in=0.d0        ! porous coolant inlet velocity [m/s] (all three 0 -> use LS_U_in/LS_V_in/LS_W_in)
+    Porous_V_in=0.d0
+    Porous_W_in=0.d0
+    Porous_T_in=0.d0        ! porous coolant inlet temperature [K]; <=0 -> use LS_T_ref
 
 !---- interface-19 staggered (segmented) coupling controls --------------------
     Iflag_Couple_Scheme=0   ! 0 = per-step coupling; 1 = staggered segmented (gas chunk / porous chunk)
@@ -183,6 +187,7 @@ end
 		LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm, &
 		AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, &
 		Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, &
+		Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in, &
 		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
 		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
 		Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux
@@ -339,6 +344,10 @@ end
     rpara(57)=Porous_T_ref
     rpara(58)=Porous_alpha_Ts
     rpara(59)=Porous_Tol
+    rpara(69)=Porous_U_in
+    rpara(70)=Porous_V_in
+    rpara(71)=Porous_W_in
+    rpara(72)=Porous_T_in
     rpara(60)=Twall_Couple_Init
     rpara(61)=Tol_Couple_Tw
     rpara(67)=Tol_Couple_p
@@ -457,6 +466,10 @@ end
     Porous_T_ref=rpara(57)
     Porous_alpha_Ts=rpara(58)
     Porous_Tol=rpara(59)
+    Porous_U_in=rpara(69)
+    Porous_V_in=rpara(70)
+    Porous_W_in=rpara(71)
+    Porous_T_in=rpara(72)
     Twall_Couple_Init=rpara(60)
     Tol_Couple_Tw=rpara(61)
     AC_beta=rpara(62)

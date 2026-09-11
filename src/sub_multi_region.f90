@@ -1628,6 +1628,16 @@
 ! tangential node ranges, opposite low/high normal orientation).  A pair is
 ! processed once from each side (like couple_solid_solid_interfaces).
 !----------------------------------------------------------------------
+!----------------------------------------------------------------------
+! Low-speed (BLOCK_LOWSPEED) <-> porous (BLOCK_POROUS) interface coupling
+! (explicit interface code BC_Interface_LowPorous = 16).
+! Both solvers store the SAME cell layout (U(1)=rho=LS_rho, U(2:4)=velocity,
+! U(5)=T, p=B%p).  For every interface face the LAP ghost layers of block B
+! are filled from the neighbour's first interior cell so that tangential
+! velocity, pressure and temperature are continuous.  Arbitrary index-aligned
+! (possibly rotated / reversed) face pairs are handled through the connection
+! descriptors L1,L2,L3; remote neighbours are exchanged with MPI.
+!----------------------------------------------------------------------
   subroutine couple_lowspeed_porous_interfaces(nMesh)
    use Global_Var
    use const_var
@@ -1635,10 +1645,7 @@
    integer:: nMesh
    Type (Block_TYPE),pointer:: B, Bn
    TYPE (BC_MSG_TYPE),pointer:: Bc2
-   integer:: mBlock, ksub, nb, mb
-   integer:: face_s, face1, n, i, j, k
-   integer:: i1, j1, k1          ! normal index of neighbour's first interior cell
-   logical:: ok
+   integer:: mBlock, ksub, nb, mb, nbt
 
    do mBlock=1, Mesh(nMesh)%Num_Block
      B => Mesh(nMesh)%Block(mBlock)
@@ -1648,104 +1655,154 @@
        if(.not. is_interface_bc(Bc2%bc)) cycle
        nb = Bc2%nb1
        if(nb <= 0) cycle
-       if(B_proc(nb) .ne. my_id) cycle
-       mb = B_n(nb)
-       Bn => Mesh(nMesh)%Block(mb)
-
-!      this routine couples exactly one LOWSPEED block with one POROUS block
-       if(.not. ((B%Block_type == BLOCK_LOWSPEED .and. Bn%Block_type == BLOCK_POROUS) .or. &
-                 (B%Block_type == BLOCK_POROUS  .and. Bn%Block_type == BLOCK_LOWSPEED))) cycle
-
-       face_s = Bc2%face     ! face of B at the interface
-       face1  = Bc2%face1    ! face of Bn at the interface
-!      conformal flat interface: same normal axis, opposite low/high faces
-       ok = .false.
-       if(face_s == 1 .and. face1 == 4) ok = .true.
-       if(face_s == 4 .and. face1 == 1) ok = .true.
-       if(face_s == 2 .and. face1 == 5) ok = .true.
-       if(face_s == 5 .and. face1 == 2) ok = .true.
-       if(face_s == 3 .and. face1 == 6) ok = .true.
-       if(face_s == 6 .and. face1 == 3) ok = .true.
-       if(.not. ok) then
-         if(my_id == 0) print*, 'couple_lowspeed_porous: unsupported face pair', &
-                                face_s, face1, ' (block', B%Block_no, nb, ') skipped'
-         cycle
+       nbt = Block_Type_List(nb)
+       if(.not. ((B%Block_type == BLOCK_LOWSPEED .and. nbt == BLOCK_POROUS) .or. &
+                 (B%Block_type == BLOCK_POROUS  .and. nbt == BLOCK_LOWSPEED))) cycle
+       if(B_proc(nb) .ne. my_id) then
+         call ls_por_iface_mpi(nMesh, B, nb, Bc2)
+       else
+         mb = B_n(nb)
+         if(mb <= 0) cycle
+         Bn => Mesh(nMesh)%Block(mb)
+         call ls_por_iface_local(nMesh, B, Bn, Bc2)
        endif
-
-!      first interior cell of Bn adjacent to its interface face
-       i1 = Bc2%ib1; j1 = Bc2%jb1; k1 = Bc2%kb1
-       select case(face1)
-       case(4); i1 = Bc2%ie1 - 1      ! i+ face: last interior cell row ie1-1
-       case(2); j1 = Bc2%jb1          ! j- face: first interior cell row jb1
-       case(5); j1 = Bc2%je1 - 1      ! j+ face: last interior cell row je1-1
-       case(6); k1 = Bc2%ke1 - 1      ! k+ face: last interior cell row ke1-1
-       end select
-
-!      fill B's ghost layers (n = 1..LAP) from Bn's first interior cell
-       select case(face_s)
-       case(1)      ! B i- face: ghosts i = ib - n
-         do n=1, LAP
-           i = Bc2%ib - n
-           do k=Bc2%kb, Bc2%ke-1
-           do j=Bc2%jb, Bc2%je-1
-             B%U(1,i,j,k)=Bn%U(1,i1,j,k); B%U(2,i,j,k)=Bn%U(2,i1,j,k)
-             B%U(3,i,j,k)=Bn%U(3,i1,j,k); B%U(4,i,j,k)=Bn%U(4,i1,j,k)
-             B%U(5,i,j,k)=Bn%U(5,i1,j,k); B%p(i,j,k) = Bn%p(i1,j,k)
-           enddo; enddo
-         enddo
-       case(4)      ! B i+ face: ghosts i = ie + n - 1
-         do n=1, LAP
-           i = Bc2%ie + n - 1
-           do k=Bc2%kb, Bc2%ke-1
-           do j=Bc2%jb, Bc2%je-1
-             B%U(1,i,j,k)=Bn%U(1,i1,j,k); B%U(2,i,j,k)=Bn%U(2,i1,j,k)
-             B%U(3,i,j,k)=Bn%U(3,i1,j,k); B%U(4,i,j,k)=Bn%U(4,i1,j,k)
-             B%U(5,i,j,k)=Bn%U(5,i1,j,k); B%p(i,j,k) = Bn%p(i1,j,k)
-           enddo; enddo
-         enddo
-       case(2)      ! B j- face: ghosts j = jb - n
-         do n=1, LAP
-           j = Bc2%jb - n
-           do k=Bc2%kb, Bc2%ke-1
-           do i=Bc2%ib, Bc2%ie-1
-             B%U(1,i,j,k)=Bn%U(1,i,j1,k); B%U(2,i,j,k)=Bn%U(2,i,j1,k)
-             B%U(3,i,j,k)=Bn%U(3,i,j1,k); B%U(4,i,j,k)=Bn%U(4,i,j1,k)
-             B%U(5,i,j,k)=Bn%U(5,i,j1,k); B%p(i,j,k) = Bn%p(i,j1,k)
-           enddo; enddo
-         enddo
-       case(5)      ! B j+ face: ghosts j = je + n - 1
-         do n=1, LAP
-           j = Bc2%je + n - 1
-           do k=Bc2%kb, Bc2%ke-1
-           do i=Bc2%ib, Bc2%ie-1
-             B%U(1,i,j,k)=Bn%U(1,i,j1,k); B%U(2,i,j,k)=Bn%U(2,i,j1,k)
-             B%U(3,i,j,k)=Bn%U(3,i,j1,k); B%U(4,i,j,k)=Bn%U(4,i,j1,k)
-             B%U(5,i,j,k)=Bn%U(5,i,j1,k); B%p(i,j,k) = Bn%p(i,j1,k)
-           enddo; enddo
-         enddo
-       case(3)      ! B k- face: ghosts k = kb - n
-         do n=1, LAP
-           k = Bc2%kb - n
-           do j=Bc2%jb, Bc2%je-1
-           do i=Bc2%ib, Bc2%ie-1
-             B%U(1,i,j,k)=Bn%U(1,i,j,k1); B%U(2,i,j,k)=Bn%U(2,i,j,k1)
-             B%U(3,i,j,k)=Bn%U(3,i,j,k1); B%U(4,i,j,k)=Bn%U(4,i,j,k1)
-             B%U(5,i,j,k)=Bn%U(5,i,j,k1); B%p(i,j,k) = Bn%p(i,j,k1)
-           enddo; enddo
-         enddo
-       case(6)      ! B k+ face: ghosts k = ke + n - 1
-         do n=1, LAP
-           k = Bc2%ke + n - 1
-           do j=Bc2%jb, Bc2%je-1
-           do i=Bc2%ib, Bc2%ie-1
-             B%U(1,i,j,k)=Bn%U(1,i,j,k1); B%U(2,i,j,k)=Bn%U(2,i,j,k1)
-             B%U(3,i,j,k)=Bn%U(3,i,j,k1); B%U(4,i,j,k)=Bn%U(4,i,j,k1)
-             B%U(5,i,j,k)=Bn%U(5,i,j,k1); B%p(i,j,k) = Bn%p(i,j,k1)
-           enddo; enddo
-         enddo
-       end select
      enddo
    enddo
+
+   contains
+
+!  fill block B's interface ghost layers from the (same-process) neighbour Bn
+   subroutine ls_por_iface_local(nMesh, B, Bn, Bc2)
+     use Global_Var
+     implicit none
+     integer:: nMesh
+     Type (Block_TYPE),pointer:: B, Bn
+     TYPE (BC_MSG_TYPE),pointer:: Bc2
+     integer:: face_s, face1, nd_n, d, m, td1, td2, c1, c2, o1, o2, n1, lo_s
+     integer:: kbar(3),kear(3),kbar1(3),kear1(3),mo(3),sg(3),Lv(3)
+     integer:: cs(3), cf(3), gs(3)
+     face_s = Bc2%face
+     face1  = Bc2%face1
+     kbar  = (/Bc2%ib,  Bc2%jb,  Bc2%kb /)
+     kear  = (/Bc2%ie,  Bc2%je,  Bc2%ke /)
+     kbar1 = (/Bc2%ib1, Bc2%jb1, Bc2%kb1/)
+     kear1 = (/Bc2%ie1, Bc2%je1, Bc2%ke1/)
+     Lv    = (/Bc2%L1,  Bc2%L2,  Bc2%L3 /)
+     do d=1,3; mo(d)=abs(Lv(d)); sg(d)=sign(1,Lv(d)); enddo
+     nd_n = mo(mod(face_s-1,3)+1)
+     if(nd_n .lt. 1 .or. nd_n .gt. 3) return
+     if(face_s <= 3) then; cs(mod(face_s-1,3)+1) = kbar(mod(face_s-1,3)+1); lo_s=1
+     else; cs(mod(face_s-1,3)+1) = kear(mod(face_s-1,3)+1)-1; lo_s=0; endif
+     if(face1 <= 3) then; cf(nd_n) = kbar1(nd_n); else; cf(nd_n) = kear1(nd_n)-1; endif
+     td1=0; td2=0
+     do d=1,3
+       if(d == mod(face_s-1,3)+1) cycle
+       if(td1 == 0) then; td1=d; else; td2=d; endif
+     enddo
+     do c2=kbar(td2),kear(td2)-1
+       cs(td2)=c2; m=mo(td2); o2=c2-kbar(td2)
+       if(sg(td2) > 0) then; cf(m)=kbar1(m)+o2; else; cf(m)=(kear1(m)-1)-o2; endif
+       do c1=kbar(td1),kear(td1)-1
+         cs(td1)=c1; m=mo(td1); o1=c1-kbar(td1)
+         if(sg(td1) > 0) then; cf(m)=kbar1(m)+o1; else; cf(m)=(kear1(m)-1)-o1; endif
+         do n1=1,LAP
+           gs=cs
+           if(lo_s == 1) then; gs(mod(face_s-1,3)+1)=cs(mod(face_s-1,3)+1)-n1
+           else; gs(mod(face_s-1,3)+1)=cs(mod(face_s-1,3)+1)+n1; endif
+           B%U(1,gs(1),gs(2),gs(3)) = Bn%U(1,cf(1),cf(2),cf(3))
+           B%U(2,gs(1),gs(2),gs(3)) = Bn%U(2,cf(1),cf(2),cf(3))
+           B%U(3,gs(1),gs(2),gs(3)) = Bn%U(3,cf(1),cf(2),cf(3))
+           B%U(4,gs(1),gs(2),gs(3)) = Bn%U(4,cf(1),cf(2),cf(3))
+           B%U(5,gs(1),gs(2),gs(3)) = Bn%U(5,cf(1),cf(2),cf(3))
+           B%p(gs(1),gs(2),gs(3))   = Bn%p(cf(1),cf(2),cf(3))
+         enddo
+       enddo
+     enddo
+   end subroutine ls_por_iface_local
+
+!  cross-process exchange of the interface cell values (U(1:5), p)
+   subroutine ls_por_iface_mpi(nMesh, B, nb, Bc2)
+     use Global_Var
+     implicit none
+     integer:: nMesh, nb
+     Type (Block_TYPE),pointer:: B
+     TYPE (BC_MSG_TYPE),pointer:: Bc2
+     integer:: kbar(3),kear(3),kbar1(3),kear1(3),Lv(3),Pv(3),inv(3)
+     integer:: own_nd, nbr_nd, td1,td2, nt1,nt2, d, q, n1, idx, ncell
+     integer:: c1,c2, ka, ksd, sl, cs(3), nv(3), gs(3)
+     integer:: tag, ierr, status(MPI_status_size)
+     real(PRE_EC),allocatable:: sbuf(:), rbuf(:)
+     kbar  = (/Bc2%ib,  Bc2%jb,  Bc2%kb /)
+     kear  = (/Bc2%ie,  Bc2%je,  Bc2%ke /)
+     kbar1 = (/Bc2%ib1, Bc2%jb1, Bc2%kb1/)
+     kear1 = (/Bc2%ie1, Bc2%je1, Bc2%ke1/)
+     Lv    = (/Bc2%L1,  Bc2%L2,  Bc2%L3 /)
+     do d=1,3; Pv(d)=sign(1,Lv(d)); enddo
+     do q=1,3; inv(q)=0; enddo
+     do d=1,3; q=abs(Lv(d)); if(q>=1 .and. q<=3) inv(q)=d; enddo
+     own_nd = mod(Bc2%face-1,3)+1
+     nbr_nd = mod(Bc2%face1-1,3)+1
+     td1=0; td2=0
+     do d=1,3
+       if(d == own_nd) cycle
+       if(td1 == 0) then; td1=d; else; td2=d; endif
+     enddo
+     nt1=0; nt2=0
+     do d=1,3
+       if(d == nbr_nd) cycle
+       if(nt1 == 0) then; nt1=d; else; nt2=d; endif
+     enddo
+     ncell = (kear(td2)-kbar(td2))*(kear(td1)-kbar(td1))
+     if(ncell <= 0) return
+     tag = 30000 + min(B%Block_no, nb)
+     allocate(sbuf(6*ncell)); allocate(rbuf(6*ncell))
+!    pack our interface cell values in the receiver's index space
+     idx=0
+     do c2=kbar1(nt2),kear1(nt2)-1
+       nv(nt2)=c2
+       do c1=kbar1(nt1),kear1(nt1)-1
+         nv(nt1)=c1; nv(nbr_nd)=kbar1(nbr_nd)
+         do q=1,3
+           if(q == nbr_nd) cycle
+           d=inv(q)
+           if(Pv(d) > 0) then; ksd=kbar(d); else; ksd=kear(d); endif
+           ka = nv(q) - kbar1(q)
+           sl = ksd + ka*Pv(d)
+           if(Pv(d) > 0) then; cs(d)=sl; else; cs(d)=sl-1; endif
+         enddo
+         if(Bc2%face <= 3) then; cs(own_nd)=kbar(own_nd); else; cs(own_nd)=kear(own_nd)-1; endif
+         sbuf(6*idx+1)=B%U(1,cs(1),cs(2),cs(3))
+         sbuf(6*idx+2)=B%U(2,cs(1),cs(2),cs(3))
+         sbuf(6*idx+3)=B%U(3,cs(1),cs(2),cs(3))
+         sbuf(6*idx+4)=B%U(4,cs(1),cs(2),cs(3))
+         sbuf(6*idx+5)=B%U(5,cs(1),cs(2),cs(3))
+         sbuf(6*idx+6)=B%p(cs(1),cs(2),cs(3))
+         idx=idx+1
+       enddo
+     enddo
+     call MPI_Sendrecv(sbuf, 6*ncell, OCFD_DATA_TYPE, B_proc(nb), tag, &
+                       rbuf, 6*ncell, OCFD_DATA_TYPE, B_proc(nb), tag, &
+                       MPI_COMM_WORLD, status, ierr)
+!    fill our ghost layers (received array indexed in our own region)
+     idx=0
+     do c2=kbar(td2),kear(td2)-1
+       do c1=kbar(td1),kear(td1)-1
+         do n1=1,LAP
+           gs=0; gs(td1)=c1; gs(td2)=c2
+           if(Bc2%face <= 3) then; gs(own_nd)=kbar(own_nd)-n1; else; gs(own_nd)=kear(own_nd)-1+n1; endif
+           B%U(1,gs(1),gs(2),gs(3))=rbuf(6*idx+1)
+           B%U(2,gs(1),gs(2),gs(3))=rbuf(6*idx+2)
+           B%U(3,gs(1),gs(2),gs(3))=rbuf(6*idx+3)
+           B%U(4,gs(1),gs(2),gs(3))=rbuf(6*idx+4)
+           B%U(5,gs(1),gs(2),gs(3))=rbuf(6*idx+5)
+           B%p(gs(1),gs(2),gs(3))  =rbuf(6*idx+6)
+         enddo
+         idx=idx+1
+       enddo
+     enddo
+     deallocate(sbuf,rbuf)
+   end subroutine ls_por_iface_mpi
+
   end subroutine couple_lowspeed_porous_interfaces
 
 
