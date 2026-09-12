@@ -1,0 +1,14 @@
+===== solid_1d solver tail =====
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+===== solid_1d validate_analytic =====
+profile pts (distinct x): 50   x in [0.0100, 0.9900]
+T(x=0.01) = 300.529801  analytic 300.529801
+T(x=0.50) = 325.960264  analytic 325.960265
+T(x=0.99) = 352.450330  analytic 352.450331
+RMS err    = 7.536e-07   max|err| = 1.066e-06
+rel. max   = 2.05e-08

@@ -33,7 +33,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--case', default='.', help='case directory')
     ap.add_argument('--out', default='validation_bj.png')
+    ap.add_argument('--eps', type=float, default=0.8)
+    ap.add_argument('--dp',  type=float, default=0.5)
+    ap.add_argument('--mu',  type=float, default=0.02)
     args = ap.parse_args()
+    global EPS, DP, MU
+    EPS, DP, MU = args.eps, args.dp, args.mu
 
     b1 = pv_vtk.load_block(os.path.join(args.case, 'flow3d_block_1.vtk'))
     b2 = pv_vtk.load_block(os.path.join(args.case, 'flow3d_block_2.vtk'))

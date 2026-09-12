@@ -1,0 +1,14 @@
+===== solid_annulus solver tail =====
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+===== solid_annulus validate_analytic =====
+cells: 3200   r in [0.10123, 0.19871]
+layer1 (inner) T = 303.605586  analytic 303.607510  (r=0.10123)
+layer20 (mid) T = 301.568043  analytic 301.569500  (r=0.14872)
+layer40 (outer)T = 300.033106  analytic 300.034238  (r=0.19871)
+radial RMS err (40 layer means) = 1.492e-03
+per-cell RMS err = 1.492e-03   max|err| = 1.923e-03

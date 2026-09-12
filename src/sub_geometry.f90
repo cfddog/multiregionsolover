@@ -449,6 +449,7 @@
  
  	 flmax=1.d0
 	 ftmax=0.d0
+	 i1=1; j1=1; k1=1; i2=1; j2=1; k2=1   ! init (uniform grid: no fl>flmax / ft>ftmax)
 
 !  ?????
 
