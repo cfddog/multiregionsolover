@@ -92,12 +92,8 @@ $dp/dx=-12\mu\bar U/H^2$；$Re_H=\rho \bar U H/\mu=50$。\par
 内边界壁面无滑移，外边界上游速度入口、下游压力出口；AC。Re$=$200 采用 dual-time。\par
 \textbf{结果.} AC 已收敛（$res_q\!\sim\!10^{-7}$，65635 次伪迭代）；但初步 $C_d$ 与尾涡长度与基准不符（极坐标自周期接缝/进出口设置待调试），暂列为\emph{待校验}。
 
-\subsection{（6）平板边界层（$Re_L=10^6$）}
-\textbf{方程/解析解.} Blasius 方程 $2f^{\prime\prime\prime}+f f^{\prime\prime}=0$，
-$f^{\prime}(0)=f(0)=0,\ f^{\prime}(\infty)=1$；
-$C_f=0.664/\sqrt{Re_x}$，$\delta/x=5.0/\sqrt{Re_x}$，形状因子 $H\approx2.59$。\par
-\textbf{设置.} $x\in[0,1]$（120 单元），$y$ 几何加密（首层 $\approx4.3\times10^{-6}$）；$U=18,\ \mu=1.8\times10^{-5}\Rightarrow Re_L=10^6$。\par
-\textbf{状态.} 现有算例调试中（网格质量/读入），定量 Blasius 对比见后续。
+\subsection{（6）平板边界层（$Re_L=10^6$）——本轮放弃}
+\textbf{说明.} 因低速块网格质量/读入问题（见第 5 节），本轮放弃该算例的定量 Blasius 对比；其方程与判据为 $2f^{\prime\prime\prime}+f f^{\prime\prime}=0$、$C_f=0.664/\sqrt{Re_x}$、$\delta/x=5.0/\sqrt{Re_x}$、形状因子 $H\approx2.59$。
 
 \subsection{（7）Beavers--Joseph 问题（$\varepsilon=0.3/0.6/0.9$）}
 \textbf{方程/解析解.} 自由流体 $\mu u^{\prime\prime}=\frac{dp}{dx}$；多孔床 $\mu u^{\prime\prime}-(\varepsilon^2\mu/K)u=\frac{dp}{dx}$，
@@ -139,6 +135,17 @@ $h_v$ 按 Wakao--Kaguei 关联（随 $\varepsilon,G$）标定；AC。$G\in\{1,2,
 \includegraphics[width=0.30\textwidth]{figures/annulus.png}\\
 \includegraphics[width=0.30\textwidth]{figures/plug.png}
 \includegraphics[width=0.30\textwidth]{figures/ltne.png}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.46\textwidth]{figures/solid1d_flux.png}
+\includegraphics[width=0.46\textwidth]{figures/annulus_flux.png}\\
+\includegraphics[width=0.32\textwidth]{figures/ltne_eps.png}
+\includegraphics[width=0.32\textwidth]{figures/ltne_G.png}
+\includegraphics[width=0.32\textwidth]{figures/ltne_q.png}\\
+\includegraphics[width=0.32\textwidth]{figures/plug_eps.png}
+\caption{导热（含热流对比）；LTNE 多孔隙率/多流量/多热流（空心=CFD，实线=解析）；Plug 三孔隙率 $u(y)$ vs Brinkman。}
+\end{figure}
 \caption{左：方腔 $u(x=0.5)$ 与槽道剖面；右：一维与圆环导热剖面（点：CFD；线：解析/基准）。}
 \end{figure}
 
@@ -153,7 +160,7 @@ $h_v$ 按 Wakao--Kaguei 关联（随 $\varepsilon,G$）标定；AC。$G\in\{1,2,
 方腔 Re100/1000/5000 & Ghia (1982) & $u$-RMS 0.021 / 0.044 / 0.088 \\
 槽道（AC） & Poiseuille & $u_{\max}$ 误差 $<0.3\%$，RMS $<0.15\%$ \\
 圆柱 Re40 & Dennis--Chang & 已集算，$C_d$/$L_r$ 待校验 \\
-平板 $Re_L=10^6$ & Blasius & 调试中 \\
+平板 $Re_L=10^6$ & Blasius & 本轮放弃（见第 5 节） \\
 Beavers--Joseph & 复合 Darcy--Brinkman & AC $L^2\approx0.2$--$0.4$（待改进） \\
 Porous Plug & Brinkman & $\varepsilon=0.3/0.6/0.9$ 误差 $\le1.5\%$ \\
 LTNE 1D（27 例）& 两温度闭式解 & 相对误差 $\le0.7\%$，能量平衡 $\le0.7\%$ \\
