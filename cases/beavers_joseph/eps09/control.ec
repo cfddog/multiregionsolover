@@ -5,8 +5,8 @@ $control_ec
   AoA=0.d0
   If_viscous=1
   Iflag_turbulence_model=0
-  Kstep_save=25000
-  t_end=300.d0
+  Kstep_save=20000
+  t_end=200000.d0
   CFL=1.0d0
   Time_Method=0
   T_inf=288.15d0
@@ -20,7 +20,7 @@ $control_ec
   Cood_Y_UP=1
   NUM_THREADS=1
   Mesh_File_Format=2
-  Kstep_show=500
+  Kstep_show=20000
   Kstep_average=0
   Kstep_smooth=-1
   Kstep_init_smooth=0
@@ -92,7 +92,7 @@ $control_ec
   Porous_T_ref=300.d0
 AC_CFL=20.d0
 AC_beta=1000.d0
-AC_Max_Iter=4000
-AC_Print=100000
+AC_Max_Iter=1
+AC_Print=100000000
 AC_Tol=1.d-9
 $end

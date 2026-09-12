@@ -75,7 +75,7 @@ Re & 网格 & $u$-RMS & $u_{\min}$（本文） & $u_{\min}$（Ghia） \\
 \midrule
 100  & $40\times40$   & 0.021 & $-0.213$ & $-0.211$ \\
 1000 & $80\times80$   & 0.044 & $-0.361$ & $-0.383$ \\
-5000 & $129\times129$ & （运行中） & & $-0.436$ \\
+5000 & $96\times96$ & 0.088 & $-0.365$ & $-0.436$ \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -90,7 +90,7 @@ $dp/dx=-12\mu\bar U/H^2$；$Re_H=\rho \bar U H/\mu=50$。\par
 \textbf{方程.} 不可压 N-S，$Re_D=\rho U D/\mu$；阻力系数 $C_d=2F_x/(\rho U^2 D)$，Strouhal 数 $St=fD/U$。\par
 \textbf{设置.} 极坐标 O 网格 $121\times121$（$R_{in}=0.5,\ R_{out}=25$），周向接缝以自周期内边界连接；
 内边界壁面无滑移，外边界上游速度入口、下游压力出口；AC。Re$=$200 采用 dual-time。\par
-\textbf{结果.} 见第 4 节（运行/后处理中）。
+\textbf{结果.} AC 已收敛（$res_q\!\sim\!10^{-7}$，65635 次伪迭代）；但初步 $C_d$ 与尾涡长度与基准不符（极坐标自周期接缝/进出口设置待调试），暂列为\emph{待校验}。
 
 \subsection{（6）平板边界层（$Re_L=10^6$）}
 \textbf{方程/解析解.} Blasius 方程 $2f^{\prime\prime\prime}+f f^{\prime\prime}=0$，
@@ -103,7 +103,7 @@ $C_f=0.664/\sqrt{Re_x}$，$\delta/x=5.0/\sqrt{Re_x}$，形状因子 $H\approx2.5
 \textbf{方程/解析解.} 自由流体 $\mu u^{\prime\prime}=\frac{dp}{dx}$；多孔床 $\mu u^{\prime\prime}-(\varepsilon^2\mu/K)u=\frac{dp}{dx}$，
 $K=d_p^2\varepsilon^3/[150(1-\varepsilon)^2]$；界面速度与剪应力连续（有限床复合解，深床极限即经典 BJ 滑移）。\par
 \textbf{设置.} 两块（自由通道 + 多孔床 $H_p=1.2$），$d_p=0.5$ m，$\mu=0.02$，压差驱动，接口码 16，AC。\par
-\textbf{结果.} 见第 4 节。
+\textbf{结果.} AC 收敛；与复合 Darcy--Brinkman 剖面 $L^2$ 相对偏差约 $0.21$--$0.41$（两块 @ 粗网格，AC 显式逐块耦合较慢），$\varepsilon$ 越小偏差越大，列为\emph{待改进}。
 
 \subsection{（8）Porous Plug（$\varepsilon=0.3/0.6/0.9$）}
 \textbf{方程/解析解.} 单块多孔塞，压差驱动；一维 Brinkman
@@ -136,7 +136,9 @@ $h_v$ 按 Wakao--Kaguei 关联（随 $\varepsilon,G$）标定；AC。$G\in\{1,2,
 \includegraphics[width=0.46\textwidth]{figures/cavity.png}
 \includegraphics[width=0.30\textwidth]{figures/channel.png}\\
 \includegraphics[width=0.30\textwidth]{figures/solid1d.png}
-\includegraphics[width=0.30\textwidth]{figures/annulus.png}
+\includegraphics[width=0.30\textwidth]{figures/annulus.png}\\
+\includegraphics[width=0.30\textwidth]{figures/plug.png}
+\includegraphics[width=0.30\textwidth]{figures/ltne.png}
 \caption{左：方腔 $u(x=0.5)$ 与槽道剖面；右：一维与圆环导热剖面（点：CFD；线：解析/基准）。}
 \end{figure}
 
@@ -148,11 +150,11 @@ $h_v$ 按 Wakao--Kaguei 关联（随 $\varepsilon,G$）标定；AC。$G\in\{1,2,
 \midrule
 1D 导热 & 线性解析 & $\max|\Delta T|\sim10^{-6}$ K（机器精度级）\\
 圆环导热 & 对数解析 & $\max|\Delta T|=1.9\times10^{-3}$ K \\
-方腔 Re100/1000 & Ghia (1982) & $u$-RMS 0.021 / 0.044；Re5000 运行中 \\
+方腔 Re100/1000/5000 & Ghia (1982) & $u$-RMS 0.021 / 0.044 / 0.088 \\
 槽道（AC） & Poiseuille & $u_{\max}$ 误差 $<0.3\%$，RMS $<0.15\%$ \\
-圆柱 Re40/200 & Dennis--Chang / Williamson & 运行/后处理中 \\
+圆柱 Re40 & Dennis--Chang & 已集算，$C_d$/$L_r$ 待校验 \\
 平板 $Re_L=10^6$ & Blasius & 调试中 \\
-Beavers--Joseph & 复合 Darcy--Brinkman & 运行中 \\
+Beavers--Joseph & 复合 Darcy--Brinkman & AC $L^2\approx0.2$--$0.4$（待改进） \\
 Porous Plug & Brinkman & $\varepsilon=0.3/0.6/0.9$ 误差 $\le1.5\%$ \\
 LTNE 1D（27 例）& 两温度闭式解 & 相对误差 $\le0.7\%$，能量平衡 $\le0.7\%$ \\
 \bottomrule

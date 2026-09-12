@@ -88,8 +88,8 @@ $control_ec
   LS_Algorithm=3
 AC_CFL=20.d0
 AC_beta=1.d0
-AC_Max_Iter=300000
+AC_Max_Iter=150000
 AC_Print=5000
-AC_Tol=1.d-7
+AC_Tol=1.d-6
 AC_CFLv=0.5d0
 $end

@@ -1,0 +1,14 @@
+===== Porous plug (pressure-driven, AC) vs Darcy-Brinkman =====
+  eps=0.30  K=3.6735e-06 m2  lam=6.3888e-03 m  fitted dp/dx=-3.21601e-02 Pa/m
+      ubar_CFD=6.54199e-05  ubar_Brinkman=6.47943e-05  err=+0.97%   u_max=6.56413e-05
+  eps=0.60  K=9.0000e-05 m2  lam=1.5811e-02 m  fitted dp/dx=-3.14300e-02 Pa/m
+      ubar_CFD=3.86221e-04  ubar_Brinkman=3.80451e-04  err=+1.52%   u_max=3.92870e-04
+  eps=0.90  K=4.8600e-03 m2  lam=7.7460e-02 m  fitted dp/dx=-3.12592e-02 Pa/m
+      ubar_CFD=7.95827e-03  ubar_Brinkman=7.92496e-03  err=+0.42%   u_max=9.25746e-03
+===== Beavers-Joseph (two-block low-speed/porous, AC) vs composite Darcy-Brinkman =====
+  eps=0.30  G=-dp/dx=5.34154e-04 Pa/m  kappa*Hp=37.57  uD=2.7253e-05 u_int=4.3978e-04
+      profile L2=4.114e-01  Linf=9.090e-01   (umax=3.5620e-03)
+  eps=0.60  G=-dp/dx=6.12054e-04 Pa/m  kappa*Hp=15.18  uD=1.9127e-04 u_int=1.2983e-03
+      profile L2=2.101e-01  Linf=5.227e-01   (umax=4.5020e-03)
+  eps=0.90  G=-dp/dx=6.09830e-04 Pa/m  kappa*Hp=3.10  uD=4.5737e-03 u_int=7.2471e-03
+      profile L2=2.132e-01  Linf=4.279e-01   (umax=8.2962e-03)
