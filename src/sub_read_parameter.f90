@@ -95,6 +95,7 @@
     Iflag_savefile=0       ! ???��??flow3d.dat
     Iflag_vtk_onefile=0    ! 0=one vtk per block (flow3d_block_*.vtk), 1=single merged flow3d.vtk
     Iflag_vtk_SI=0         ! 0=compressible blocks written non-dimensional, 1=convert to SI units in vtk
+    Iflag_bc_check=1       ! 0=legacy; 1=auto-gen/validate bc3d.inp from bc3d_interface.inp; 2=strict abort
 !----for Turbomachinary solver------------
     IF_TurboMachinary=0    ! ??????????????
 	Ref_medium_usrdef=0    ! ???????????? ???????????
@@ -180,7 +181,7 @@ end
         IF_TurboMachinary, Ref_medium_usrdef, IF_Scheme_Positivity, &
 		Turbo_P0,Turbo_T0, Turbo_L0,Turbo_w, Turbo_Periodic_seta, &
 		Periodic_dX, Periodic_dY, Periodic_dZ, &
-		IF_Innerflow, Iflag_savefile, Iflag_vtk_onefile, Iflag_vtk_SI, &
+		IF_Innerflow, Iflag_savefile, Iflag_vtk_onefile, Iflag_vtk_SI, Iflag_bc_check, &
 		LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref, LS_Inlet_Type, &
 		LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, &
 		LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, &
@@ -405,6 +406,7 @@ end
     Ipara(45)=AC_Max_Iter
     Ipara(46)=AC_Print
     Ipara(47)=Iflag_Couple_WallFlux
+    Ipara(48)=Iflag_bc_check
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -526,6 +528,7 @@ end
     AC_Max_Iter=Ipara(45)
     AC_Print=Ipara(46)
     Iflag_Couple_WallFlux=Ipara(47)
+    Iflag_bc_check=Ipara(48)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)

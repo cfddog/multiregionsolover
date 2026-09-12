@@ -333,3 +333,394 @@
    close(99)
    print*, "Convert bc3d_interface.inp to bc3d_interface.inc OK"
   end
+!----------------------------------------------------------------------
+! Auto-prepare bc3d.inp from bc3d_interface.inp + material.in
+!
+! bc3d_interface.inp is treated as the single source of truth for the block
+! connections (and normally for the physical faces as well).  The explicit
+! cross-class interface codes (11..19, see const_var) are derived from the
+! block types given in material.in, so the interface codes of bc3d.inp no
+! longer have to be kept in sync by hand.
+!
+! Iflag_bc_check (control.ec):
+!   0 : disabled (legacy behaviour, bc3d.inp must be supplied)
+!   1 : if bc3d.inp is missing -> generate it from bc3d_interface.inp;
+!       if bc3d.inp is present -> validate it and, when inconsistent or
+!       unreadable, back it up (bc3d.inp.bak) and regenerate it
+!   2 : strict - validate bc3d.inp and stop when inconsistent
+!
+! On regeneration the physical (non-interface) face codes of the existing
+! bc3d.inp are preserved (read back from bc3d.inp.bak); only the interface
+! codes are re-derived.  Explicit codes 11..19 carry no inline continuation
+! line; negative codes keep the inline neighbour line, matching convert_inp_inc.
+!----------------------------------------------------------------------
+  subroutine prepare_bc3d_input
+   use Global_var
+   use const_var
+   implicit none
+   logical:: ex_if, ex_bc, ex_mat, have_types, ok
+   integer:: nt, m, ios
+   integer,allocatable:: btl(:)
+
+   if(Iflag_bc_check .le. 0) return
+
+   inquire(file='bc3d_interface.inp',exist=ex_if)
+   if(.not. ex_if) return
+   inquire(file='bc3d.inp',exist=ex_bc)
+   inquire(file='material.in',exist=ex_mat)
+
+   have_types = .false.
+   nt = 0
+   if(ex_mat) then
+     open(97,file='material.in')
+     read(97,*,iostat=ios) nt
+     if(ios==0 .and. nt>0) then
+       allocate(btl(nt))
+       read(97,*,iostat=ios) (btl(m),m=1,nt)
+       if(ios==0) have_types=.true.
+     endif
+     close(97)
+   endif
+   if(.not. have_types) then
+     print*, 'prepare_bc3d_input: material.in unavailable -> interface faces ', &
+             'written as BC_Inner (-1); coupling still dispatches by block type'
+     if(.not. allocated(btl)) then
+       nt = 1
+       allocate(btl(1))
+       btl(1) = BLOCK_FLUID
+     endif
+   endif
+
+   if(.not. ex_bc) then
+     call gen_bc3d(btl, nt, have_types, '')
+     print*, 'prepare_bc3d_input: bc3d.inp generated from bc3d_interface.inp'
+   else
+     call check_bc3d(btl, nt, have_types, ok)
+     if(ok) then
+       print*, 'prepare_bc3d_input: bc3d.inp consistent with bc3d_interface.inp, keep it'
+     else if(Iflag_bc_check .eq. 2) then
+       print*, 'prepare_bc3d_input: ERROR - bc3d.inp is inconsistent with ', &
+               'bc3d_interface.inp/material.in (Iflag_bc_check=2)'
+       stop
+     else
+       print*, 'prepare_bc3d_input: bc3d.inp inconsistent -> save as bc3d.inp.bak, ', &
+               'regenerate interface codes (physical codes kept from the backup)'
+       call backup_bc3d
+       call gen_bc3d(btl, nt, have_types, 'bc3d.inp.bak')
+     endif
+   endif
+
+   if(allocated(btl)) deallocate(btl)
+
+  contains
+
+!   Unordered pair of block types -> canonical explicit interface code.
+!   Returns 0 when no explicit code is defined (same-class pair).
+   integer function canonical_interface_code(ta,tb)
+     integer,intent(in):: ta, tb
+     canonical_interface_code = 0
+     if((ta==BLOCK_FLUID .and. tb==BLOCK_SOLID) .or. &
+        (ta==BLOCK_SOLID .and. tb==BLOCK_FLUID)) then
+       canonical_interface_code = BC_Interface_FluidSolid
+     else if((ta==BLOCK_FLUID .and. tb==BLOCK_LOWSPEED) .or. &
+             (ta==BLOCK_LOWSPEED .and. tb==BLOCK_FLUID)) then
+       canonical_interface_code = BC_Interface_FluidLow
+     else if((ta==BLOCK_LOWSPEED .and. tb==BLOCK_SOLID) .or. &
+             (ta==BLOCK_SOLID .and. tb==BLOCK_LOWSPEED)) then
+       canonical_interface_code = BC_Interface_LowSolid
+     else if(ta==BLOCK_SOLID .and. tb==BLOCK_SOLID) then
+       canonical_interface_code = BC_Interface_SolidSolid
+     else if((ta==BLOCK_LOWSPEED .and. tb==BLOCK_POROUS) .or. &
+             (ta==BLOCK_POROUS .and. tb==BLOCK_LOWSPEED)) then
+       canonical_interface_code = BC_Interface_LowPorous
+     else if((ta==BLOCK_SOLID .and. tb==BLOCK_POROUS) .or. &
+             (ta==BLOCK_POROUS .and. tb==BLOCK_SOLID)) then
+       canonical_interface_code = BC_Interface_SolidPorous
+     else if(ta==BLOCK_POROUS .and. tb==BLOCK_POROUS) then
+       canonical_interface_code = BC_Interface_PorousPorous
+     else if((ta==BLOCK_FLUID .and. tb==BLOCK_POROUS) .or. &
+             (ta==BLOCK_POROUS .and. tb==BLOCK_FLUID)) then
+       canonical_interface_code = BC_Interface_FluidPorous
+     endif
+   end function canonical_interface_code
+
+   subroutine backup_bc3d
+     integer:: ios
+     character(len=256):: line
+     open(96,file='bc3d.inp',status='old')
+     open(95,file='bc3d.inp.bak',status='replace')
+     do
+       read(96,'(a)',iostat=ios) line
+       if(ios/=0) exit
+       write(95,'(a)') trim(line)
+     enddo
+     close(96); close(95)
+   end subroutine backup_bc3d
+
+!   Read bc3d_interface.inp (continuation line after every interface code)
+!   and write bc3d.inp with the canonical interface codes.  Same-class faces
+!   become BC_Inner (-1).  Physical face codes come from the interface file,
+!   unless ovname is non-empty: then they are copied from that file where the
+!   (normalised) face ranges match (used to preserve user physical BCs).
+!   That overlay file is read entirely up front; if it cannot be parsed it is
+!   simply ignored so a malformed bc3d.inp never aborts the run.
+   subroutine gen_bc3d(tlist, nblk_t, has_types, ovname)
+     integer,intent(in):: nblk_t
+     integer,intent(in):: tlist(*)
+     logical,intent(in):: has_types
+     character(len=*),intent(in):: ovname
+     integer:: NB, NBu, m, k, ksub, nsub, nx,ny,nz, oc, ios, tot, t
+     integer:: ib,ie,jb,je,kb,ke,bc
+     integer:: ib1,ie1,jb1,je1,kb1,ke1,nb1
+     integer:: ru(6), kk(6), cc, nxr,nyr,nzr, nsr
+     character(len=256):: line
+     integer,allocatable:: oblk(:), ofac(:,:)
+     logical:: ov, found
+
+     ov = (len_trim(ovname) > 0)
+     NBu = 0
+     tot = 0
+     if(ov) then
+       open(86,file=trim(ovname),status='old',iostat=ios)
+       if(ios/=0) then
+         ov = .false.
+       else
+         read(86,'(a)',iostat=ios) line
+         if(ios==0) read(86,*,iostat=ios) NBu
+         if(ios/=0) then
+           ov = .false.; NBu = 0
+         endif
+       endif
+       if(ov) then
+         ios = 0
+         do m=1,NBu
+           read(86,*,iostat=ios) nxr,nyr,nzr
+           if(ios==0) read(86,'(a)',iostat=ios) line
+           if(ios==0) read(86,*,iostat=ios) nsr
+           if(ios/=0) exit
+           do k=1,nsr
+             read(86,*,iostat=ios) kk(1),kk(2),kk(3),kk(4),kk(5),kk(6),cc
+             if(ios/=0) exit
+             if(cc .lt. 0) read(86,'(a)',iostat=ios) line
+             if(ios/=0) exit
+             tot = tot + 1
+           enddo
+           if(ios/=0) exit
+         enddo
+         if(ios/=0) ov = .false.
+       endif
+       if(ov) then
+         allocate(oblk(tot), ofac(7,tot))
+         rewind(86)
+         read(86,'(a)') line
+         read(86,*) NBu
+         t = 0
+         do m=1,NBu
+           read(86,*) nxr,nyr,nzr
+           read(86,'(a)') line
+           read(86,*) nsr
+           do k=1,nsr
+             read(86,*) kk(1),kk(2),kk(3),kk(4),kk(5),kk(6),cc
+             t = t + 1
+             oblk(t) = m
+             ofac(1,t)=min(abs(kk(1)),abs(kk(2))); ofac(2,t)=max(abs(kk(1)),abs(kk(2)))
+             ofac(3,t)=min(abs(kk(3)),abs(kk(4))); ofac(4,t)=max(abs(kk(3)),abs(kk(4)))
+             ofac(5,t)=min(abs(kk(5)),abs(kk(6))); ofac(6,t)=max(abs(kk(5)),abs(kk(6)))
+             ofac(7,t)=cc
+             if(cc .lt. 0) read(86,'(a)') line
+           enddo
+         enddo
+       endif
+       close(86)
+     endif
+
+     open(88,file='bc3d_interface.inp')
+     open(99,file='bc3d.inp',status='replace')
+     read(88,'(a)') line
+     write(99,'(a)') 'OpenCFD-EC bc3d.inp generated from bc3d_interface.inp'
+     read(88,*) NB
+     write(99,*) NB
+     do m=1,NB
+       read(88,*) nx,ny,nz
+       write(99,'(3I10)') nx,ny,nz
+       read(88,'(a)') line
+       write(99,'(a)') trim(line)
+       read(88,*) nsub
+       write(99,*) nsub
+       do ksub=1,nsub
+         read(88,*) ib,ie,jb,je,kb,ke,bc
+         if(is_interface_bc(bc)) then
+           read(88,*) ib1,ie1,jb1,je1,kb1,ke1,nb1
+           if(has_types .and. m<=nblk_t .and. nb1>=1 .and. nb1<=nblk_t) then
+             if(tlist(m) .ne. tlist(nb1)) then
+               oc = canonical_interface_code(tlist(m), tlist(nb1))
+               if(oc .le. 0) oc = BC_Inner
+             else
+               oc = BC_Inner
+             endif
+           else
+             oc = BC_Inner
+           endif
+         else
+           oc = bc
+           if(ov .and. tot>0) then
+             ru(1)=min(abs(ib),abs(ie)); ru(2)=max(abs(ib),abs(ie))
+             ru(3)=min(abs(jb),abs(je)); ru(4)=max(abs(jb),abs(je))
+             ru(5)=min(abs(kb),abs(ke)); ru(6)=max(abs(kb),abs(ke))
+             do t=1,tot
+               if(oblk(t)==m .and. ofac(1,t)==ru(1) .and. ofac(2,t)==ru(2) .and. &
+                  ofac(3,t)==ru(3) .and. ofac(4,t)==ru(4) .and. &
+                  ofac(5,t)==ru(5) .and. ofac(6,t)==ru(6)) then
+                 oc = ofac(7,t); exit
+               endif
+             enddo
+           endif
+         endif
+         write(99,'(6I10,I10)') ib,ie,jb,je,kb,ke,oc
+         if(oc .lt. 0) write(99,'(7I10)') ib1,ie1,jb1,je1,kb1,ke1,nb1
+       enddo
+     enddo
+     close(88); close(99)
+     if(allocated(oblk)) deallocate(oblk,ofac)
+   end subroutine gen_bc3d
+
+!   Validate a user-supplied bc3d.inp against bc3d_interface.inp + block types.
+!   Face ranges are normalised (abs + min/max) exactly like Convert_bc, so the
+!   '-1/-2' and '1/2' encodings compare equal.  Continuation lines: interface
+!   file -> after every is_interface_bc code; user file -> after a negative
+!   code only (see convert_inp_inc).  Any read error (e.g. an inline line after
+!   a positive code, which convert_inp_inc cannot consume) marks the file as
+!   inconsistent so it gets regenerated instead of aborting.
+   subroutine check_bc3d(tlist, nblk_t, has_types, ok)
+     integer,intent(in):: nblk_t
+     integer,intent(in):: tlist(*)
+     logical,intent(in):: has_types
+     logical,intent(out):: ok
+     integer:: NBi, NBu, m, k, j, nsubi, nsubu, nx,ny,nz, ios
+     integer:: ib,ie,jb,je,kb,ke,bc
+     integer:: ib1,ie1,jb1,je1,kb1,ke1,nb1
+     integer:: cu, expected
+     character(len=256):: line
+     integer,allocatable:: aki(:,:), aci(:), anbi(:)
+     integer,allocatable:: aku(:,:), acu(:)
+     logical:: found
+
+     ok = .true.
+     open(88,file='bc3d_interface.inp',iostat=ios)
+     if(ios/=0) then
+       ok = .false.; return
+     endif
+     open(87,file='bc3d.inp',iostat=ios)
+     if(ios/=0) then
+       ok = .false.; close(88); return
+     endif
+     read(88,'(a)',iostat=ios) line
+     if(ios==0) read(88,*,iostat=ios) NBi
+     if(ios==0) read(87,'(a)',iostat=ios) line
+     if(ios==0) read(87,*,iostat=ios) NBu
+     if(ios/=0) then
+       print*, 'check_bc3d: cannot read header of bc3d.inp/bc3d_interface.inp'
+       ok=.false.; close(87); close(88); return
+     endif
+     if(NBi .ne. NBu) then
+       print*, 'check_bc3d: block count differs: bc3d_interface=',NBi,' bc3d.inp=',NBu
+       ok = .false.
+     endif
+     do m=1,min(NBi,NBu)
+       read(88,*,iostat=ios) nx,ny,nz
+       if(ios==0) read(88,'(a)',iostat=ios) line
+       if(ios==0) read(88,*,iostat=ios) nsubi
+       if(ios/=0) then
+         print*, 'check_bc3d: cannot parse bc3d_interface.inp block',m
+         ok=.false.; close(87); close(88); return
+       endif
+       allocate(aki(6,nsubi), aci(nsubi), anbi(nsubi))
+       do k=1,nsubi
+         read(88,*,iostat=ios) ib,ie,jb,je,kb,ke,bc
+         if(ios/=0) exit
+         aki(1,k)=min(abs(ib),abs(ie)); aki(2,k)=max(abs(ib),abs(ie))
+         aki(3,k)=min(abs(jb),abs(je)); aki(4,k)=max(abs(jb),abs(je))
+         aki(5,k)=min(abs(kb),abs(ke)); aki(6,k)=max(abs(kb),abs(ke))
+         aci(k)=bc; anbi(k)=0
+         if(is_interface_bc(aci(k))) then
+           read(88,*,iostat=ios) ib1,ie1,jb1,je1,kb1,ke1,nb1
+           if(ios/=0) exit
+           anbi(k) = nb1
+         endif
+       enddo
+       if(ios/=0) then
+         print*, 'check_bc3d: cannot parse bc3d_interface.inp block',m
+         ok=.false.; close(87); close(88); return
+       endif
+       read(87,*,iostat=ios) nx,ny,nz
+       if(ios==0) read(87,'(a)',iostat=ios) line
+       if(ios==0) read(87,*,iostat=ios) nsubu
+       if(ios/=0) then
+         print*, 'check_bc3d: cannot parse bc3d.inp block',m
+         ok=.false.; close(87); close(88); return
+       endif
+       allocate(aku(6,nsubu), acu(nsubu))
+       do k=1,nsubu
+         read(87,*,iostat=ios) ib,ie,jb,je,kb,ke,bc
+         if(ios/=0) exit
+         aku(1,k)=min(abs(ib),abs(ie)); aku(2,k)=max(abs(ib),abs(ie))
+         aku(3,k)=min(abs(jb),abs(je)); aku(4,k)=max(abs(jb),abs(je))
+         aku(5,k)=min(abs(kb),abs(ke)); aku(6,k)=max(abs(kb),abs(ke))
+         acu(k)=bc
+         if(bc .lt. 0) read(87,'(a)',iostat=ios) line
+         if(ios/=0) exit
+       enddo
+       if(ios/=0) then
+         print*, 'check_bc3d: cannot parse bc3d.inp block',m, &
+                 '(inline continuation after a positive code?)'
+         ok=.false.; close(87); close(88); return
+       endif
+       do k=1,nsubi
+         if(.not. is_interface_bc(aci(k))) cycle
+         found = .false.
+         j = 0
+         do while(.not. found .and. j < nsubu)
+           j = j + 1
+           if(aku(1,j)==aki(1,k) .and. aku(2,j)==aki(2,k) .and. &
+              aku(3,j)==aki(3,k) .and. aku(4,j)==aki(4,k) .and. &
+              aku(5,j)==aki(5,k) .and. aku(6,j)==aki(6,k)) found = .true.
+         enddo
+         if(.not. found) then
+           print*, 'check_bc3d: block',m,' interface face missing in bc3d.inp:', &
+                   aki(1,k),aki(2,k),aki(3,k),aki(4,k),aki(5,k),aki(6,k)
+           ok = .false.
+           cycle
+         endif
+         cu = acu(j)
+         if(has_types .and. m<=nblk_t .and. anbi(k)>=1 .and. anbi(k)<=nblk_t) then
+           if(tlist(m) .ne. tlist(anbi(k))) then
+             expected = canonical_interface_code(tlist(m), tlist(anbi(k)))
+             if(cu .ne. expected .and. cu .ne. BC_Wall) then
+               print*, 'check_bc3d: block',m,' face',aki(1,k),aki(2,k),aki(3,k), &
+                       aki(4,k),aki(5,k),aki(6,k),' code',cu,' expected',expected
+               ok = .false.
+             endif
+           else
+             if(cu .ge. 0 .and. cu .ne. BC_Wall) then
+               if((tlist(m)==BLOCK_FLUID .or. tlist(m)==BLOCK_LOWSPEED) .or. &
+                  .not. is_interface_bc(cu)) then
+                 print*, 'check_bc3d: block',m,' same-class face',aki(1,k), &
+                         aki(2,k),' code',cu,' should be an internal (negative) code'
+                 ok = .false.
+               endif
+             endif
+           endif
+         else
+           if(cu .ge. 0 .and. cu .ne. BC_Wall .and. .not. is_interface_bc(cu)) then
+             print*, 'check_bc3d: block',m,' interface face',aki(1,k),aki(2,k), &
+                     'coded as physical boundary',cu
+             ok = .false.
+           endif
+         endif
+       enddo
+       deallocate(aki,aci,anbi,aku,acu)
+     enddo
+     close(88); close(87)
+   end subroutine check_bc3d
+
+  end subroutine prepare_bc3d_input

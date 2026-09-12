@@ -223,7 +223,8 @@
       IF_Walldist, IFLAG_LIMIT_FLOW, & !
       IF_Scheme_Positivity,          & !
       Kstep_average,                 & !
-      Iflag_savefile, Iflag_vtk_onefile, Iflag_vtk_SI !
+      Iflag_savefile, Iflag_vtk_onefile, Iflag_vtk_SI, &
+      Iflag_bc_check !
    integer,save:: IF_TurboMachinary , Ref_medium_usrdef !
    integer,save:: IF_InnerFlow !
 
