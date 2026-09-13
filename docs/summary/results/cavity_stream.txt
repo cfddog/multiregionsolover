@@ -1,0 +1,4 @@
+cavity_streamlines.png saved
+Re=100  umax=0.923 vmax=0.498
+Re=1000  umax=0.908 vmax=0.584
+Re=5000  umax=0.806 vmax=0.552
