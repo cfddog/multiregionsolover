@@ -1,0 +1,5 @@
+1D Dirichlet: max err = 5.000e-08 K
+1D Neumann: max err = 1.066e-06 K
+annulus Dirichlet: max err = 1.944e-02 K
+annulus Neumann: max err = 1.923e-03 K
+conduction_bc.png saved

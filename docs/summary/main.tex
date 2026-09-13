@@ -51,18 +51,15 @@ G c_p \frac{d T_f}{dy}=h_v(T_s-T_f),\qquad (1-\varepsilon)k_s\frac{d^2T_s}{dy^2}
 
 \section{算例设置、解析解与对比}
 
-\subsection{（1）一维稳态导热}
-\textbf{方程/解析解.} $d/dx(k\,dT/dx)=0$，边界 $T(0)=T_0=300\,\mathrm{K}$，$-k\,dT/dx|_L=q=800\,\mathrm{W/m^2}$：
-$T(x)=T_0+(q/k)x$，$k=15.1\,\mathrm{W/(m\,K)}$。\par
-\textbf{设置.} $51\times9\times9$ 节点，$L=1\,$m；\texttt{solid\_bc.inp}：面1 $T=300$，面4 $q=800$。\par
-\textbf{结果.} 复跑收敛（$t_{end}=10$）：$\mathrm{RMS}=7.5\times10^{-7}\,\mathrm{K}$，
-$\max|\Delta T|=1.07\times10^{-6}\,\mathrm{K}$（相对 $2.1\times10^{-8}$）。
+\subsection{（1）一维稳态导热（两类边界条件）}
+\textbf{方程/解析解.} $d/dx(k\,dT/dx)=0$，$L=1$ m，$k=15.1\,\mathrm{W/(m\,K)}$。\n两类边界：(i) \emph{两端定温} $T(0)=300,\,T(L)=400$ K $\Rightarrow T=T_0+(T_L-T_0)x/L$；(ii) \emph{一端等温、一端热流} $T(0)=300,\,-k\,dT/dx|_L=q=800\,\mathrm{W/m^2}$ $\Rightarrow T=T_0+(q/k)x$。\par
+\textbf{设置.} $51\times9\times9$ 节点；\texttt{solid\_bc.inp} 对应两套边界。\par
+\textbf{结果.} 定温–定温 $\max|\Delta T|=5.0\times10^{-8}$ K；定温–热流 $\max|\Delta T|=1.07\times10^{-6}$ K（相对 $2.1\times10^{-8}$）。
 
-\subsection{（2）圆环稳态导热}
-\textbf{方程/解析解.} $\frac{1}{r}\frac{d}{dr}(r k\frac{dT}{dr})=0$，内环 $R_i$ 热流 $q$、外环 $R_o$ 等温 $T_{out}$：
-$T(r)=T_{out}+\dfrac{q R_i}{k}\ln\dfrac{R_o}{r}$；$R_i=0.1,\ R_o=0.2\,$m，$k=15.1$。\par
-\textbf{设置.} 半环 O 网格 $40\times80$（准 2D）；\texttt{solid\_bc.inp}：面1（内）$q=800$，面4（外）$T=300$。\par
-\textbf{结果.} $\mathrm{RMS}=1.49\times10^{-3}\,\mathrm{K}$，$\max|\Delta T|=1.92\times10^{-3}\,\mathrm{K}$。
+\subsection{（2）圆环稳态导热（两类边界条件）}
+\textbf{方程/解析解.} $\frac{1}{r}\frac{d}{dr}(r k\frac{dT}{dr})=0$，$R_i=0.1,\,R_o=0.2$ m，$k=15.1$。\n两类边界：(i) \emph{内外环定温} $T(R_i)=350,\,T(R_o)=300$ $\Rightarrow T=T_i+(T_o-T_i)\ln(r/R_i)/\ln(R_o/R_i)$；(ii) \emph{内环热流、外环定温} $q=800,\,T(R_o)=300$ $\Rightarrow T=T_o+(q R_i/k)\ln(R_o/r)$。\par
+\textbf{设置.} 半环 O 网格 $40\times80$（准 2D）。\par
+\textbf{结果.} 定温–定温 $\max|\Delta T|=1.94\times10^{-2}$ K；定温–热流 $1.92\times10^{-3}$ K。
 
 \subsection{（3）顶盖驱动方腔（Re=100/1000/5000）}
 \textbf{方程.} 不可压 N-S，顶盖 $U_{lid}=1$，其余三壁静止。基准：Ghia, Ghia \& Shin (1982) 竖直中线 $x=0.5$ 的 $u(y)$。\par
@@ -138,6 +135,7 @@ $h_v$ 按 Wakao--Kaguei 关联（随 $\varepsilon,G$）标定；AC。$G\in\{1,2,
 \end{figure}
 
 \begin{figure}[htbp]\centering
+\includegraphics[width=0.92\textwidth]{figures/conduction_bc.png}\\
 \includegraphics[width=0.46\textwidth]{figures/solid1d_flux.png}
 \includegraphics[width=0.46\textwidth]{figures/annulus_flux.png}\\
 \includegraphics[width=0.32\textwidth]{figures/ltne_eps.png}
