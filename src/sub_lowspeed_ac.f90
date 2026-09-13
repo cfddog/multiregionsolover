@@ -68,7 +68,8 @@
    call ac_have_pressure_bc(nMesh, mBlock, have_pbc)
 
    if(my_id .eq. 0) print*, ' AC solver (LS_Algorithm=3) block', mBlock, &
-      ' nx,ny,nz=',nx,ny,nz,' beta=',beta,' CFL=',AC_CFL,' dual=',isdual
+      ' nx,ny,nz=',nx,ny,nz,' beta=',beta,' CFL=',AC_CFL,' dual=',isdual, &
+      ' flux=',AC_Flux,' recon=',AC_Recon,' lim=',AC_Limiter
 
    rq0 = 0.d0; rm0 = 0.d0
    do iter = 1, AC_Max_Iter
@@ -201,6 +202,278 @@
   end subroutine ac_flux_rusanov
 
 !===============================================================================
+! Steger-Warming (characteristic) flux splitting for the AC system, selected by
+! AC_Flux=2.  Along a unit normal n the Jacobian d(F.n)/dW (W=(q,u,v,w)) has
+! eigenvalues {un, un, un+c, un-c}, c=sqrt(un^2+beta); the right eigenvectors
+! are (0,0,1,0),(0,0,0,1),(beta,un+c,0,0),(beta,un-c,0,0) and the left ones
+! (0,0,1,0),(0,0,0,1),(1,un+c,0,0)/(beta+(un+c)^2),(1,un-c,0,0)/(beta+(un-c)^2).
+! The split flux is  F+(W)=0.5*(F(W)+|A|W),  F-(W)=0.5*(F(W)-|A|W)  with
+! |A|W obtained by projecting W on the characteristic variables; the transverse
+! part collapses to  un^+- * (u - un*n).  Face flux = F+(WL) + F-(WR).
+!===============================================================================
+   subroutine ac_flux_sw(qL,uL,vL,wL,qR,uR,vR,wR,anx,any,anz,beta,F)
+    use precision_EC
+    implicit none
+    real(PRE_EC),intent(in) :: qL,uL,vL,wL,qR,uR,vR,wR,anx,any,anz,beta
+    real(PRE_EC),intent(out):: F(4)
+    real(PRE_EC) :: Fp(4),Fm(4)
+    call ac_sw_half(qL,uL,vL,wL,anx,any,anz,beta, 1,Fp)
+    call ac_sw_half(qR,uR,vR,wR,anx,any,anz,beta,-1,Fm)
+    F(1)=Fp(1)+Fm(1); F(2)=Fp(2)+Fm(2)
+    F(3)=Fp(3)+Fm(3); F(4)=Fp(4)+Fm(4)
+   end subroutine ac_flux_sw
+
+!  one side of the Steger-Warming split: sgn=+1 -> F+, sgn=-1 -> F-
+   subroutine ac_sw_half(q,u,v,w,anx,any,anz,beta,sgn,fh)
+    use precision_EC
+    implicit none
+    real(PRE_EC),intent(in) :: q,u,v,w,anx,any,anz,beta
+    integer,intent(in) :: sgn
+    real(PRE_EC),intent(out):: fh(4)
+    real(PRE_EC) :: un,c,cp,cm,s3,s4,awq,awu,fn,unp,ut1,ut2,ut3
+    un = u*anx + v*any + w*anz
+    c  = sqrt(un*un + beta)
+    cp = un + c
+    cm = un - c
+    s3 = abs(cp)/(beta+cp*cp)
+    s4 = abs(cm)/(beta+cm*cm)
+    awq = beta*( s3*(q+cp*un) + s4*(q+cm*un) )
+    awu = s3*cp*(q+cp*un) + s4*cm*(q+cm*un)
+    ut1 = u - un*anx
+    ut2 = v - un*any
+    ut3 = w - un*anz
+    if(sgn .gt. 0) then
+      fh(1) = 0.5d0*(beta*un + awq)
+      fn    = 0.5d0*(un*un + q + awu)
+      unp   = 0.5d0*(un + abs(un))
+    else
+      fh(1) = 0.5d0*(beta*un - awq)
+      fn    = 0.5d0*(un*un + q - awu)
+      unp   = 0.5d0*(un - abs(un))
+    endif
+    fh(2) = fn*anx + unp*ut1
+    fh(3) = fn*any + unp*ut2
+    fh(4) = fn*anz + unp*ut3
+   end subroutine ac_sw_half
+
+
+!===============================================================================
+! AUSM+ (Liou) flux for the AC system, selected by AC_Flux=3.
+! The AC flux separates exactly into a convected part and a pressure part:
+!   F.n = un*(beta,u,v,w) + q*(0,nx,ny,nz)
+! AUSM+ builds the interface convective speed from the Mach splitting
+!   M~ = M+(M_L) + M-(M_R),  u_face = c0*M~
+! (Phi taken from the upwind side) and the interface pressure from
+!   q_face = P+(M_L)*q_L + P-(M_R)*q_R
+! (Liou, J.Comput.Phys. 129 (1996) 364).  Reference speed c0=sqrt(beta+un^2/2)
+! follows the AC spectral radius used by the LU-SGS.  For equal states
+! M~=M and P++P-=1, so the flux reduces exactly to F(W).
+!===============================================================================
+   subroutine ac_flux_ausm(qL,uL,vL,wL,qR,uR,vR,wR,anx,any,anz,beta,F)
+    use precision_EC
+    implicit none
+    real(PRE_EC),intent(in) :: qL,uL,vL,wL,qR,uR,vR,wR,anx,any,anz,beta
+    real(PRE_EC),intent(out):: F(4)
+    real(PRE_EC) :: unL,unR,c0,ML,MR,MpL,MmR,Mt,uf,ppL,pmR,pf,b1,b2,b3,b4
+    unL = uL*anx + vL*any + wL*anz
+    unR = uR*anx + vR*any + wR*anz
+    c0  = sqrt(max(beta,1.d-30) + 0.5d0*(unL*unL + unR*unR))
+    ML  = unL/c0
+    MR  = unR/c0
+!   AUSM+ convected-speed splitting
+    if(abs(ML) .ge. 1.d0) then
+      MpL = 0.5d0*(ML + abs(ML))
+    else
+      MpL = 0.25d0*(ML + 1.d0)**2
+    endif
+    if(abs(MR) .ge. 1.d0) then
+      MmR = 0.5d0*(MR - abs(MR))
+    else
+      MmR = -0.25d0*(MR - 1.d0)**2
+    endif
+    Mt  = MpL + MmR
+    uf  = c0*Mt
+!   upwind convected vector Phi=(beta,u,v,w)
+    if(uf .ge. 0.d0) then
+      b1 = beta; b2 = uL; b3 = vL; b4 = wL
+    else
+      b1 = beta; b2 = uR; b3 = vR; b4 = wR
+    endif
+!   AUSM+ pressure splitting
+    if(abs(ML) .ge. 1.d0) then
+      ppL = 0.5d0*(1.d0 + sign(1.d0,ML))
+    else
+      ppL = 0.25d0*(ML + 1.d0)**2*(2.d0 - ML)
+    endif
+    if(abs(MR) .ge. 1.d0) then
+      pmR = 0.5d0*(1.d0 - sign(1.d0,MR))
+    else
+      pmR = 0.25d0*(MR - 1.d0)**2*(2.d0 + MR)
+    endif
+    pf = ppL*qL + pmR*qR
+    F(1) = uf*b1
+    F(2) = uf*b2 + pf*anx
+    F(3) = uf*b3 + pf*any
+    F(4) = uf*b4 + pf*anz
+   end subroutine ac_flux_ausm
+
+! b and the right cell c, using the 5-point stencil a,b,c,d,e.
+! Returns the face-left state wL and the face-right state wR.
+!===============================================================================
+   subroutine ac_weno5_lr(a,b,c,d,e,wL,wR)
+    use precision_EC
+    implicit none
+    real(PRE_EC),intent(in) :: a,b,c,d,e
+    real(PRE_EC),intent(out):: wL,wR
+    real(PRE_EC),parameter :: g0=0.1d0, g1=0.6d0, g2=0.3d0, epw=1.d-6
+    real(PRE_EC) :: u0,u1,u2, b0,b1,b2, a0,a1,a2, s
+    u0 = ( 1.d0/3.d0)*a - (7.d0/6.d0)*b + (11.d0/6.d0)*c
+    u1 = -(1.d0/6.d0)*b + (5.d0/6.d0)*c + ( 1.d0/3.d0)*d
+    u2 = ( 1.d0/3.d0)*c + (5.d0/6.d0)*d - ( 1.d0/6.d0)*e
+    b0 = (13.d0/12.d0)*(a-2.d0*b+c)**2 + 0.25d0*(a-4.d0*b+3.d0*c)**2
+    b1 = (13.d0/12.d0)*(b-2.d0*c+d)**2 + 0.25d0*(b-d)**2
+    b2 = (13.d0/12.d0)*(c-2.d0*d+e)**2 + 0.25d0*(3.d0*c-4.d0*d+e)**2
+    a0 = g0/(epw+b0)**2; a1 = g1/(epw+b1)**2; a2 = g2/(epw+b2)**2
+    s  = a0+a1+a2
+    wL = (a0*u0 + a1*u1 + a2*u2)/s
+    u0 = ( 1.d0/3.d0)*e - (7.d0/6.d0)*d + (11.d0/6.d0)*c
+    u1 = -(1.d0/6.d0)*d + (5.d0/6.d0)*c + ( 1.d0/3.d0)*b
+    u2 = ( 1.d0/3.d0)*c + (5.d0/6.d0)*b - ( 1.d0/6.d0)*a
+    b0 = (13.d0/12.d0)*(e-2.d0*d+c)**2 + 0.25d0*(e-4.d0*d+3.d0*c)**2
+    b1 = (13.d0/12.d0)*(d-2.d0*c+b)**2 + 0.25d0*(d-b)**2
+    b2 = (13.d0/12.d0)*(c-2.d0*b+a)**2 + 0.25d0*(3.d0*c-4.d0*b+a)**2
+    a0 = g0/(epw+b0)**2; a1 = g1/(epw+b1)**2; a2 = g2/(epw+b2)**2
+    s  = a0+a1+a2
+    wR = (a0*u0 + a1*u1 + a2*u2)/s
+   end subroutine ac_weno5_lr
+
+!===============================================================================
+! 3rd-order WENO (Jiang-Shu) reconstruction (more dissipative/robust than WENO5)
+! for the face between the left cell c and the right cell d; stencil a,b,c,d,e.
+!===============================================================================
+   subroutine ac_weno3_lr(a,b,c,d,e,wL,wR)
+    use precision_EC
+    implicit none
+    real(PRE_EC),intent(in) :: a,b,c,d,e
+    real(PRE_EC),intent(out):: wL,wR
+    real(PRE_EC),parameter :: g0=1.d0/3.d0, g1=2.d0/3.d0, epw=1.d-6
+    real(PRE_EC) :: u0,u1, bt0,bt1, a0,a1, s
+    u0 = -0.5d0*b + 1.5d0*c
+    u1 =  0.5d0*c + 0.5d0*d
+    bt0 = (c-b)**2
+    bt1 = (d-c)**2
+    a0 = g0/(epw+bt0)**2; a1 = g1/(epw+bt1)**2
+    s  = a0+a1
+    wL = (a0*u0 + a1*u1)/s
+    u0 = -0.5d0*e + 1.5d0*d
+    u1 =  0.5d0*d + 0.5d0*c
+    bt0 = (e-d)**2
+    bt1 = (d-c)**2
+    a0 = g0/(epw+bt0)**2; a1 = g1/(epw+bt1)**2
+    s  = a0+a1
+    wR = (a0*u0 + a1*u1)/s
+   end subroutine ac_weno3_lr
+
+!===============================================================================
+! MUSCL slope limiter (AC_Limiter: 1=van Leer, 2=minmod).  minmod is the most
+! dissipative/monotone choice and gives the most robust MUSCL reconstruction.
+!===============================================================================
+   real(PRE_EC) function ac_slope(a, b)
+    use precision_EC
+    use Global_var
+    implicit none
+    real(PRE_EC),intent(in) :: a, b
+    if(a*b .le. 0.d0) then
+      ac_slope = 0.d0
+    else if(AC_Limiter .eq. 2) then
+      ac_slope = sign(min(abs(a), abs(b)), a)
+    else
+      ac_slope = 2.d0*a*b/(a+b+1.d-30)
+    endif
+   end function ac_slope
+
+!===============================================================================
+! Face reconstruction of the left/right states from the 5-point stencil:
+!   a,b = two cells left of the face ; c = face-left cell ;
+!   d = face-right cell ; e = one cell right of d.
+!   AC_Recon = 1 -> 2nd-order MUSCL (limiter AC_Limiter) ; 2 -> WENO5 ; 3 -> WENO3
+!===============================================================================
+   subroutine ac_recon_face(a,b,c,d,e,wL,wR)
+    use precision_EC
+    use Global_var
+    implicit none
+    real(PRE_EC),intent(in) :: a,b,c,d,e
+    real(PRE_EC),intent(out):: wL,wR
+    real(PRE_EC), external :: ac_slope
+    if(AC_Recon .eq. 2) then
+      call ac_weno5_lr(a,b,c,d,e,wL,wR)
+    else if(AC_Recon .eq. 3) then
+      call ac_weno3_lr(a,b,c,d,e,wL,wR)
+    else
+      wL = c + 0.5d0*ac_slope(c-b, d-c)
+      wR = d - 0.5d0*ac_slope(d-c, e-d)
+    endif
+   end subroutine ac_recon_face
+
+!===============================================================================
+! Flux on one interior face between cells L and R=L+e_dir (normal points L->R).
+! Reconstructs (q,u,v,w) with ac_recon_face then applies the selected inviscid
+! flux (AC_Flux: 1=Rusanov, 2=Steger-Warming, 3=AUSM+).  RAC(L) -= F*A ; RAC(R) += F*A.
+!===============================================================================
+   subroutine ac_face_flux(B, iL,jL,kL, iR,jR,kR, dir, beta)
+    use Global_var
+    use lows_ac_work
+    implicit none
+    Type (Block_TYPE),pointer:: B
+    integer,intent(in):: iL,jL,kL,iR,jR,kR,dir
+    real(PRE_EC),intent(in):: beta
+    real(PRE_EC) :: FLX(4), A, nx1,ny1,nz1
+    real(PRE_EC) :: FLX1(4), sb
+    real(PRE_EC) :: qL,uL,vL,wL, qR,uR,vR,wR
+    integer :: im2,jm2,km2, im1,jm1,km1, ip2,jp2,kp2
+    im2=iL; jm2=jL; km2=kL; im1=iL; jm1=jL; km1=kL; ip2=iR; jp2=jR; kp2=kR
+    if(dir .eq. 1) then
+      im2=iL-2; im1=iL-1; ip2=iR+1
+      A=B%Si(iR,jR,kR); nx1=B%ni1(iR,jR,kR); ny1=B%ni2(iR,jR,kR); nz1=B%ni3(iR,jR,kR)
+    else if(dir .eq. 2) then
+      jm2=jL-2; jm1=jL-1; jp2=jR+1
+      A=B%Sj(iR,jR,kR); nx1=B%nj1(iR,jR,kR); ny1=B%nj2(iR,jR,kR); nz1=B%nj3(iR,jR,kR)
+    else
+      km2=kL-2; km1=kL-1; kp2=kR+1
+      A=B%Sk(iR,jR,kR); nx1=B%nk1(iR,jR,kR); ny1=B%nk2(iR,jR,kR); nz1=B%nk3(iR,jR,kR)
+    endif
+    call ac_recon_face(XW(1,im2,jm2,km2),XW(1,im1,jm1,km1),XW(1,iL,jL,kL), &
+                       XW(1,iR,jR,kR),XW(1,ip2,jp2,kp2), qL,qR)
+    call ac_recon_face(XW(2,im2,jm2,km2),XW(2,im1,jm1,km1),XW(2,iL,jL,kL), &
+                       XW(2,iR,jR,kR),XW(2,ip2,jp2,kp2), uL,uR)
+    call ac_recon_face(XW(3,im2,jm2,km2),XW(3,im1,jm1,km1),XW(3,iL,jL,kL), &
+                       XW(3,iR,jR,kR),XW(3,ip2,jp2,kp2), vL,vR)
+    call ac_recon_face(XW(4,im2,jm2,km2),XW(4,im1,jm1,km1),XW(4,iL,jL,kL), &
+                       XW(4,iR,jR,kR),XW(4,ip2,jp2,kp2), wL,wR)
+    if(AC_Flux .eq. 2) then
+      call ac_flux_sw(qL,uL,vL,wL, qR,uR,vR,wR, nx1,ny1,nz1, beta, FLX)
+    else if(AC_Flux .eq. 3) then
+      call ac_flux_ausm(qL,uL,vL,wL, qR,uR,vR,wR, nx1,ny1,nz1, beta, FLX)
+    else
+      call ac_flux_rusanov(qL,uL,vL,wL, qR,uR,vR,wR, nx1,ny1,nz1, beta, FLX)
+    endif
+!   WENO5 reconstruction removes the low-order Rusanov dissipation that damps
+!   the odd-even (checkerboard) pressure-velocity mode of the collocated AC
+!   scheme, which makes it unstable.  AC_WenoBlend>0 restores a controlled
+!   fraction (0..1) of the first-order (cell-value) Rusanov flux as a safety
+!   dissipation while keeping the 5th-order reconstruction for the rest.
+    if(AC_Recon .ge. 2 .and. AC_WenoBlend .gt. 0.d0) then
+      call ac_flux_rusanov(XW(1,iL,jL,kL),XW(2,iL,jL,kL),XW(3,iL,jL,kL),XW(4,iL,jL,kL), &
+                           XW(1,iR,jR,kR),XW(2,iR,jR,kR),XW(3,iR,jR,kR),XW(4,iR,jR,kR), &
+                           nx1,ny1,nz1, beta, FLX1)
+      sb = min(max(AC_WenoBlend, 0.d0), 1.d0)
+      FLX(1:4) = (1.d0-sb)*FLX(1:4) + sb*FLX1(1:4)
+    endif
+    RAC(1:4,iL,jL,kL) = RAC(1:4,iL,jL,kL) - FLX(1:4)*A
+    RAC(1:4,iR,jR,kR) = RAC(1:4,iR,jR,kR) + FLX(1:4)*A
+   end subroutine ac_face_flux
+
+!===============================================================================
 ! Internal-face inviscid fluxes -> RAC.  RAC must be zeroed before use.
 ! Plane between cells L=(f-1) and R=f :  L gets -F*A, R gets +F*A
 !===============================================================================
@@ -210,64 +483,34 @@
    implicit none
    integer :: nMesh, mBlock, ii, i, j, k
    real(PRE_EC),intent(in) :: beta
-   real(PRE_EC) :: FLX(4), A
-   real(PRE_EC) :: qL,uL,vL,wL, qR,uR,vR,wR
-   real(PRE_EC), external :: ac_lim
    Type (Block_TYPE),pointer:: B
+   interface
+     subroutine ac_face_flux(B, iL,jL,kL, iR,jR,kR, dir, beta)
+       use Global_var
+       use precision_EC
+       Type (Block_TYPE),pointer:: B
+       integer,intent(in):: iL,jL,kL,iR,jR,kR,dir
+       real(PRE_EC),intent(in):: beta
+     end subroutine ac_face_flux
+   end interface
    B => Mesh(nMesh)%Block(mBlock)
 
    do k = 1, B%nz-1
    do j = 1, B%ny-1
    do ii = 2, B%nx-1                  ! i-faces between interior cells
-     A = B%Si(ii,j,k)
-     qL = XW(1,ii-1,j,k) + 0.5d0*ac_lim(XW(1,ii-1,j,k)-XW(1,ii-2,j,k), XW(1,ii,j,k)-XW(1,ii-1,j,k))
-     qR = XW(1,ii  ,j,k) - 0.5d0*ac_lim(XW(1,ii,j,k)-XW(1,ii-1,j,k), XW(1,ii+1,j,k)-XW(1,ii,j,k))
-     uL = XW(2,ii-1,j,k) + 0.5d0*ac_lim(XW(2,ii-1,j,k)-XW(2,ii-2,j,k), XW(2,ii,j,k)-XW(2,ii-1,j,k))
-     uR = XW(2,ii  ,j,k) - 0.5d0*ac_lim(XW(2,ii,j,k)-XW(2,ii-1,j,k), XW(2,ii+1,j,k)-XW(2,ii,j,k))
-     vL = XW(3,ii-1,j,k) + 0.5d0*ac_lim(XW(3,ii-1,j,k)-XW(3,ii-2,j,k), XW(3,ii,j,k)-XW(3,ii-1,j,k))
-     vR = XW(3,ii  ,j,k) - 0.5d0*ac_lim(XW(3,ii,j,k)-XW(3,ii-1,j,k), XW(3,ii+1,j,k)-XW(3,ii,j,k))
-     wL = XW(4,ii-1,j,k) + 0.5d0*ac_lim(XW(4,ii-1,j,k)-XW(4,ii-2,j,k), XW(4,ii,j,k)-XW(4,ii-1,j,k))
-     wR = XW(4,ii  ,j,k) - 0.5d0*ac_lim(XW(4,ii,j,k)-XW(4,ii-1,j,k), XW(4,ii+1,j,k)-XW(4,ii,j,k))
-     call ac_flux_rusanov(qL,uL,vL,wL, qR,uR,vR,wR, &
-                          B%ni1(ii,j,k), B%ni2(ii,j,k), B%ni3(ii,j,k), beta, FLX)
-     RAC(1:4,ii-1,j,k) = RAC(1:4,ii-1,j,k) - FLX(1:4)*A
-     RAC(1:4,ii  ,j,k) = RAC(1:4,ii  ,j,k) + FLX(1:4)*A
+     call ac_face_flux(B, ii-1,j,k, ii,j,k, 1, beta)
    enddo; enddo; enddo
 
    do k = 1, B%nz-1
    do i = 1, B%nx-1
    do ii = 2, B%ny-1                  ! j-faces between interior cells
-     A = B%Sj(i,ii,k)
-     qL = XW(1,i,ii-1,k) + 0.5d0*ac_lim(XW(1,i,ii-1,k)-XW(1,i,ii-2,k), XW(1,i,ii,k)-XW(1,i,ii-1,k))
-     qR = XW(1,i,ii  ,k) - 0.5d0*ac_lim(XW(1,i,ii,k)-XW(1,i,ii-1,k), XW(1,i,ii+1,k)-XW(1,i,ii,k))
-     uL = XW(2,i,ii-1,k) + 0.5d0*ac_lim(XW(2,i,ii-1,k)-XW(2,i,ii-2,k), XW(2,i,ii,k)-XW(2,i,ii-1,k))
-     uR = XW(2,i,ii  ,k) - 0.5d0*ac_lim(XW(2,i,ii,k)-XW(2,i,ii-1,k), XW(2,i,ii+1,k)-XW(2,i,ii,k))
-     vL = XW(3,i,ii-1,k) + 0.5d0*ac_lim(XW(3,i,ii-1,k)-XW(3,i,ii-2,k), XW(3,i,ii,k)-XW(3,i,ii-1,k))
-     vR = XW(3,i,ii  ,k) - 0.5d0*ac_lim(XW(3,i,ii,k)-XW(3,i,ii-1,k), XW(3,i,ii+1,k)-XW(3,i,ii,k))
-     wL = XW(4,i,ii-1,k) + 0.5d0*ac_lim(XW(4,i,ii-1,k)-XW(4,i,ii-2,k), XW(4,i,ii,k)-XW(4,i,ii-1,k))
-     wR = XW(4,i,ii  ,k) - 0.5d0*ac_lim(XW(4,i,ii,k)-XW(4,i,ii-1,k), XW(4,i,ii+1,k)-XW(4,i,ii,k))
-     call ac_flux_rusanov(qL,uL,vL,wL, qR,uR,vR,wR, &
-                          B%nj1(i,ii,k), B%nj2(i,ii,k), B%nj3(i,ii,k), beta, FLX)
-     RAC(1:4,i,ii-1,k) = RAC(1:4,i,ii-1,k) - FLX(1:4)*A
-     RAC(1:4,i,ii  ,k) = RAC(1:4,i,ii  ,k) + FLX(1:4)*A
+     call ac_face_flux(B, i,ii-1,k, i,ii,k, 2, beta)
    enddo; enddo; enddo
 
    do j = 1, B%ny-1
    do i = 1, B%nx-1
    do ii = 2, B%nz-1                  ! k-faces between interior cells
-     A = B%Sk(i,j,ii)
-     qL = XW(1,i,j,ii-1) + 0.5d0*ac_lim(XW(1,i,j,ii-1)-XW(1,i,j,ii-2), XW(1,i,j,ii)-XW(1,i,j,ii-1))
-     qR = XW(1,i,j,ii  ) - 0.5d0*ac_lim(XW(1,i,j,ii)-XW(1,i,j,ii-1), XW(1,i,j,ii+1)-XW(1,i,j,ii))
-     uL = XW(2,i,j,ii-1) + 0.5d0*ac_lim(XW(2,i,j,ii-1)-XW(2,i,j,ii-2), XW(2,i,j,ii)-XW(2,i,j,ii-1))
-     uR = XW(2,i,j,ii  ) - 0.5d0*ac_lim(XW(2,i,j,ii)-XW(2,i,j,ii-1), XW(2,i,j,ii+1)-XW(2,i,j,ii))
-     vL = XW(3,i,j,ii-1) + 0.5d0*ac_lim(XW(3,i,j,ii-1)-XW(3,i,j,ii-2), XW(3,i,j,ii)-XW(3,i,j,ii-1))
-     vR = XW(3,i,j,ii  ) - 0.5d0*ac_lim(XW(3,i,j,ii)-XW(3,i,j,ii-1), XW(3,i,j,ii+1)-XW(3,i,j,ii))
-     wL = XW(4,i,j,ii-1) + 0.5d0*ac_lim(XW(4,i,j,ii-1)-XW(4,i,j,ii-2), XW(4,i,j,ii)-XW(4,i,j,ii-1))
-     wR = XW(4,i,j,ii  ) - 0.5d0*ac_lim(XW(4,i,j,ii)-XW(4,i,j,ii-1), XW(4,i,j,ii+1)-XW(4,i,j,ii))
-     call ac_flux_rusanov(qL,uL,vL,wL, qR,uR,vR,wR, &
-                          B%nk1(i,j,ii), B%nk2(i,j,ii), B%nk3(i,j,ii), beta, FLX)
-     RAC(1:4,i,j,ii-1) = RAC(1:4,i,j,ii-1) - FLX(1:4)*A
-     RAC(1:4,i,j,ii  ) = RAC(1:4,i,j,ii  ) + FLX(1:4)*A
+     call ac_face_flux(B, i,j,ii-1, i,j,ii, 3, beta)
    enddo; enddo; enddo
   end subroutine ac_internal_flux
 
@@ -313,25 +556,48 @@
 
    do ksub = 1, B%subface
      Bc => B%bc_msg(ksub)
-     if(is_interface_bc(Bc%bc)) cycle
-     if(associated(B%bc_msg2)) then
-       if(is_interface_bc(B%bc_msg2(ksub)%bc)) cycle
-     endif
      face_s = Bc%face
      ib=Bc%ib; ie=Bc%ie; jb=Bc%jb; je=Bc%je; kb=Bc%kb; ke=Bc%ke
 
 !    --- classify BC and build face state ---
+!    No-penetration interfaces (LOWSPEED<->SOLID 13, LOWSPEED<->POROUS 16):
+!    these subfaces carry no physical BC but DO need a flux on the adjacent
+!    interior cell.  Previously they were `cycle`d here and are also outside
+!    the ac_internal_flux interior-face loops, so NO inviscid (pressure /
+!    convective / beta*un) flux was applied while the VISCOUS flux was
+!    (ac_viscous_res loops all i/j/k planes).  The interface cell's normal
+!    momentum was then balanced only by a spurious viscous drag, producing a
+!    spurious interface pressure spike and normal velocity (BJ case: v ~ -5e-3
+!    on the interface row, p discontinuity ~ 4e-3) and a wrong dp/dx.
+!    On a flat, aligned interface the correct kinematic condition is
+!    no-penetration with the pressure force transmitted -> use the same
+!    pressure-only flux as a wall; the tangential shear still comes from the
+!    viscous term using the neighbour ghost.  Interfaces that carry mass flux
+!    (e.g. 19 blowing) keep the old (no-flux) path for now.
      qb = -1.d0
-     if(Bc%bc .eq. BC_Wall .or. Bc%bc .eq. BC_Symmetry) then
-       qb = 0.d0                      ! pressure-only flux marker
-     else if(Bc%bc .eq. BC_Outflow .or. Bc%bc .eq. BC_LS_Outlet .or. &
-             Bc%bc .eq. BC_Farfield) then
-       qb = -2.d0                     ! prescribed outlet pressure
-     else if(Bc%bc .eq. BC_Inflow .or. Bc%bc .eq. BC_LS_Inlet) then
-       if(LS_Inlet_Type .eq. 3) then
-         qb = -3.d0                   ! pressure inlet
-       else
-         qb = -4.d0                   ! velocity inlet
+     if(Bc%bc .eq. BC_Interface_LowSolid .or. &
+        Bc%bc .eq. BC_Interface_LowPorous) qb = 0.d0
+     if(associated(B%bc_msg2)) then
+       if(B%bc_msg2(ksub)%bc .eq. BC_Interface_LowSolid .or. &
+          B%bc_msg2(ksub)%bc .eq. BC_Interface_LowPorous) qb = 0.d0
+     endif
+     if(qb .lt. 0.d0) then
+!      other interfaces (12/19..., negative inner codes) keep old no-flux path
+       if(is_interface_bc(Bc%bc)) cycle
+       if(associated(B%bc_msg2)) then
+         if(is_interface_bc(B%bc_msg2(ksub)%bc)) cycle
+       endif
+       if(Bc%bc .eq. BC_Wall .or. Bc%bc .eq. BC_Symmetry) then
+         qb = 0.d0                      ! pressure-only flux marker
+       else if(Bc%bc .eq. BC_Outflow .or. Bc%bc .eq. BC_LS_Outlet .or. &
+               Bc%bc .eq. BC_Farfield) then
+         qb = -2.d0                     ! prescribed outlet pressure
+       else if(Bc%bc .eq. BC_Inflow .or. Bc%bc .eq. BC_LS_Inlet) then
+         if(LS_Inlet_Type .eq. 3) then
+           qb = -3.d0                   ! pressure inlet
+         else
+           qb = -4.d0                   ! velocity inlet
+         endif
        endif
      endif
 

@@ -240,6 +240,10 @@
    real(PRE_EC),save:: AC_CFLv=0.5d0 ! viscous CFL limit for the pseudo time step
    real(PRE_EC),save:: AC_Tol=1.d-7  ! convergence: dimensionless res_q & res_m < AC_Tol
    real(PRE_EC),save:: AC_w=1.d0     ! LU-SGS relaxation (>=0.5)
+   integer,save:: AC_Flux=1   ! AC inviscid flux: 1=Rusanov(LLF), 2=Steger-Warming, 3=AUSM+
+   integer,save:: AC_Recon=1  ! AC face reconstruction: 1=2nd-order MUSCL(van Leer), 2=WENO5, 3=WENO3
+   integer,save:: AC_Limiter=1 ! MUSCL limiter: 1=van Leer, 2=minmod (more robust/dissipative)
+   real(PRE_EC),save:: AC_WenoBlend=0.d0 ! WENO only: blend fraction of the 1st-order Rusanov flux (0..1)
 
    integer,save:: FD_Flux,FD_scheme !
    integer,save:: KRK=0 !

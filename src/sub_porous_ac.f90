@@ -58,7 +58,8 @@
 
    if(my_id .eq. 0) print*, ' AC porous solver (LS_Algorithm=3) block', mBlock, &
       ' eps=', B%porous_eps, ' dp=', B%porous_dp, ' hv=', B%porous_hv, &
-      ' beta=', beta, ' CFL=', AC_CFL
+      ' beta=', beta, ' CFL=', AC_CFL, ' flux=', AC_Flux, ' recon=', AC_Recon, &
+      ' lim=', AC_Limiter
 
    do iter = 1, AC_Max_Iter
      call ac_fill_ghost(nMesh, mBlock, uin_x, uin_y, uin_z)
