@@ -119,6 +119,16 @@ $\varepsilon$ & $K\ (\mathrm{m^2})$ & $\bar u$ 计算 & $\bar u$ Brinkman & 误�
 \end{tabular}
 \end{center}
 
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.94\textwidth]{figures/plug_fields.png}
+\caption{Porous Plug 云图（AC，压差驱动）：上行 $|u|$、下行压力 $p$，$\varepsilon=0.3/0.6/0.9$。柱均速度误差 $\le1.5\%$。}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.94\textwidth]{figures/plug_pressure.png}
+\caption{Porous Plug 压力沿程：CFD（空心）与 Darcy--Brinkman 解析（实线）对比；$dp/dx$ 偏差 $\approx3$--$6\%$（$\varepsilon=0.3/0.6/0.9$）。}
+\end{figure}
+
 \subsection{（9）一维发汗冷却 LTNE（$3\varepsilon\times3G\times3q=27$ 例）}
 \textbf{方程/解析解.} 两温度模型（式 (2)）；消元得 $T_s^{\prime\prime\prime}+A T_s^{\prime\prime}-B T_s^{\prime}=0$，
 $A=h_v/(G c_p)$，$B=h_v/k_{se}$，$k_{se}=(1-\varepsilon)k_s$，配冷端 Robin 与热端定热流得闭式解。\par

@@ -1,0 +1,5 @@
+eps=0.3 K=3.673e-06  dp/dx CFD=-3.21601e-02  analytic=-3.24707e-02  ubar=6.5420e-05  rel.p-err=6.372e-02
+eps=0.6 K=9.000e-05  dp/dx CFD=-3.14300e-02  analytic=-3.19067e-02  ubar=3.8622e-04  rel.p-err=4.601e-02
+eps=0.9 K=4.860e-03  dp/dx CFD=-3.12592e-02  analytic=-3.13905e-02  ubar=7.9583e-03  rel.p-err=3.007e-02
+plug_fields.png saved
+plug_pressure.png saved

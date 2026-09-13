@@ -1,1 +1,1 @@
-Cd=2.3087 (pressure 2.3084)  Cl=0.0009  Lr=none  u_min(wake)=0.04585
+Cd=2.3088 (pressure 2.3085)  Cl=0.0010  Lr=none  u_min(wake)=0.04585
