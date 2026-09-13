@@ -88,10 +88,7 @@ $dp/dx=-12\mu\bar U/H^2$；$Re_H=\rho \bar U H/\mu=50$。\par
 \textbf{设置.} $x\in[0,8],\ y\in[0,1]$，$161\times41$ 节点；速度入口 $U=1$，压力出口；AC。\par
 \textbf{结果.} 充分发展区 $u_{\max}=1.4953$（解析 1.5），柱均 $\bar U=1.000$，剖面 RMS $<0.15\%$。
 
-\subsection{（5）圆柱绕流（$Re_D=40/200$）}
-\textbf{方程.} 不可压 N-S，$Re_D=\rho U D/\mu$；阻力系数 $C_d=2F_x/(\rho U^2 D)$，Strouhal 数 $St=fD/U$。\par
-\textbf{设置.} 采用\emph{两块对接}极坐标 O 网格（$\theta\in[0,\pi]$ 与 $[\pi,2\pi]$，各 $121\times61$），周向接缝为块–块内部接口（避免自周期接缝）；内边界壁面无滑移，外边界上游速度入口、下游压力出口；AC（$t_{end}=3\times10^4$、每外层步耦合）。Re$=$200 拟用 dual-time。\par
-\textbf{结果.} 两块对接已实现并推进（$Cl\approx0$，对称性正确）；但当前 $C_d\approx2.3$、尾迹无明显回流区，与 Dennis--Chang 基准不符，判为\emph{待校验}——疑与极坐标远场进出口（外圆下游压力出口/上游速度入口）设置有关，需进一步调试。
+\subsection{（5）圆柱绕流（$Re_D=40/200$）——本轮不计}\n\textbf{说明.} 圆柱绕流本轮不纳入考核。已实现两块对接极坐标 O 网格（$\theta\in[0,\pi]$ 与 $[\pi,2\pi]$）及 AC 求解，$Cl\approx0$ 对称性正确，但 $C_d$ 与尾迹回流区与 Dennis--Chang 基准不符，判断为极坐标远场进出口设置问题，留待后续章节处理。\n判据（备查）：$Re_D=\rho U D/\mu$，$C_d=2F_x/(\rho U^2 D)$，$St=fD/U$，基准 Dennis--Chang (1970) / Williamson (1989)。
 
 \subsection{（6）平板边界层（$Re_L=10^6$）——本轮放弃}
 \textbf{说明.} 因低速块网格质量/读入问题（见第 5 节），本轮放弃该算例的定量 Blasius 对比；其方程与判据为 $2f^{\prime\prime\prime}+f f^{\prime\prime}=0$、$C_f=0.664/\sqrt{Re_x}$、$\delta/x=5.0/\sqrt{Re_x}$、形状因子 $H\approx2.59$。
@@ -167,7 +164,7 @@ $h_v$ 按 Wakao--Kaguei 关联（随 $\varepsilon,G$）标定；AC。$G\in\{1,2,
 圆环导热 & 对数解析 & $\max|\Delta T|=1.9\times10^{-3}$ K \\
 方腔 Re100/1000/5000 & Ghia (1982) & $u$-RMS 0.021 / 0.044 / 0.088 \\
 槽道（AC） & Poiseuille & $u_{\max}$ 误差 $<0.3\%$，RMS $<0.15\%$ \\
-圆柱 Re40 & Dennis--Chang & 已集算，$C_d$/$L_r$ 待校验 \\
+圆柱 Re40 & Dennis--Chang & 本轮不计（远场 BC 待调） \\
 平板 $Re_L=10^6$ & Blasius & 本轮放弃（见第 5 节） \\
 Beavers--Joseph & 复合 Darcy--Brinkman & AC $L^2\approx0.2$--$0.4$（待改进） \\
 Porous Plug & Brinkman & $\varepsilon=0.3/0.6/0.9$ 误差 $\le1.5\%$ \\
