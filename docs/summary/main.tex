@@ -52,12 +52,14 @@ G c_p \frac{d T_f}{dy}=h_v(T_s-T_f),\qquad (1-\varepsilon)k_s\frac{d^2T_s}{dy^2}
 \section{算例设置、解析解与对比}
 
 \subsection{（1）一维稳态导热（两类边界条件）}
-\textbf{方程/解析解.} $d/dx(k\,dT/dx)=0$，$L=1$ m，$k=15.1\,\mathrm{W/(m\,K)}$。\n两类边界：(i) \emph{两端定温} $T(0)=300,\,T(L)=400$ K $\Rightarrow T=T_0+(T_L-T_0)x/L$；(ii) \emph{一端等温、一端热流} $T(0)=300,\,-k\,dT/dx|_L=q=800\,\mathrm{W/m^2}$ $\Rightarrow T=T_0+(q/k)x$。\par
+\textbf{方程/解析解.} $d/dx(k\,dT/dx)=0$，$L=1$ m，$k=15.1\,\mathrm{W/(m\,K)}$。
+两类边界：(i) \emph{两端定温} $T(0)=300,\,T(L)=400$ K $\Rightarrow T=T_0+(T_L-T_0)x/L$；(ii) \emph{一端等温、一端热流} $T(0)=300,\,-k\,dT/dx|_L=q=800\,\mathrm{W/m^2}$ $\Rightarrow T=T_0+(q/k)x$。\par
 \textbf{设置.} $51\times9\times9$ 节点；\texttt{solid\_bc.inp} 对应两套边界。\par
 \textbf{结果.} 定温–定温 $\max|\Delta T|=5.0\times10^{-8}$ K；定温–热流 $\max|\Delta T|=1.07\times10^{-6}$ K（相对 $2.1\times10^{-8}$）。
 
 \subsection{（2）圆环稳态导热（两类边界条件）}
-\textbf{方程/解析解.} $\frac{1}{r}\frac{d}{dr}(r k\frac{dT}{dr})=0$，$R_i=0.1,\,R_o=0.2$ m，$k=15.1$。\n两类边界：(i) \emph{内外环定温} $T(R_i)=350,\,T(R_o)=300$ $\Rightarrow T=T_i+(T_o-T_i)\ln(r/R_i)/\ln(R_o/R_i)$；(ii) \emph{内环热流、外环定温} $q=800,\,T(R_o)=300$ $\Rightarrow T=T_o+(q R_i/k)\ln(R_o/r)$。\par
+\textbf{方程/解析解.} $\frac{1}{r}\frac{d}{dr}(r k\frac{dT}{dr})=0$，$R_i=0.1,\,R_o=0.2$ m，$k=15.1$。
+两类边界：(i) \emph{内外环定温} $T(R_i)=350,\,T(R_o)=300$ $\Rightarrow T=T_i+(T_o-T_i)\ln(r/R_i)/\ln(R_o/R_i)$；(ii) \emph{内环热流、外环定温} $q=800,\,T(R_o)=300$ $\Rightarrow T=T_o+(q R_i/k)\ln(R_o/r)$。\par
 \textbf{设置.} 半环 O 网格 $40\times80$（准 2D）。\par
 \textbf{结果.} 定温–定温 $\max|\Delta T|=1.94\times10^{-2}$ K；定温–热流 $1.92\times10^{-3}$ K。
 
@@ -88,7 +90,9 @@ $dp/dx=-12\mu\bar U/H^2$；$Re_H=\rho \bar U H/\mu=50$。\par
 \textbf{设置.} $x\in[0,8],\ y\in[0,1]$，$161\times41$ 节点；速度入口 $U=1$，压力出口；AC。\par
 \textbf{结果.} 充分发展区 $u_{\max}=1.4953$（解析 1.5），柱均 $\bar U=1.000$，剖面 RMS $<0.15\%$。
 
-\subsection{（5）圆柱绕流（$Re_D=40/200$）——本轮不计}\n\textbf{说明.} 圆柱绕流本轮不纳入考核。已实现两块对接极坐标 O 网格（$\theta\in[0,\pi]$ 与 $[\pi,2\pi]$）及 AC 求解，$Cl\approx0$ 对称性正确，但 $C_d$ 与尾迹回流区与 Dennis--Chang 基准不符，判断为极坐标远场进出口设置问题，留待后续章节处理。\n判据（备查）：$Re_D=\rho U D/\mu$，$C_d=2F_x/(\rho U^2 D)$，$St=fD/U$，基准 Dennis--Chang (1970) / Williamson (1989)。
+\subsection{（5）圆柱绕流（$Re_D=40/200$）——本轮不计}
+\textbf{说明.} 圆柱绕流本轮不纳入考核。已实现两块对接极坐标 O 网格（$\theta\in[0,\pi]$ 与 $[\pi,2\pi]$）及 AC 求解，$Cl\approx0$ 对称性正确，但 $C_d$ 与尾迹回流区与 Dennis--Chang 基准不符，判断为极坐标远场进出口设置问题，留待后续章节处理。
+判据（备查）：$Re_D=\rho U D/\mu$，$C_d=2F_x/(\rho U^2 D)$，$St=fD/U$，基准 Dennis--Chang (1970) / Williamson (1989)。
 
 \subsection{（6）平板边界层（$Re_L=10^6$）——本轮放弃}
 \textbf{说明.} 因低速块网格质量/读入问题（见第 5 节），本轮放弃该算例的定量 Blasius 对比；其方程与判据为 $2f^{\prime\prime\prime}+f f^{\prime\prime}=0$、$C_f=0.664/\sqrt{Re_x}$、$\delta/x=5.0/\sqrt{Re_x}$、形状因子 $H\approx2.59$。
@@ -97,7 +101,8 @@ $dp/dx=-12\mu\bar U/H^2$；$Re_H=\rho \bar U H/\mu=50$。\par
 \textbf{方程/解析解.} 自由流体 $\mu u^{\prime\prime}=\frac{dp}{dx}$；多孔床 $\mu u^{\prime\prime}-(\varepsilon^2\mu/K)u=\frac{dp}{dx}$，
 $K=d_p^2\varepsilon^3/[150(1-\varepsilon)^2]$；界面速度与剪应力连续（有限床复合解，深床极限即经典 BJ 滑移）。\par
 \textbf{设置.} 两块（自由通道 + 多孔床 $H_p=1.2$），$d_p=0.5$ m，$\mu=0.02$，压差驱动，接口码 16，AC。\par
-\textbf{结果.} AC 收敛；与复合 Darcy--Brinkman 剖面的 $L^2$ 相对偏差：$\varepsilon=0.3/0.6/0.9$ 分别为 $0.41/0.21/0.21$（粗网格 $81\times21$）。\n加密网格（$161\times81$）跑到约 1/3 步长时偏差反而更大（$1.01/0.79/0.23$），说明 AC 显式逐块耦合在细网格上收敛更慢；\textbf{本轮不再进一步加密，按最新情况记录}，列为\emph{待改进}（可在细网格上增加外迭代/欠松弛改进）。
+\textbf{结果.} AC 收敛；与复合 Darcy--Brinkman 剖面的 $L^2$ 相对偏差：$\varepsilon=0.3/0.6/0.9$ 分别为 $0.41/0.21/0.21$（粗网格 $81\times21$）。
+加密网格（$161\times81$）跑到约 1/3 步长时偏差反而更大（$1.01/0.79/0.23$），说明 AC 显式逐块耦合在细网格上收敛更慢；\textbf{本轮不再进一步加密，按最新情况记录}，列为\emph{待改进}（可在细网格上增加外迭代/欠松弛改进）。
 
 \begin{figure}[htbp]\centering
 \includegraphics[width=0.94\textwidth]{figures/bj_profiles.png}
