@@ -102,7 +102,7 @@ $dp/dx=-12\mu\bar U/H^2$；$Re_H=\rho \bar U H/\mu=50$。\par
 $K=d_p^2\varepsilon^3/[150(1-\varepsilon)^2]$；界面速度与剪应力连续（有限床复合解，深床极限即经典 BJ 滑移）。\par
 \textbf{设置.} 两块（自由通道 + 多孔床 $H_p=1.2$），$d_p=0.5$ m，$\mu=0.02$，压差驱动，接口码 16，AC。\par
 \textbf{结果.} AC 收敛；与复合 Darcy--Brinkman 剖面的 $L^2$ 相对偏差：$\varepsilon=0.3/0.6/0.9$ 分别为 $0.41/0.21/0.21$（粗网格 $81\times21$）。
-加密网格（$161\times81$，同一 block-Jacobi 格式，$t_{end}=3\times10^5$）运行至 Kstep$=10^5$（约 1/3）时偏差反而更大（$1.01/0.79/0.23$），且逐块 AC 耦合在细网格上收敛明显变慢（外迭代残差停在 $\sim0.1$--$0.18$），该加密运行随后**超时终止、未收敛**。\textbf{本轮不再进一步加密或调试，按最新情况记录}（以粗网格收敛解为准），列为\emph{待改进}（细网格需增加内迭代/欠松弛或界面隐式处理）。
+加密网格（$161\times81$，同一 block-Jacobi 格式，$t_{end}=3\times10^5$）运行至 Kstep$=10^5$（约 1/3）时偏差反而更大（$1.01/0.79/0.23$），且逐块 AC 耦合在细网格上收敛明显变慢（外迭代残差停在 $\sim0.1$--$0.18$），该加密运行随后\textbf{超时终止、未收敛}。\textbf{本轮不再进一步加密或调试，按最新情况记录}（以粗网格收敛解为准），列为\emph{待改进}（细网格需增加内迭代/欠松弛或界面隐式处理）。
 
 \begin{figure}[htbp]\centering
 \includegraphics[width=0.94\textwidth]{figures/bj_profiles.png}
