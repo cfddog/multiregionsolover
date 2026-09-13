@@ -85,9 +85,8 @@ $dp/dx=-12\mu\bar U/H^2$；$Re_H=\rho \bar U H/\mu=50$。\par
 
 \subsection{（5）圆柱绕流（$Re_D=40/200$）}
 \textbf{方程.} 不可压 N-S，$Re_D=\rho U D/\mu$；阻力系数 $C_d=2F_x/(\rho U^2 D)$，Strouhal 数 $St=fD/U$。\par
-\textbf{设置.} 极坐标 O 网格 $121\times121$（$R_{in}=0.5,\ R_{out}=25$），周向接缝以自周期内边界连接；
-内边界壁面无滑移，外边界上游速度入口、下游压力出口；AC。Re$=$200 采用 dual-time。\par
-\textbf{结果.} AC 已收敛（$res_q\!\sim\!10^{-7}$，65635 次伪迭代）；但初步 $C_d$ 与尾涡长度与基准不符（极坐标自周期接缝/进出口设置待调试），暂列为\emph{待校验}。
+\textbf{设置.} 采用\emph{两块对接}极坐标 O 网格（$\theta\in[0,\pi]$ 与 $[\pi,2\pi]$，各 $121\times61$），周向接缝为块–块内部接口（避免自周期接缝）；内边界壁面无滑移，外边界上游速度入口、下游压力出口；AC（$t_{end}=3\times10^4$、每外层步耦合）。Re$=$200 拟用 dual-time。\par
+\textbf{结果.} 两块对接已实现并推进（$Cl\approx0$，对称性正确）；但当前 $C_d\approx2.3$、尾迹无明显回流区，与 Dennis--Chang 基准不符，判为\emph{待校验}——疑与极坐标远场进出口（外圆下游压力出口/上游速度入口）设置有关，需进一步调试。
 
 \subsection{（6）平板边界层（$Re_L=10^6$）——本轮放弃}
 \textbf{说明.} 因低速块网格质量/读入问题（见第 5 节），本轮放弃该算例的定量 Blasius 对比；其方程与判据为 $2f^{\prime\prime\prime}+f f^{\prime\prime}=0$、$C_f=0.664/\sqrt{Re_x}$、$\delta/x=5.0/\sqrt{Re_x}$、形状因子 $H\approx2.59$。
