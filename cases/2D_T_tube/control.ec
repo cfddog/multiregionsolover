@@ -93,6 +93,6 @@ AC_Max_Iter=100
 AC_Print=100
 AC_Tol=1.d-6
 AC_Flux=1
-AC_Recon=0
+AC_Recon=1
 AC_Limiter=1
 $end

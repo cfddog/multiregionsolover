@@ -95,7 +95,9 @@ $control_ec
   AC_Print=2000
   AC_Tol=1.d-8
   AC_w=1.0d0
-  AC_Flux=3
+  AC_Flux=1          ! AC_Flux=3 (AUSM+) was REMOVED from the solver on 2026-09-17:
+                     ! it diverged to NaN within 2000 steps on this case (run_ausm.log)
+                     ! and has no consistent low-Mach pressure dissipation for AC.
   AC_Recon=1
   AC_Limiter=1
   AC_WenoBlend=0.d0
