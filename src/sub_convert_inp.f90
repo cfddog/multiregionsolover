@@ -60,6 +60,15 @@
       Bc => B%bc_msg(ksub)
       Bc%f_no=ksub                        ! 子面号
 	  read(88,*)  kb(1),ke(1),kb(2),ke(2),kb(3),ke(3),Bc%bc
+!     A face left without a boundary code gets NO flux in every solver, which
+!     silently produces a wrong (often diverging) solution -- warn loudly.
+      if(Bc%bc .eq. 0) then
+        print*, ' WARNING: bc3d.inp face with boundary code 0 (unset) !!!'
+        print*, '   block=', m, ' subface=', ksub, &
+                ' ib,ie,jb,je,kb,ke=', kb(1),ke(1),kb(2),ke(2),kb(3),ke(3)
+        print*, '   -> no flux is applied there; give it a real code', &
+                ' (2=wall 3=symmetry 5=inlet 6=outlet -1=inner link)'
+      endif
 	 
 	  if(Bc%bc .lt. 0) then
  !  --------有连接的情况 (内边界)--------------------------------------------------------	    

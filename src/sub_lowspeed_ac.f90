@@ -21,6 +21,42 @@
    real(PRE_EC), allocatable, dimension(:,:,:)   :: SIG   ! spectral sum
    real(PRE_EC), allocatable, dimension(:,:,:)   :: dragc ! porous drag coeff (1/s, per cell)
    integer :: ac_nxw=0, ac_nyw=0, ac_nzw=0, ac_lap=0
+!  ---- same-class (LOWSPEED<->LOWSPEED) block-interface flux registry --------
+!  The OWNER of an interface (the block with the SMALLER block number) computes
+!  the interface flux ONCE per pseudo-step and stores it in FSH indexed by its
+!  own cell adjacent to the interface; every other block on that interface only
+!  READS it and applies the opposite contribution to its own cell.  The flux is
+!  therefore single valued and the interface is conservative to round-off.
+!  Evaluating the flux on both sides from their own ghost buffers is NOT
+!  conservative: the numerical dissipation term 0.5*lam*(qR-qL) has lam even in
+!  the face normal, so the two one-sided fluxes differ by lam*(qB-qA) instead of
+!  cancelling -- a spurious interface mass/momentum source.
+!  If a pair cannot be resolved unambiguously (id = 0) the historical two-sided
+!  flux is used, so the change is backward compatible.
+   integer, parameter :: AC_IFC_MAX = 64
+   integer :: ac_ifc_n = 0
+   integer :: ac_ifc_mesh = -1
+!  NOTE (known limitation, 2026-09-15): the registry is built for ONE mesh
+!  (ac_ifc_mesh) and is rebuilt when the AC solver is called for another mesh,
+!  which also zeroes FSH.  Same-class (BC_Inner) interfaces always live inside a
+!  single mesh, so this is exact as long as the blocks on either side of an
+!  interface are solved without an intervening switch to another mesh (all
+!  current cases: 2-block / 4-block channel, BJ, bl_cht, fluid_solid).  If a
+!  future run interleaves same-class AC interfaces across meshes, build the
+!  registry once for all meshes (loop nMesh=1..Num_Mesh, store the mesh number
+!  per interface and look the owner up in Mesh(ac_ifc_msh(id))).
+   integer :: ac_ifc_own(AC_IFC_MAX) = 0
+   integer :: ac_ifc_ks (AC_IFC_MAX) = 0
+   integer :: ac_ifc_nb (AC_IFC_MAX) = 0
+   real(PRE_EC), allocatable, dimension(:,:,:,:,:) :: FSH  ! (4,nx,ny,nz,nifc)
+!  ---- optional diagnostic for the interface sharing (default OFF) -----------
+!  ac_dbg=1 prints, for one face of every same-class interface (the first 3
+!  pseudo-steps and then every 500), the owner cell / ghost state, the stored
+!  flux and the neighbour's mapped read slot, plus the (mBlock,ksub) ->
+!  (id,is_owner) resolution of the first few subfaces.  Used to verify that the
+!  neighbour reads exactly the slot the owner wrote (2-block channel 2026-09-15).
+   integer :: ac_dbg = 0
+   integer :: ac_dbg_own = 0, ac_dbg_nb = 0, ac_dbg_find = 0
   end module lows_ac_work
 
 !===============================================================================
@@ -38,6 +74,12 @@
    real(PRE_EC) :: uin_x, uin_y, uin_z, Uref, beta, U2, L
    real(PRE_EC) :: rq, rm, rq0, rm0
    logical :: have_pbc
+   interface
+     subroutine update_buffer_onemesh(nMesh)
+       use precision_EC
+       integer:: nMesh
+     end subroutine update_buffer_onemesh
+   end interface
 
    B => Mesh(nMesh)%Block(mBlock)
    nx = B%nx; ny = B%ny; nz = B%nz
@@ -74,6 +116,13 @@
    rq0 = 0.d0; rm0 = 0.d0
    do iter = 1, AC_Max_Iter
      call ac_fill_ghost(nMesh, mBlock, uin_x, uin_y, uin_z)
+!    Same-class block interfaces (BC_Inner, -1): refresh the ghost
+!    buffers from the neighbours on EVERY pseudo-step, not only once per
+!    outer step.  The lagged interface is what destabilises the coupled
+!    AC march.  Restricted to a single process: a per-pseudo-step MPI
+!    exchange would require both sides to iterate the same number of
+!    times, which they do not (each block exits on AC_Tol).
+     if(Total_proc .eq. 1) call update_buffer_onemesh(nMesh)
      call ac_load_state(nMesh, mBlock)
      call ac_boundary_flux(nMesh, mBlock, beta, uin_x, uin_y, uin_z)
      call ac_internal_flux(nMesh, mBlock, beta)
@@ -137,7 +186,7 @@
    use Global_var
    use const_var
    implicit none
-   integer :: nMesh, mBlock, ksub
+   integer :: nMesh, mBlock, ksub, mb
    Type (Block_TYPE),pointer:: B
    TYPE (BC_MSG_TYPE),pointer:: Bc
    logical :: flag
@@ -154,6 +203,29 @@
      if((Bc%bc .eq. BC_Inflow .or. Bc%bc .eq. BC_LS_Inlet) .and. &
         LS_Inlet_Type .eq. 3) flag = .true.
    enddo
+!  Coupled same-class blocks carry ONE pressure field: a pressure BC on any
+!  low-speed block of the mesh anchors the level of all of them through the
+!  interface ghost, so NO block may remove its own mean pressure.  Removing the
+!  per-block mean of an unanchored inlet block injects a spurious pressure jump
+!  across each interface and lets that pressure mode grow (block-1 style
+!  "converges then diverges"); this is what killed the multi-block AC runs.
+   if(.not. flag) then
+     do mb = 1, Mesh(nMesh)%Num_Block
+       if(mb .eq. mBlock) cycle
+       if(Mesh(nMesh)%Block(mb)%Block_type .ne. BLOCK_LOWSPEED) cycle
+       if(.not. associated(Mesh(nMesh)%Block(mb)%bc_msg)) cycle
+       B => Mesh(nMesh)%Block(mb)
+       do ksub = 1, B%subface
+         Bc => B%bc_msg(ksub)
+         if(is_interface_bc(Bc%bc)) cycle
+         if(Bc%bc .eq. BC_Outflow .or. Bc%bc .eq. BC_LS_Outlet .or. &
+            Bc%bc .eq. BC_Farfield) flag = .true.
+         if((Bc%bc .eq. BC_Inflow .or. Bc%bc .eq. BC_LS_Inlet) .and. &
+            LS_Inlet_Type .eq. 3) flag = .true.
+       enddo
+     enddo
+     B => Mesh(nMesh)%Block(mBlock)
+   endif
   end subroutine ac_have_pressure_bc
 
 !===============================================================================
@@ -474,6 +546,356 @@
    end subroutine ac_face_flux
 
 !===============================================================================
+! First-order Rusanov (LLF) flux on ONE face between cells L and R.
+! Used on the same-class block-interface planes: the interface is closed with
+! a robust dissipative flux built DIRECTLY from the two cell states, with no
+! reconstruction.  A reconstructed (MUSCL/AUSM+) interface flux driven by
+! ghost data that is only refreshed once per outer step is what excites the
+! odd-even instability of the collocated AC scheme; the plain Rusanov flux
+! adds the missing dissipation.  RAC(L) -= F*A ; RAC(R) += F*A.
+!===============================================================================
+   subroutine ac_face_flux_rus1(B, iL,jL,kL, iR,jR,kR, dir, beta)
+    use Global_var
+    use lows_ac_work
+    implicit none
+    Type(Block_TYPE),pointer:: B
+    integer,intent(in):: iL,jL,kL,iR,jR,kR,dir
+    real(PRE_EC),intent(in):: beta
+    real(PRE_EC) :: FLX(4), A, nx1,ny1,nz1
+    if(dir .eq. 1) then
+      A=B%Si(iR,jR,kR); nx1=B%ni1(iR,jR,kR); ny1=B%ni2(iR,jR,kR); nz1=B%ni3(iR,jR,kR)
+    else if(dir .eq. 2) then
+      A=B%Sj(iR,jR,kR); nx1=B%nj1(iR,jR,kR); ny1=B%nj2(iR,jR,kR); nz1=B%nj3(iR,jR,kR)
+    else
+      A=B%Sk(iR,jR,kR); nx1=B%nk1(iR,jR,kR); ny1=B%nk2(iR,jR,kR); nz1=B%nk3(iR,jR,kR)
+    endif
+    call ac_flux_rusanov(XW(1,iL,jL,kL),XW(2,iL,jL,kL),XW(3,iL,jL,kL),XW(4,iL,jL,kL), &
+                         XW(1,iR,jR,kR),XW(2,iR,jR,kR),XW(3,iR,jR,kR),XW(4,iR,jR,kR), &
+                         nx1,ny1,nz1, beta, FLX)
+    RAC(1:4,iL,jL,kL) = RAC(1:4,iL,jL,kL) - FLX(1:4)*A
+    RAC(1:4,iR,jR,kR) = RAC(1:4,iR,jR,kR) + FLX(1:4)*A
+   end subroutine ac_face_flux_rus1
+
+!===============================================================================
+! Same-class block-interface registry (owner = block with the smaller number).
+! ===============================================================================
+   subroutine ac_build_ifc_registry(nMesh)
+    use Global_var
+    use const_var
+    use lows_ac_work
+    implicit none
+    integer :: nMesh, mBlock, ksub, nb, mx, my, mz
+    Type (Block_TYPE),pointer:: B
+    TYPE (BC_MSG_TYPE),pointer:: Bc
+    if(allocated(FSH)) deallocate(FSH)
+    ac_ifc_n = 0
+    mx = 1; my = 1; mz = 1
+    do mBlock = 1, Mesh(nMesh)%Num_Block
+      B => Mesh(nMesh)%Block(mBlock)
+      if(B%Block_type .ne. BLOCK_LOWSPEED) cycle
+      if(.not. associated(B%bc_msg)) cycle
+      do ksub = 1, B%subface
+        Bc => B%bc_msg(ksub)
+        if(.not. is_interface_bc(Bc%bc)) cycle
+        nb = Bc%nb1
+        if(nb .le. 0 .or. nb .gt. Mesh(nMesh)%Num_Block) cycle
+        if(Block_Type_List(nb) .ne. BLOCK_LOWSPEED) cycle
+        if(mBlock .ge. nb) cycle
+        ac_ifc_n = ac_ifc_n + 1
+        if(ac_ifc_n .le. AC_IFC_MAX) then
+          ac_ifc_own(ac_ifc_n) = mBlock
+          ac_ifc_ks (ac_ifc_n) = ksub
+          ac_ifc_nb (ac_ifc_n) = nb
+        endif
+        mx = max(mx, B%nx); my = max(my, B%ny); mz = max(mz, B%nz)
+      enddo
+    enddo
+    if(ac_ifc_n .gt. AC_IFC_MAX) then
+      if(my_id .eq. 0) write(*,*) ' AC: >', AC_IFC_MAX, ' interfaces: sharing cut'
+      ac_ifc_n = AC_IFC_MAX
+    endif
+    if(ac_ifc_n .gt. 0) then
+      allocate( FSH(4, mx, my, mz, ac_ifc_n) )
+      FSH = 0.d0
+    endif
+    ac_ifc_mesh = nMesh
+    if(my_id .eq. 0 .and. ac_ifc_n .gt. 0) &
+      write(*,*) ' AC: shared same-class interfaces =', ac_ifc_n
+   end subroutine ac_build_ifc_registry
+
+!===============================================================================
+! (mBlock, ksub) -> id, is_owner.  id = 0 -> fall back to the two-sided flux.
+! ===============================================================================
+   subroutine ac_ifc_find(nMesh, mBlock, ksub, id, is_owner)
+    use Global_var
+    use const_var
+    use lows_ac_work
+    implicit none
+    integer, intent(in) :: nMesh, mBlock, ksub
+    integer, intent(out) :: id
+    logical, intent(out) :: is_owner
+    integer :: k
+    Type (Block_TYPE),pointer:: Bo
+    TYPE (BC_MSG_TYPE),pointer:: Bc, Bco
+    id = 0; is_owner = .false.
+    do k = 1, ac_ifc_n
+      if(ac_ifc_own(k) .eq. mBlock .and. ac_ifc_ks(k) .eq. ksub) then
+        id = k; is_owner = .true.; return
+      endif
+    enddo
+    if(mBlock .lt. 1 .or. mBlock .gt. Mesh(nMesh)%Num_Block) return
+    if(.not. associated(Mesh(nMesh)%Block(mBlock)%bc_msg)) return
+    Bc => Mesh(nMesh)%Block(mBlock)%bc_msg(ksub)
+    do k = 1, ac_ifc_n
+      if(ac_ifc_nb(k) .ne. mBlock) cycle
+      Bo => Mesh(nMesh)%Block(ac_ifc_own(k))
+      if(.not. associated(Bo%bc_msg)) cycle
+      Bco => Bo%bc_msg(ac_ifc_ks(k))
+      if(Bco%face1 .ne. Bc%face) cycle
+      if(Bco%ib1 .ne. Bc%ib .or. Bco%ie1 .ne. Bc%ie) cycle
+      if(Bco%jb1 .ne. Bc%jb .or. Bco%je1 .ne. Bc%je) cycle
+      if(Bco%kb1 .ne. Bc%kb .or. Bco%ke1 .ne. Bc%ke) cycle
+      id = k; is_owner = .false.; return
+    enddo
+   end subroutine ac_ifc_find
+
+!===============================================================================
+! Owner cell opposite the given ghost point, same index convention as the
+! buffer exchange (Umessage_send_mpi) -> rotated interfaces stay consistent.
+! ===============================================================================
+   subroutine ac_ifc_src_cell(nMesh, id, ig,jg,kg, i1,j1,k1)
+    use Global_var
+    use const_var
+    use lows_ac_work
+    implicit none
+    integer, intent(in) :: nMesh, id, ig,jg,kg
+    integer, intent(out) :: i1,j1,k1
+    integer :: k, d, kb(3), ke(3), kb1(3), ke1(3), ks(3), ka(3), L(3), P(3), g(3)
+    TYPE (BC_MSG_TYPE),pointer:: Bc
+    Bc => Mesh(nMesh)%Block(ac_ifc_own(id))%bc_msg(ac_ifc_ks(id))
+    kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
+    d = mod(Bc%face-1,3)+1
+    if(Bc%face .gt. 3) kb(d) = kb(d) - LAP
+    ke(d) = kb(d) + LAP - 1
+    kb1(1)=Bc%ib1; ke1(1)=Bc%ie1-1; kb1(2)=Bc%jb1; ke1(2)=Bc%je1-1; kb1(3)=Bc%kb1; ke1(3)=Bc%ke1-1
+    d = mod(Bc%face1-1,3)+1
+    if(Bc%face1 .le. 3) kb1(d) = kb1(d) - LAP
+    ke1(d) = kb1(d) + LAP - 1
+    L(1)=abs(Bc%L1); P(1)=sign(1,Bc%L1)
+    L(2)=abs(Bc%L2); P(2)=sign(1,Bc%L2)
+    L(3)=abs(Bc%L3); P(3)=sign(1,Bc%L3)
+    do k = 1, 3
+      if(P(k) .gt. 0) then
+        ks(k)=kb(k)
+      else
+        ks(k)=ke(k)
+      endif
+    enddo
+    g(1)=ig; g(2)=jg; g(3)=kg
+    do k = 1, 3
+      ka(k) = g(k) - kb1(k)
+    enddo
+    i1 = ks(1) + ka(L(1))*P(1)
+    j1 = ks(2) + ka(L(2))*P(2)
+    k1 = ks(3) + ka(L(3))*P(3)
+   end subroutine ac_ifc_src_cell
+
+!===============================================================================
+! Owner: single valued interface flux -> FSH(owner cell); RAC(owner cell) -= F*A
+! ===============================================================================
+   subroutine ac_ifc_flux_own(B, id, iO,jO,kO, iG,jG,kG, dir, beta)
+    use Global_var
+    use lows_ac_work
+    implicit none
+    Type (Block_TYPE),pointer:: B
+    integer,intent(in):: id, iO,jO,kO, iG,jG,kG, dir
+    real(PRE_EC),intent(in):: beta
+    real(PRE_EC) :: FLX(4), A, nx1,ny1,nz1
+    integer :: iF,jF,kF
+    iF=max(iO,iG); jF=max(jO,jG); kF=max(kO,kG)          ! face plane index
+    if(dir .eq. 1) then
+      A=B%Si(iF,jF,kF); nx1=B%ni1(iF,jF,kF); ny1=B%ni2(iF,jF,kF); nz1=B%ni3(iF,jF,kF)
+    else if(dir .eq. 2) then
+      A=B%Sj(iF,jF,kF); nx1=B%nj1(iF,jF,kF); ny1=B%nj2(iF,jF,kF); nz1=B%nj3(iF,jF,kF)
+    else
+      A=B%Sk(iF,jF,kF); nx1=B%nk1(iF,jF,kF); ny1=B%nk2(iF,jF,kF); nz1=B%nk3(iF,jF,kF)
+    endif
+    call ac_flux_rusanov(XW(1,iO,jO,kO),XW(2,iO,jO,kO),XW(3,iO,jO,kO),XW(4,iO,jO,kO), &
+                         XW(1,iG,jG,kG),XW(2,iG,jG,kG),XW(3,iG,jG,kG),XW(4,iG,jG,kG), &
+                         nx1,ny1,nz1, beta, FLX)
+    FSH(1:4,iO,jO,kO,id) = FLX(1:4)
+    RAC(1:4,iO,jO,kO) = RAC(1:4,iO,jO,kO) - FLX(1:4)*A
+!IFC DIAG
+    if(jO .eq. 1 .and. kO .eq. 1) then
+      ac_dbg_own = ac_dbg_own + 1
+      if(ac_dbg .eq. 1 .and. (ac_dbg_own .le. 3 .or. mod(ac_dbg_own,500) .eq. 0)) then
+        write(*,*) ' DBG own id=',id,' cell=',iO,jO,kO,' qvu=',XW(1:4,iO,jO,kO), &
+          ' ghost=',XW(1:4,iG,jG,kG),' FLX=',FLX(1:4),' A=',A
+      endif
+    endif
+!IFC DIAG END
+   end subroutine ac_ifc_flux_own
+
+!===============================================================================
+! Neighbour: NO local flux -- read the single stored owner flux.
+! F points from the owner cell into this cell -> RAC(own cell) += F*A
+! ===============================================================================
+   subroutine ac_ifc_flux_nb(nMesh, B, id, iO,jO,kO, iG,jG,kG, dir)
+    use Global_var
+    use lows_ac_work
+    implicit none
+    integer,intent(in):: nMesh, id, iO,jO,kO, iG,jG,kG, dir
+    Type (Block_TYPE),pointer:: B
+    real(PRE_EC) :: A
+    integer :: i1,j1,k1, iF,jF,kF
+    call ac_ifc_src_cell(nMesh, id, iG,jG,kG, i1,j1,k1)
+    iF=max(iO,iG); jF=max(jO,jG); kF=max(kO,kG)
+    if(dir .eq. 1) then
+      A=B%Si(iF,jF,kF)
+    else if(dir .eq. 2) then
+      A=B%Sj(iF,jF,kF)
+    else
+      A=B%Sk(iF,jF,kF)
+    endif
+    RAC(1:4,iO,jO,kO) = RAC(1:4,iO,jO,kO) + FSH(1:4,i1,j1,k1,id)*A
+!IFC DIAG
+    if(jO .eq. 1 .and. kO .eq. 1) then
+      ac_dbg_nb = ac_dbg_nb + 1
+      if(ac_dbg .eq. 1 .and. (ac_dbg_nb .le. 3 .or. mod(ac_dbg_nb,500) .eq. 0)) then
+        write(*,*) ' DBG nb  id=',id,' cell=',iO,jO,kO,' qvu=',XW(1:4,iO,jO,kO), &
+          ' ghost=',XW(1:4,iG,jG,kG),' map=',i1,j1,k1, &
+          ' FSHread=',FSH(1:4,i1,j1,k1,id),' A=',A
+      endif
+    endif
+!IFC DIAG END
+   end subroutine ac_ifc_flux_nb
+
+!===============================================================================
+! One interface face point: owner computes+stores, neighbour reads, and only if
+! the pair could not be resolved does it fall back to the two-sided flux.
+! ===============================================================================
+   subroutine ac_ifc_face(nMesh, B, id, is_owner, iO,jO,kO, iG,jG,kG, dir, beta)
+    use Global_var
+    use precision_EC
+    implicit none
+    integer,intent(in):: nMesh, id, iO,jO,kO, iG,jG,kG, dir
+    logical,intent(in):: is_owner
+    real(PRE_EC),intent(in):: beta
+    Type (Block_TYPE),pointer:: B
+    interface
+      subroutine ac_ifc_flux_own(B, id, iO,jO,kO, iG,jG,kG, dir, beta)
+        use Global_var
+        use precision_EC
+        Type (Block_TYPE),pointer:: B
+        integer,intent(in):: id, iO,jO,kO, iG,jG,kG, dir
+        real(PRE_EC),intent(in):: beta
+      end subroutine ac_ifc_flux_own
+      subroutine ac_ifc_flux_nb(nMesh, B, id, iO,jO,kO, iG,jG,kG, dir)
+        use Global_var
+        use precision_EC
+        integer,intent(in):: nMesh, id, iO,jO,kO, iG,jG,kG, dir
+        Type (Block_TYPE),pointer:: B
+      end subroutine ac_ifc_flux_nb
+      subroutine ac_face_flux_rus1(B, iL,jL,kL, iR,jR,kR, dir, beta)
+        use Global_var
+        use precision_EC
+        Type (Block_TYPE),pointer:: B
+        integer,intent(in):: iL,jL,kL,iR,jR,kR,dir
+        real(PRE_EC),intent(in):: beta
+      end subroutine ac_face_flux_rus1
+    end interface
+    if(id .le. 0) then
+      call ac_face_flux_rus1(B, iO,jO,kO, iG,jG,kG, dir, beta)
+    else if(is_owner) then
+      call ac_ifc_flux_own(B, id, iO,jO,kO, iG,jG,kG, dir, beta)
+    else
+      call ac_ifc_flux_nb(nMesh, B, id, iO,jO,kO, iG,jG,kG, dir)
+    endif
+   end subroutine ac_ifc_face
+
+!===============================================================================
+! All same-class interface faces of one block.  Blocks must be visited in
+! ascending block order inside a pseudo-step (the AC drivers do), so the owner
+! value that the other side reads is always from the current pseudo-step.
+! ===============================================================================
+   subroutine ac_interface_fluxes(nMesh, mBlock, beta)
+    use Global_var
+    use const_var
+    use lows_ac_work
+    implicit none
+    integer,intent(in):: nMesh, mBlock
+    real(PRE_EC),intent(in):: beta
+    integer :: ksub, id, face_s, ib,ie,jb,je,kb,ke, i,j,k
+    logical :: is_owner
+    Type (Block_TYPE),pointer:: B
+    TYPE (BC_MSG_TYPE),pointer:: Bc
+    interface
+      subroutine ac_build_ifc_registry(nMesh)
+        integer :: nMesh
+      end subroutine ac_build_ifc_registry
+      subroutine ac_ifc_find(nMesh, mBlock, ksub, id, is_owner)
+        integer, intent(in) :: nMesh, mBlock, ksub
+        integer, intent(out) :: id
+        logical, intent(out) :: is_owner
+      end subroutine ac_ifc_find
+      subroutine ac_ifc_face(nMesh, B, id, is_owner, iO,jO,kO, iG,jG,kG, dir, beta)
+        use Global_var
+        use precision_EC
+        integer,intent(in):: nMesh, id, iO,jO,kO, iG,jG,kG, dir
+        logical,intent(in):: is_owner
+        real(PRE_EC),intent(in):: beta
+        Type (Block_TYPE),pointer:: B
+      end subroutine ac_ifc_face
+    end interface
+    if(ac_ifc_mesh .ne. nMesh) call ac_build_ifc_registry(nMesh)
+    B => Mesh(nMesh)%Block(mBlock)
+    if(.not. associated(B%bc_msg)) return
+    do ksub = 1, B%subface
+      Bc => B%bc_msg(ksub)
+      if(.not. is_interface_bc(Bc%bc)) cycle
+      if(Bc%nb1 .le. 0 .or. Bc%nb1 .gt. Mesh(nMesh)%Num_Block) cycle
+      if(Block_Type_List(Bc%nb1) .ne. BLOCK_LOWSPEED) cycle
+      face_s = Bc%face
+      ib=Bc%ib; ie=Bc%ie; jb=Bc%jb; je=Bc%je; kb=Bc%kb; ke=Bc%ke
+      call ac_ifc_find(nMesh, mBlock, ksub, id, is_owner)
+!IFC DIAG
+      if(ac_dbg .eq. 1 .and. ac_dbg_find .lt. 14) then
+        ac_dbg_find = ac_dbg_find + 1
+        write(*,*) ' DBG ifc blk=',mBlock,' ksub=',ksub,' bc=',Bc%bc, &
+          ' nb1=',Bc%nb1,' face=',Bc%face,' face_s=',face_s,' rng=',ib,ie,jb,je,kb,ke, &
+          ' own=',is_owner,' id=',id
+      endif
+!IFC DIAG END
+      select case(face_s)
+      case(1)                                    ! i- : cell ib   , ghost ib-1
+        do k=kb,ke-1; do j=jb,je-1
+          call ac_ifc_face(nMesh, B, id, is_owner, ib,j,k, ib-1,j,k, 1, beta)
+        enddo; enddo
+      case(4)                                    ! i+ : cell ie-1 , ghost ie
+        do k=kb,ke-1; do j=jb,je-1
+          call ac_ifc_face(nMesh, B, id, is_owner, ie-1,j,k, ie,j,k, 1, beta)
+        enddo; enddo
+      case(2)                                    ! j- : cell jb   , ghost jb-1
+        do k=kb,ke-1; do i=ib,ie-1
+          call ac_ifc_face(nMesh, B, id, is_owner, i,jb,k, i,jb-1,k, 2, beta)
+        enddo; enddo
+      case(5)                                    ! j+ : cell je-1 , ghost je
+        do k=kb,ke-1; do i=ib,ie-1
+          call ac_ifc_face(nMesh, B, id, is_owner, i,je-1,k, i,je,k, 2, beta)
+        enddo; enddo
+      case(3)                                    ! k- : cell kb   , ghost kb-1
+        do j=jb,je-1; do i=ib,ie-1
+          call ac_ifc_face(nMesh, B, id, is_owner, i,j,kb, i,j,kb-1, 3, beta)
+        enddo; enddo
+      case(6)                                    ! k+ : cell ke-1 , ghost ke
+        do j=jb,je-1; do i=ib,ie-1
+          call ac_ifc_face(nMesh, B, id, is_owner, i,j,ke-1, i,j,ke, 3, beta)
+        enddo; enddo
+      end select
+    enddo
+   end subroutine ac_interface_fluxes
+
+!===============================================================================
 ! Internal-face inviscid fluxes -> RAC.  RAC must be zeroed before use.
 ! Plane between cells L=(f-1) and R=f :  L gets -F*A, R gets +F*A
 !===============================================================================
@@ -492,9 +914,16 @@
        integer,intent(in):: iL,jL,kL,iR,jR,kR,dir
        real(PRE_EC),intent(in):: beta
      end subroutine ac_face_flux
+     subroutine ac_interface_fluxes(nMesh, mBlock, beta)
+       use precision_EC
+       integer,intent(in):: nMesh, mBlock
+       real(PRE_EC),intent(in):: beta
+     end subroutine ac_interface_fluxes
    end interface
    B => Mesh(nMesh)%Block(mBlock)
 
+!  Same-class (LOWSPEED<->LOWSPEED) interface planes: owner computes / both
+!  sides share the single flux value (see ac_interface_fluxes below).
    do k = 1, B%nz-1
    do j = 1, B%ny-1
    do ii = 2, B%nx-1                  ! i-faces between interior cells
@@ -512,6 +941,8 @@
    do ii = 2, B%nz-1                  ! k-faces between interior cells
      call ac_face_flux(B, i,j,ii-1, i,j,ii, 3, beta)
    enddo; enddo; enddo
+!  --- same-class block-interface planes: single-valued (owner/shared) flux ---
+   call ac_interface_fluxes(nMesh, mBlock, beta)
   end subroutine ac_internal_flux
 
 !===============================================================================
@@ -1139,9 +1570,21 @@
 
    select case(bc)
    case(BC_Wall)                              ! no-slip (moving wall supported)
-     B%U(2,i1,j1,k1) = 2.d0*uw(1) - ui
-     B%U(3,i1,j1,k1) = 2.d0*uw(2) - vi
-     B%U(4,i1,j1,k1) = 2.d0*uw(3) - wi
+!    Inviscid (Euler) wall: If_viscous=0 means there is no viscous momentum
+!    flux, so a no-slip ghost would only corrupt the MUSCL reconstruction of
+!    the first interior face.  Use the slip condition (mirror the normal
+!    component only), exactly as the compressible solver does for
+!    BC_Wall + If_viscous=0 (boundary_Symmetry_or_SlideWall).
+     if(If_viscous .eq. 0) then
+       un = ui*nx1 + vi*ny1 + wi*nz1
+       B%U(2,i1,j1,k1) = ui - 2.d0*un*nx1
+       B%U(3,i1,j1,k1) = vi - 2.d0*un*ny1
+       B%U(4,i1,j1,k1) = wi - 2.d0*un*nz1
+     else
+       B%U(2,i1,j1,k1) = 2.d0*uw(1) - ui
+       B%U(3,i1,j1,k1) = 2.d0*uw(2) - vi
+       B%U(4,i1,j1,k1) = 2.d0*uw(3) - wi
+     endif
      if(LS_T_wall > 0.d0) then
        B%U(5,i1,j1,k1) = 2.d0*LS_T_wall - B%U(5,i2,j2,k2)
      else

@@ -31,7 +31,7 @@
         call Umessage_Turbo_Periodic(nMesh)   !  处理周期边界条件 
     endif
     
-	call Umessage_corner(nMesh)     ! 角区数据信息（采用插值的方法）
+!	call Umessage_corner(nMesh)     ! 角区数据信息（采用插值的方法） [DISABLED: corner treatment causes instability at T-junction]
 
   end subroutine update_buffer_onemesh
 
@@ -59,8 +59,11 @@
 
 !-----------------------------------------------------------------------------------------------
       if(Bc%bc .ge. 0 ) cycle          ! 非内边界 inner boundary
-      if(.not.(B%Block_type == BLOCK_FLUID .and. &
-               Block_Type_List(Bc%nb1) == BLOCK_FLUID)) cycle
+      !  BC_Inner (-1) / Periodic (-2,-3) mark SAME-CLASS block interfaces: the
+!  ghost buffer is exchanged for EVERY block type (compressible / low-speed
+!  / porous / solid).  Cross-class interfaces (11..19) are physical
+!  coupling faces -- they are handled by the couple_* routines and never
+!  enter this buffer exchange (their code is >= 0 and is skipped above).
       
 !--------------------------------------------------------
 !  B块为源数据； B1块为目标数据；   数据从源数据写入目标数据
@@ -135,7 +138,25 @@
 		  enddo
 		 enddo
 	  endif	
-	  deallocate(Usend)
+	!  same-class low-speed pair: B%p lives outside U(1:5), so it is copied
+!  separately on the direct (same-process) path.
+  if(Send_to_ID .eq. my_id) then
+    if(B%Block_type == BLOCK_LOWSPEED .and. &
+       Block_Type_List(Bc%nb1) == BLOCK_LOWSPEED) then
+      mb=B_n(Bc%nb1)
+      B1 => Mesh(nMesh)%Block(mb)
+      do k=kb1(3),ke1(3)
+      do j=kb1(2),ke1(2)
+      do i=kb1(1),ke1(1)
+        ka(1)=i-kb1(1); ka(2)=j-kb1(2); ka(3)=k-kb1(3)
+        i1=ks(1)+ka(L1)*P(1)
+        j1=ks(2)+ka(L2)*P(2)
+        k1=ks(3)+ka(L3)*P(3)
+        B1%p(i,j,k) = B%p(i1,j1,k1)
+      enddo; enddo; enddo
+    endif
+  endif
+  deallocate(Usend)
 
   enddo
   enddo
@@ -162,8 +183,11 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
   B => Mesh(nMesh)%Block(mBlock)
   do  ksub=1,B%subface
    Bc=> B%bc_msg(ksub)
-      if(.not.(B%Block_type == BLOCK_FLUID .and. &
-               Block_Type_List(Bc%nb1) == BLOCK_FLUID)) cycle
+      !  BC_Inner (-1) / Periodic (-2,-3) mark SAME-CLASS block interfaces: the
+!  ghost buffer is exchanged for EVERY block type (compressible / low-speed
+!  / porous / solid).  Cross-class interfaces (11..19) are physical
+!  coupling faces -- they are handled by the couple_* routines and never
+!  enter this buffer exchange (their code is >= 0 and is skipped above).
    if(Bc%bc .ge. 0 ) cycle               ! 内边界 inner boundary
    Recv_from_ID=B_proc(Bc%nb1)           ! 相邻块（接收源块）所在的进程号
    if(Recv_from_ID .eq. my_id) cycle     ! 源块在本进程内，不使用MPI通信 (Umessage_send_mpi()已完成写入操作)  

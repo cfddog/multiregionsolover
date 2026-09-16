@@ -46,7 +46,7 @@
 ! Ver 0.75c: 2012-1-11:  Turbulent viscous is limited; Forces are reported by each block
 ! Ver 0.75d: 2012-1-16:  New post-analysis code
 ! Ver 0.75e: 2012-1-19:  Modify in Open-MP feature, Limit for vt/v increased to 300
-! Ver 0.76: 2012-1-31:   New feature of UIRS (Upwind Implicit Residual Smoothing); 
+! Ver 0.76:  2012-1-31:   New feature of UIRS (Upwind Implicit Residual Smoothing); 
 ! Ver 0.76a: 2012-2-1:   Bug in output( ) (flow2d-surf.dat) is fixed;  iso_thermal_wall( ) is modified
 ! Ver 0.76b: 2012-2-3:   Viscous terms in du_LU_SGS is modified, DU(1) (density) need not viscous term.
 ! Ver 0.76c: 2012-2-4:   Improve Robustness by lower local time-step when Negative Temperature points appear 
@@ -230,10 +230,10 @@
            call Set_Un1_Un_oneblock(1,mBlock)          ! Un1=Un; Un=U
          enddo
 
-       case default                                    ! LU_SGS ?? 1??Euler: ????????
+       case default                                    ! LU_SGS + 1 step Euler
          call comput_Sfac(Sfac,Sfac1)                  ! =0
          call Set_Un(1)                                ! Un=U
-         do mBlock=1,Mesh(1)%Num_Block                 ! ??????? block, ?????????
+         do mBlock=1,Mesh(1)%Num_Block
            call solver_one_block(1,mBlock,Sfac,Sfac1)
 !          NB: the low-porous interface is coupled once per step (after the
 !          block loop) so that the MPI call count is independent of how many
