@@ -1,0 +1,276 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is         3200
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        3200
+ Total Grid number=        4131
+ Max grid number is         4131  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is         4131  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           1  rho=   7990.0000000000000       Cp=   477.00000000000000       k=   15.100000000000000     
+ porous.inp not found: porous blocks use defaults (eps=0.9, dp=1e-3 m, hv=0)
+ creat main mesh OK, Num_Cell=        3200
+  read main mesh ...
+  Mesh3d.x layout: separate (x,y,z in three records per block)
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ Read solid_bc.inp OK
+   Block           1  (solid):           2  thermal BC faces
+     face           1  Tw=   300.00000000000000       Qw=   0.0000000000000000     
+     face           4  Tw=   400.00000000000000       Qw=   0.0000000000000000     
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+   GS iter           1  res=   105.92752179029486       Ts(1,1,1)=   291.44166666666655       Ts(nx-1,ny-1,1)=   336.34889265255373     
+   GS iter           2  res=   48.288326891534894       Ts(1,1,1)=   294.25756558641967       Ts(nx-1,ny-1,1)=   370.21353375419358     
+   GS iter           3  res=   21.187007090419115       Ts(1,1,1)=   296.15479967921237       Ts(nx-1,ny-1,1)=   376.90849551621767     
+   GS iter           4  res=   15.025757507971775       Ts(1,1,1)=   297.02719941629255       Ts(nx-1,ny-1,1)=   377.42989154341365     
+   GS iter           5  res=   11.214891328200281       Ts(1,1,1)=   297.39643327565403       Ts(nx-1,ny-1,1)=   380.24424977092087     
+ Solid solver Block           1  GS iterations:        8300  final res:   9.7668362286640331E-010
+   DBG: Ts(1,1,1)=   300.99999998629198       Ts(nx/2,ny/2,1)=   348.99999957762401       Ts(nx-1,ny-1,1)=   398.99999998714600     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000       -8.1315162936412833E-020   0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        2.8799120206646212E-020   3.3881317890172014E-020
+ Kstep, t=           1   1.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+ CPU wall time in this step:   2.7482646580000001     
+ Averaged CPU wall time is:   2.7482646580000001     
+   GS iter           1  res=   9.7463725978741422E-010  Ts(1,1,1)=   300.99999998632347       Ts(nx-1,ny-1,1)=   398.99999998717561     
+   GS iter           2  res=   9.7236352303298190E-010  Ts(1,1,1)=   300.99999998635479       Ts(nx-1,ny-1,1)=   398.99999998720523     
+   GS iter           3  res=   9.7020347311627120E-010  Ts(1,1,1)=   300.99999998638611       Ts(nx-1,ny-1,1)=   398.99999998723439     
+   GS iter           4  res=   9.6781604952411726E-010  Ts(1,1,1)=   300.99999998641738       Ts(nx-1,ny-1,1)=   398.99999998726366     
+   GS iter           5  res=   9.6565599960740656E-010  Ts(1,1,1)=   300.99999998644853       Ts(nx-1,ny-1,1)=   398.99999998729299     
+ Solid solver Block           1  GS iterations:         100  final res:   7.7631057138205506E-010
+   DBG: Ts(1,1,1)=   300.99999998910630       Ts(nx/2,ny/2,1)=   348.99999966433916       Ts(nx-1,ny-1,1)=   398.99999998978495     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000       -8.1315162936412833E-020   0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        2.8799120206646212E-020   3.3881317890172014E-020
+ Kstep, t=           2   2.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+ CPU wall time in this step:  0.10599525300000012     
+ Averaged CPU wall time is:   1.4271299555000001     
+   GS iter           1  res=   7.7443473855964839E-010  Ts(1,1,1)=   300.99999998913125       Ts(nx-1,ny-1,1)=   398.99999998980849     
+   GS iter           2  res=   7.7255890573724173E-010  Ts(1,1,1)=   300.99999998915621       Ts(nx-1,ny-1,1)=   398.99999998983179     
+   GS iter           3  res=   7.7091044659027830E-010  Ts(1,1,1)=   300.99999998918111       Ts(nx-1,ny-1,1)=   398.99999998985527     
+   GS iter           4  res=   7.6903461376787163E-010  Ts(1,1,1)=   300.99999998920589       Ts(nx-1,ny-1,1)=   398.99999998987840     
+   GS iter           5  res=   7.6749984145862982E-010  Ts(1,1,1)=   300.99999998923079       Ts(nx-1,ny-1,1)=   398.99999998990188     
+ Solid solver Block           1  GS iterations:         100  final res:   6.1658056438318454E-010
+   DBG: Ts(1,1,1)=   300.99999999134263       Ts(nx/2,ny/2,1)=   348.99999973325146       Ts(nx-1,ny-1,1)=   398.99999999188231     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000       -8.1315162936412833E-020   0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        2.8799120206646212E-020   3.3881317890172014E-020
+ Kstep, t=           3   3.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+ CPU wall time in this step:   8.4297634999999982E-002
+ Averaged CPU wall time is:  0.97951918200000010     
+   GS iter           1  res=   6.1544369600596838E-010  Ts(1,1,1)=   300.99999999136264       Ts(nx-1,ny-1,1)=   398.99999999190089     
+   GS iter           2  res=   6.1407945395330898E-010  Ts(1,1,1)=   300.99999999138242       Ts(nx-1,ny-1,1)=   398.99999999191948     
+   GS iter           3  res=   6.1288574215723202E-010  Ts(1,1,1)=   300.99999999140232       Ts(nx-1,ny-1,1)=   398.99999999193784     
+   GS iter           4  res=   6.1095306591596454E-010  Ts(1,1,1)=   300.99999999142199       Ts(nx-1,ny-1,1)=   398.99999999195637     
+   GS iter           5  res=   6.0987304095760919E-010  Ts(1,1,1)=   300.99999999144160       Ts(nx-1,ny-1,1)=   398.99999999197479     
+ Solid solver Block           1  GS iterations:         100  final res:   4.9016080083674751E-010
+   DBG: Ts(1,1,1)=   300.99999999312013       Ts(nx/2,ny/2,1)=   348.99999978801634       Ts(nx-1,ny-1,1)=   398.99999999354867     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000       -8.1315162936412833E-020   0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        2.8799120206646212E-020   3.3881317890172014E-020
+ Kstep, t=           4   4.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+ CPU wall time in this step:   7.9207755999999740E-002
+ Averaged CPU wall time is:  0.75444132549999998     
+   GS iter           1  res=   4.8919446271611378E-010  Ts(1,1,1)=   300.99999999313593       Ts(nx-1,ny-1,1)=   398.99999999356345     
+   GS iter           2  res=   4.8783022066345438E-010  Ts(1,1,1)=   300.99999999315162       Ts(nx-1,ny-1,1)=   398.99999999357823     
+   GS iter           3  res=   4.8692072596168146E-010  Ts(1,1,1)=   300.99999999316731       Ts(nx-1,ny-1,1)=   398.99999999359301     
+   GS iter           4  res=   4.8578385758446530E-010  Ts(1,1,1)=   300.99999999318288       Ts(nx-1,ny-1,1)=   398.99999999360767     
+   GS iter           5  res=   4.8464698920724913E-010  Ts(1,1,1)=   300.99999999319868       Ts(nx-1,ny-1,1)=   398.99999999362251     
+ Solid solver Block           1  GS iterations:         100  final res:   3.8960479287197813E-010
+   DBG: Ts(1,1,1)=   300.99999999453252       Ts(nx/2,ny/2,1)=   348.99999983153793       Ts(nx-1,ny-1,1)=   398.99999999487318     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000       -8.1315162936412833E-020   0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        2.8799120206646212E-020   3.3881317890172014E-020
+ Kstep, t=           5   5.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+ CPU wall time in this step:   9.3540579999999984E-002
+ Averaged CPU wall time is:  0.62226117640000000     
+   GS iter           1  res=   3.8869529817020521E-010  Ts(1,1,1)=   300.99999999454519       Ts(nx-1,ny-1,1)=   398.99999999488489     
+   GS iter           2  res=   3.8767211663071066E-010  Ts(1,1,1)=   300.99999999455770       Ts(nx-1,ny-1,1)=   398.99999999489671     
+   GS iter           3  res=   3.8687630876665935E-010  Ts(1,1,1)=   300.99999999457020       Ts(nx-1,ny-1,1)=   398.99999999490853     
+   GS iter           4  res=   3.8608050090260804E-010  Ts(1,1,1)=   300.99999999458259       Ts(nx-1,ny-1,1)=   398.99999999492007     
+   GS iter           5  res=   3.8500047594425268E-010  Ts(1,1,1)=   300.99999999459504       Ts(nx-1,ny-1,1)=   398.99999999493161     
+ Solid solver Block           1  GS iterations:         100  final res:   3.0956925911596045E-010
+   DBG: Ts(1,1,1)=   300.99999999565506       Ts(nx/2,ny/2,1)=   348.99999986612477       Ts(nx-1,ny-1,1)=   398.99999999592580     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000       -8.1315162936412833E-020   0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        2.8799120206646212E-020   3.3881317890172014E-020
+ Kstep, t=           6   6.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+ CPU wall time in this step:   8.8267072000000280E-002
+ Averaged CPU wall time is:  0.53326215900000007     
+   GS iter           1  res=   3.0883029467076994E-010  Ts(1,1,1)=   300.99999999566501       Ts(nx-1,ny-1,1)=   398.99999999593507     
+   GS iter           2  res=   3.0826186048216186E-010  Ts(1,1,1)=   300.99999999567490       Ts(nx-1,ny-1,1)=   398.99999999594428     
+   GS iter           3  res=   3.0752289603697136E-010  Ts(1,1,1)=   300.99999999568479       Ts(nx-1,ny-1,1)=   398.99999999595377     
+   GS iter           4  res=   3.0667024475405924E-010  Ts(1,1,1)=   300.99999999569496       Ts(nx-1,ny-1,1)=   398.99999999596304     
+   GS iter           5  res=   3.0598812372772954E-010  Ts(1,1,1)=   300.99999999570468       Ts(nx-1,ny-1,1)=   398.99999999597247     
+ Solid solver Block           1  GS iterations:         100  final res:   2.4613200366729870E-010
+   DBG: Ts(1,1,1)=   300.99999999654710       Ts(nx/2,ny/2,1)=   348.99999989361083       Ts(nx-1,ny-1,1)=   398.99999999676209     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000       -8.1315162936412833E-020   0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        2.8799120206646212E-020   3.3881317890172014E-020
+ Kstep, t=           7   7.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+ CPU wall time in this step:   9.3199295999999876E-002
+ Averaged CPU wall time is:  0.47039603571428573     
+   GS iter           1  res=   2.4550672605982982E-010  Ts(1,1,1)=   300.99999999655506       Ts(nx-1,ny-1,1)=   398.99999999676965     
+   GS iter           2  res=   2.4493829187122174E-010  Ts(1,1,1)=   300.99999999656291       Ts(nx-1,ny-1,1)=   398.99999999677698     
+   GS iter           3  res=   2.4442670110147446E-010  Ts(1,1,1)=   300.99999999657069       Ts(nx-1,ny-1,1)=   398.99999999678437     
+   GS iter           4  res=   2.4374458007514477E-010  Ts(1,1,1)=   300.99999999657859       Ts(nx-1,ny-1,1)=   398.99999999679170     
+   GS iter           5  res=   2.4306245904881507E-010  Ts(1,1,1)=   300.99999999658644       Ts(nx-1,ny-1,1)=   398.99999999679915     
+ Solid solver Block           1  GS iterations:         100  final res:   1.9542767404345796E-010
+   DBG: Ts(1,1,1)=   300.99999999725600       Ts(nx/2,ny/2,1)=   348.99999991545394       Ts(nx-1,ny-1,1)=   398.99999999742687     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000       -8.1315162936412833E-020   0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        2.8799120206646212E-020   3.3881317890172014E-020
+ Kstep, t=           8   8.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+ CPU wall time in this step:   9.9504532999999729E-002
+ Averaged CPU wall time is:  0.42403459787499997     
+   GS iter           1  res=   1.9514345694915392E-010  Ts(1,1,1)=   300.99999999726225       Ts(nx-1,ny-1,1)=   398.99999999743284     
+   GS iter           2  res=   1.9468870959826745E-010  Ts(1,1,1)=   300.99999999726850       Ts(nx-1,ny-1,1)=   398.99999999743869     
+   GS iter           3  res=   1.9412027540965937E-010  Ts(1,1,1)=   300.99999999727476       Ts(nx-1,ny-1,1)=   398.99999999744460     
+   GS iter           4  res=   1.9377921489649452E-010  Ts(1,1,1)=   300.99999999728101       Ts(nx-1,ny-1,1)=   398.99999999745057     
+   GS iter           5  res=   1.9326762412674725E-010  Ts(1,1,1)=   300.99999999728726       Ts(nx-1,ny-1,1)=   398.99999999745631     
+ Solid solver Block           1  GS iterations:         100  final res:   1.5540990716544911E-010
+   DBG: Ts(1,1,1)=   300.99999999781937       Ts(nx/2,ny/2,1)=   348.99999993281290       Ts(nx-1,ny-1,1)=   398.99999999795511     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000       -8.1315162936412833E-020   0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        2.8799120206646212E-020   3.3881317890172014E-020
+ Kstep, t=           9   9.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
+ CPU wall time in this step:  0.10280151300000018     
+ Averaged CPU wall time is:  0.38834203288888891     
+   GS iter           1  res=   1.5506884665228426E-010  Ts(1,1,1)=   300.99999999782426       Ts(nx-1,ny-1,1)=   398.99999999795995     
+   GS iter           2  res=   1.5472778613911942E-010  Ts(1,1,1)=   300.99999999782938       Ts(nx-1,ny-1,1)=   398.99999999796455     
+   GS iter           3  res=   1.5438672562595457E-010  Ts(1,1,1)=   300.99999999783427       Ts(nx-1,ny-1,1)=   398.99999999796916     
+   GS iter           4  res=   1.5410250853165053E-010  Ts(1,1,1)=   300.99999999783927       Ts(nx-1,ny-1,1)=   398.99999999797376     
+   GS iter           5  res=   1.5353407434304245E-010  Ts(1,1,1)=   300.99999999784416       Ts(nx-1,ny-1,1)=   398.99999999797842     
+ Solid solver Block           1  GS iterations:         100  final res:   1.2352074918453582E-010
+   DBG: Ts(1,1,1)=   300.99999999826696       Ts(nx/2,ny/2,1)=   348.99999994660766       Ts(nx-1,ny-1,1)=   398.99999999837513     
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000       -8.1315162936412833E-020   0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        2.8799120206646212E-020   3.3881317890172014E-020
+ Kstep, t=          10   10.000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK

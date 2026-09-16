@@ -24,3 +24,14 @@ __pycache__/
 cases/**/Residual.dat
 cases/**/force.log
 cases/**/error.log
+
+# 长时间迭代的大体量运行日志（单文件 10~200 MB，不入库；需要时 git add -f）
+cases/beavers_joseph/**/run_ac.log
+cases/cylinder_re40_200/run_ac40.log
+cases/channel_ac_2blk/run.log
+cases/channel_ac_4blk/run.log
+cases/2D_T_tube/run_ac4.log
+cases/2D_T_tube/run_rus.log
+cases/square_duct_1977/run.log
+cases/**/run_sync.log
+

@@ -1,0 +1,60 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is         1600
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        1600
+ Total Grid number=        3362
+ Max grid number is         3362  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is         3362  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+ porous.inp not found: porous blocks use defaults (eps=0.9, dp=1e-3 m, hv=0)
+ creat main mesh OK, Num_Cell=        1600
+  read main mesh ...
+  Mesh3d.x layout: separate (x,y,z in three records per block)
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          41          41           2  beta=   1.0000000000000000       CFL=   20.000000000000000       dual=           0  flux=           1  recon=           1  lim=           1
+   AC iter           1  res_q=   0.0000000000000000       res_m=   32.000000000000057     
+   AC iter           1  res_q=   0.0000000000000000       res_m=   32.000000000000057     
+   AC iter        2000  res_q=   3.2531774963908404E-002  res_m=   2.7103947124891198E-002
+   AC iter        4000  res_q=   3.5075580648249323E-003  res_m=   2.9739754818495470E-003
+   AC iter        6000  res_q=   8.7764583807381426E-004  res_m=   5.3530482744605537E-004
+   AC iter        8000  res_q=   6.7558086784969259E-005  res_m=   9.5108511625085232E-005
+   AC iter       10000  res_q=   1.5230897360381709E-005  res_m=   1.1876366901116698E-005
+   AC iter       12000  res_q=   3.4280043192946833E-006  res_m=   2.1820514840757544E-006
+   AC iter       14000  res_q=   2.6726070592730773E-007  res_m=   3.7822538007554638E-007
+  AC solver block           1 : iterations =       15524  final res_q=   9.9737804494704835E-008  res_m=   7.3460216392912273E-008
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000        0.0000000000000000        0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        0.0000000000000000        0.0000000000000000     
+ Kstep, t=           1   1.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ write VTK files ......
+ write VTK files OK

@@ -1,0 +1,67 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is         6400
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        6400
+ Total Grid number=       13202
+ Max grid number is        13202  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        13202  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           2  rho=   0.0000000000000000       Cp=   0.0000000000000000       k=   0.0000000000000000     
+ porous.inp not found: porous blocks use defaults (eps=0.9, dp=1e-3 m, hv=0)
+ creat main mesh OK, Num_Cell=        6400
+  read main mesh ...
+  Mesh3d.x layout: separate (x,y,z in three records per block)
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+ [CMPM] blk           1  it           1  U2(2,10,1)=   9.9101200301716097E-002  U3(2,10,1)=   0.0000000000000000       du(2,10,1)=   1.2493753123438277E-002  apu(2,10,1)=  0.10005000000000000       conv_src(2,10,1)=   0.0000000000000000       Fin(2,10,1)=   0.0000000000000000       metric=           0
+ [CMP] blk           1  it           1  du(2,10,1)=   1.2493753123438277E-002  apu(2,10,1)=  0.10005000000000000       U2(2,10,1)= -0.20160377201372404       U3(2,10,1)=  -1.3979367336852773E-003  p(2,10,1)=  0.35753479842112235       pp(2,10,1)=   1.7876739921056117       Fi(2,10,1)=   1.7846931351744713E-002  Fj(2,10,1)=   0.0000000000000000       metric=           0
+   DBG iter           1  maxU2=  0.60734142561953630       maxFi=   1.7846951340706158E-002  maxFj=   0.0000000000000000       Fi(nx/2,1,1)=   1.4462748977168263E-100  Fi(nx,ny/2,1)=   0.0000000000000000     
+   DBG div max=   1.7846951340706158E-002  res_p=   1.7846951340706158E-002
+   SIMPLE iter           1  res_p=   1.7846951340706158E-002  u(1,1,1)=  0.37303443078874809       p(1,1,1)= -0.11568844775498616     
+ [CMPM] blk           1  it           2  U2(2,10,1)=  0.21340690520741309       U3(2,10,1)=  -2.1117791339689642E-003  du(2,10,1)=   1.2325611406330868E-002  apu(2,10,1)=  0.10141484740935088       conv_src(2,10,1)=   0.0000000000000000       Fin(2,10,1)=   1.7846931351744713E-002  metric=           0
+ [CMP] blk           1  it           2  du(2,10,1)=   1.2325611406330868E-002  apu(2,10,1)=  0.10141484740935088       U2(2,10,1)=   6.0304357244833018E-002  U3(2,10,1)=  -7.2670290772013178E-003  p(2,10,1)=   1.2821216994997340       pp(2,10,1)=   4.6229345053930579       Fi(2,10,1)=   1.8236954466357414E-002  Fj(2,10,1)=  -1.4137521151228138E-004  metric=           0
+   DBG iter           2  maxU2=  0.61676876733389374       maxFi=   1.8325392634652174E-002  maxFj=   1.2152615477310040E-003  Fi(nx/2,1,1)=   8.4316832152979501E-027  Fi(nx,ny/2,1)=   3.8242315884576690E-071
+   DBG div max=   1.5042788219153337E-002  res_p=   1.5042788219153337E-002
+   SIMPLE iter           2  res_p=   1.5042788219153337E-002  u(1,1,1)=  0.11455954244657102       p(1,1,1)=  0.40869559365203684     
+ [CMPM] blk           1  it           3  U2(2,10,1)=  0.29389490298891296       U3(2,10,1)=  -1.0639489617302713E-002  du(2,10,1)=   1.2092008806877465E-002  apu(2,10,1)=  0.10337405636762753       conv_src(2,10,1)=   0.0000000000000000       Fin(2,10,1)=   1.8236954466357414E-002  metric=           0
+ [CMP] blk           1  it           3  du(2,10,1)=   1.2092008806877465E-002  apu(2,10,1)=  0.10337405636762753       U2(2,10,1)=  0.27946615477179548       U3(2,10,1)=  -1.1271097345444823E-002  p(2,10,1)=   1.7517273466671770       pp(2,10,1)=   2.3480282358372149       Fi(2,10,1)=   1.2039721810602991E-002  Fj(2,10,1)=  -7.1773494493690285E-004  metric=           0
+   DBG iter           3  maxU2=  0.65227605623551199       maxFi=   1.5419219183347340E-002  maxFj=   3.2816230462994751E-003  Fi(nx/2,1,1)=   1.8241847129746706E-017  Fi(nx,ny/2,1)=   2.8695101419042734E-049
+   DBG div max=   4.9249820266441969E-003  res_p=   4.9249820266441969E-003
+   SIMPLE iter           3  res_p=   4.9249820266441969E-003  u(1,1,1)=  0.14926477327397508       p(1,1,1)=  0.75184431205144331     
+   SIMPLE iter           4  res_p=   6.0712248133579401E-003  u(1,1,1)=  0.11134994336646695       p(1,1,1)=   1.1191241650135466     
+   SIMPLE iter           5  res_p=   7.7680575931718919E-003  u(1,1,1)=   8.0012713675595204E-002  p(1,1,1)=   1.4585888542693526     
+ Low-speed solver Block           1  SIMPLE iterations:          21  res_p:   6.0805424240876886E-004  FV_metric:           0
+ --------------Force and Moment -----------------------------
+ Total Force Coefficient (CL, CD, CS) =
+   0.0000000000000000        0.0000000000000000        0.0000000000000000     
+ Total Moment Coefficient(CMx, CMy, CMz)=
+   0.0000000000000000        0.0000000000000000        0.0000000000000000     
+ Kstep, t=           1   1.0000000000000000     
+ ----------The Max Residuals are--------  ---Mesh---           1
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+   The R.M.S Residuals are 
+    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00    0.0000000000E+00
+ write flow3d.dat ......
+ write flow3d.dat OK
+ write VTK files ......
+ write VTK files OK

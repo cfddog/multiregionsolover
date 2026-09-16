@@ -1,0 +1,595 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            4 Total Cell number is        21600
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=       21600
+ Total Grid number=       44408
+ Max grid number is        44408  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        44408  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           4
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+   Block           2 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+   Block           3 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+   Block           4 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+ porous.inp not found: porous blocks use defaults (eps=0.9, dp=1e-3 m, hv=0)
+ creat main mesh OK, Num_Cell=       21600
+  read main mesh ...
+  Mesh3d.x layout: combined (x,y,z in one record per block)
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           2           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           3           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           4           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+  AC: shared same-class interfaces =           3
+   AC iter           1  res_q=   120.00000000001977       res_m=   144.00000000000341     
+   AC iter           1  res_q=   120.00000000001977       res_m=   144.00000000000341     
+   AC iter         200  res_q=   2.8265253728384314       res_m=   3.6605655169686435     
+   AC iter         400  res_q=   1.3552199787498334       res_m=   1.8575554295428092     
+   AC iter         600  res_q=  0.84186442142063345       res_m=   1.2353500005267444     
+   AC iter         800  res_q=  0.58140706089687810       res_m=  0.90307030203424887     
+   AC iter        1000  res_q=  0.44003105955670185       res_m=  0.62552470704058016     
+  AC solver block           1 : iterations =        1001  final res_q=  0.44003105955670185       res_m=  0.62552470704058016     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   6.3138296195099040       res_m=   148.60050534470091     
+   AC iter           1  res_q=   6.3138296195099040       res_m=   148.60050534470091     
+   AC iter         200  res_q=   3.3228162761151911       res_m=   4.6172412651194890     
+   AC iter         400  res_q=   2.3356695173284243       res_m=   2.9306674647157407     
+   AC iter         600  res_q=   1.8194725797135387       res_m=   2.1036573849405387     
+   AC iter         800  res_q=   1.5442040266714328       res_m=   1.6772003544948317     
+   AC iter        1000  res_q=   1.9245025022428401       res_m=   1.7628800596602006     
+  AC solver block           2 : iterations =        1001  final res_q=   1.9245025022428401       res_m=   1.7628800596602006     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   65.511544997037007       res_m=   204.00000000006514     
+   AC iter           1  res_q=   65.511544997037007       res_m=   204.00000000006514     
+   AC iter         200  res_q=   15.919339270884235       res_m=   11.687021927120300     
+   AC iter         400  res_q=   14.807286671537865       res_m=   12.137360268060895     
+   AC iter         600  res_q=   13.154943248138167       res_m=   16.992979656158827     
+   AC iter         800  res_q=   11.913498388973498       res_m=   19.166630147757314     
+   AC iter        1000  res_q=   12.302484065689109       res_m=   16.322061110258947     
+  AC solver block           3 : iterations =        1001  final res_q=   12.302484065689109       res_m=   16.322061110258947     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   8.6262623502913858       res_m=   169.02342297965731     
+   AC iter           1  res_q=   8.6262623502913858       res_m=   169.02342297965731     
+   AC iter         200  res_q=   4.8125924263678890       res_m=   3.8893565522853160     
+   AC iter         400  res_q=   3.3795988647736825       res_m=   2.7510722316559861     
+   AC iter         600  res_q=   2.6716510804362090       res_m=   2.7812724310097305     
+   AC iter         800  res_q=   2.8834642513849631       res_m=   2.6525223494536498     
+   AC iter        1000  res_q=   1.9207328708938602       res_m=   2.0553772048382162     
+  AC solver block           4 : iterations =        1001  final res_q=   1.9207328708938602       res_m=   2.0553772048382162     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   317.82273305817489       res_m=   367.56163939865877     
+   AC iter           1  res_q=   317.82273305817489       res_m=   367.56163939865877     
+   AC iter         200  res_q=   13.792421838507909       res_m=   11.820496535056620     
+   AC iter         400  res_q=   11.596145506463557       res_m=   9.2713659122898058     
+   AC iter         600  res_q=   9.8510021048606173       res_m=   8.1584497121508832     
+   AC iter         800  res_q=   8.6968523446709831       res_m=   7.1446344731507541     
+   AC iter        1000  res_q=   7.4253489861996842       res_m=   7.5048190170667990     
+  AC solver block           1 : iterations =        1001  final res_q=   7.4253489861996842       res_m=   7.5048190170667990     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   14.754775023687333       res_m=   23.010636124918886     
+   AC iter           1  res_q=   14.754775023687333       res_m=   23.010636124918886     
+   AC iter         200  res_q=   10.546851622694685       res_m=   10.474255435644213     
+   AC iter         400  res_q=   4.8927003310967150       res_m=   8.7771028929642885     
+   AC iter         600  res_q=   4.4894337982913628       res_m=   11.546685596399865     
+   AC iter         800  res_q=   5.8999226001171552       res_m=   19.355917552022763     
+   AC iter        1000  res_q=   3.7632947251563986       res_m=   9.9219165943358725     
+  AC solver block           2 : iterations =        1001  final res_q=   3.7632947251563986       res_m=   9.9219165943358725     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   13.707315928754834       res_m=   17.979992699124651     
+   AC iter           1  res_q=   13.707315928754834       res_m=   17.979992699124651     
+   AC iter         200  res_q=   14.467005590893962       res_m=   22.176915516318143     
+   AC iter         400  res_q=   36.950758654247309       res_m=   19.102701156175161     
+   AC iter         600  res_q=   19.227386835595521       res_m=   15.983937393114353     
+   AC iter         800  res_q=   19.131271436300413       res_m=   22.098529101028163     
+   AC iter        1000  res_q=   21.385356103545266       res_m=   26.687646320280660     
+  AC solver block           3 : iterations =        1001  final res_q=   21.385356103545266       res_m=   26.687646320280660     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   7.3981815341180086       res_m=   7.3282867576325268     
+   AC iter           1  res_q=   7.3981815341180086       res_m=   7.3282867576325268     
+   AC iter         200  res_q=   2.2710717440094430       res_m=   2.2957723493648086     
+   AC iter         400  res_q=   1.0622244253434281       res_m=   1.4042306020071300     
+   AC iter         600  res_q=  0.73524710320656061       res_m=   1.0657173582916273     
+   AC iter         800  res_q=  0.60727441621890521       res_m=  0.84937352220611029     
+   AC iter        1000  res_q=  0.56959459629952669       res_m=  0.76006401469133111     
+  AC solver block           4 : iterations =        1001  final res_q=  0.56959459629952669       res_m=  0.76006401469133111     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   1000.3906717412109       res_m=   3808.6610074068681     
+   AC iter           1  res_q=   1000.3906717412109       res_m=   3808.6610074068681     
+   AC iter         200  res_q=   144.42542565109170       res_m=   943.95383914909246     
+   AC iter         400  res_q=   162.40630211859329       res_m=   793.21340467461016     
+   AC iter         600  res_q=   98.823528585421997       res_m=   296.57799303717388     
+   AC iter         800  res_q=   37.543061331041926       res_m=   52.883840740232131     
+   AC iter        1000  res_q=   28.398274686889387       res_m=   24.792463004789834     
+  AC solver block           1 : iterations =        1001  final res_q=   28.398274686889387       res_m=   24.792463004789834     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   54.299693589198846       res_m=   397.02314014023591     
+   AC iter           1  res_q=   54.299693589198846       res_m=   397.02314014023591     
+   AC iter         200  res_q=   50.084176902991828       res_m=   206.88500255510598     
+   AC iter         400  res_q=   39.436490544318382       res_m=   216.50208606533315     
+   AC iter         600  res_q=   40.140694173001506       res_m=   189.20870898573776     
+   AC iter         800  res_q=   38.082854291147434       res_m=   163.56945266286726     
+   AC iter        1000  res_q=   38.075392907636967       res_m=   127.85170458768786     
+  AC solver block           2 : iterations =        1001  final res_q=   38.075392907636967       res_m=   127.85170458768786     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   21.437642383313772       res_m=   26.613786426674924     
+   AC iter           1  res_q=   21.437642383313772       res_m=   26.613786426674924     
+   AC iter         200  res_q=   20.760853832999324       res_m=   30.163882791989664     
+   AC iter         400  res_q=   17.639305894053436       res_m=   28.755679947897150     
+   AC iter         600  res_q=   14.938241043776827       res_m=   26.061929759253502     
+   AC iter         800  res_q=   30.070127601017788       res_m=   21.376974807359719     
+   AC iter        1000  res_q=   14.796308143888181       res_m=   11.590299270406017     
+  AC solver block           3 : iterations =        1001  final res_q=   14.796308143888181       res_m=   11.590299270406017     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   57.353557398172896       res_m=   299.90529979185101     
+   AC iter           1  res_q=   57.353557398172896       res_m=   299.90529979185101     
+   AC iter         200  res_q=   23.866881138633207       res_m=   123.99623148655837     
+   AC iter         400  res_q=   17.535963529233669       res_m=   73.886369507072558     
+   AC iter         600  res_q=   20.410476207879572       res_m=   52.243140816026717     
+   AC iter         800  res_q=   17.995663391374038       res_m=   37.135986748247618     
+   AC iter        1000  res_q=   19.003433964644298       res_m=   29.821875499275087     
+  AC solver block           4 : iterations =        1001  final res_q=   19.003433964644298       res_m=   29.821875499275087     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   9771.6114449944271       res_m=   7473.9111680708766     
+   AC iter           1  res_q=   9771.6114449944271       res_m=   7473.9111680708766     
+   AC iter         200  res_q=   115.23303199052147       res_m=   89.304295193420231     
+   AC iter         400  res_q=   62.915945227935765       res_m=   64.178229999460726     
+   AC iter         600  res_q=   43.273076311065211       res_m=   20.300493713316921     
+   AC iter         800  res_q=   33.141956874880222       res_m=   10.390050933741867     
+   AC iter        1000  res_q=   26.939128152287811       res_m=   7.3704347036128217     
+  AC solver block           1 : iterations =        1001  final res_q=   26.939128152287811       res_m=   7.3704347036128217     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   83.163151672579218       res_m=   356.77747076228172     
+   AC iter           1  res_q=   83.163151672579218       res_m=   356.77747076228172     
+   AC iter         200  res_q=   89.623535540674865       res_m=   98.910466031564496     
+   AC iter         400  res_q=   79.135978857020490       res_m=   93.801188068739819     
+   AC iter         600  res_q=   69.720437965570255       res_m=   103.58935650789120     
+   AC iter         800  res_q=   42.597819333564679       res_m=   88.840516574001072     
+   AC iter        1000  res_q=   28.091822530078925       res_m=   64.701511621903194     
+  AC solver block           2 : iterations =        1001  final res_q=   28.091822530078925       res_m=   64.701511621903194     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   59.083437278828825       res_m=   19.434727639954730     
+   AC iter           1  res_q=   59.083437278828825       res_m=   19.434727639954730     
+   AC iter         200  res_q=   13.630279490144861       res_m=   13.215052467380511     
+   AC iter         400  res_q=   12.385644933835307       res_m=   13.501730421632518     
+   AC iter         600  res_q=   10.961812280401109       res_m=   12.758377225116023     
+   AC iter         800  res_q=   9.9879154580230818       res_m=   12.195680777113360     
+   AC iter        1000  res_q=   8.8082596778966167       res_m=   11.852589618831267     
+  AC solver block           3 : iterations =        1001  final res_q=   8.8082596778966167       res_m=   11.852589618831267     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   40.179253665382241       res_m=   340.24230005252838     
+   AC iter           1  res_q=   40.179253665382241       res_m=   340.24230005252838     
+   AC iter         200  res_q=   19.789730541248431       res_m=   45.065131602920935     
+   AC iter         400  res_q=   19.787440454614469       res_m=   48.818421494573748     
+   AC iter         600  res_q=   17.015196969558296       res_m=   42.893666948210175     
+   AC iter         800  res_q=   19.310235806350125       res_m=   57.353617874792903     
+   AC iter        1000  res_q=   19.858925488438775       res_m=   45.466500050552170     
+  AC solver block           4 : iterations =        1001  final res_q=   19.858925488438775       res_m=   45.466500050552170     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   7454.7717146655741       res_m=   9102.2495080921290     
+   AC iter           1  res_q=   7454.7717146655741       res_m=   9102.2495080921290     
+   AC iter         200  res_q=   120.28086995027073       res_m=   216.42562949310127     
+   AC iter         400  res_q=   88.068737172876382       res_m=   167.96259366703126     
+   AC iter         600  res_q=   133.65725421718318       res_m=   227.77428603355006     
+   AC iter         800  res_q=   102.76145073439304       res_m=   122.01128387037988     
+   AC iter        1000  res_q=   71.074589398842448       res_m=   109.52487543726295     
+  AC solver block           1 : iterations =        1001  final res_q=   71.074589398842448       res_m=   109.52487543726295     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   44.271625321294280       res_m=   108.93057833508847     
+   AC iter           1  res_q=   44.271625321294280       res_m=   108.93057833508847     
+   AC iter         200  res_q=   25.744549859874805       res_m=   69.973583031441692     
+   AC iter         400  res_q=   19.117234877487451       res_m=   47.472366458207276     
+   AC iter         600  res_q=   18.453812715202471       res_m=   36.489247583684509     
+   AC iter         800  res_q=   13.403954577424329       res_m=   26.880721136881487     
+   AC iter        1000  res_q=   12.780839081296202       res_m=   18.182356818223997     
+  AC solver block           2 : iterations =        1001  final res_q=   12.780839081296202       res_m=   18.182356818223997     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   71.191969664029543       res_m=   23.845284740509570     
+   AC iter           1  res_q=   71.191969664029543       res_m=   23.845284740509570     
+   AC iter         200  res_q=   24.551496180449703       res_m=   11.318057072526857     
+   AC iter         400  res_q=   19.450309465837130       res_m=   13.976315686185197     
+   AC iter         600  res_q=   22.799623393314132       res_m=   20.766417373776672     
+   AC iter         800  res_q=   26.716509259553650       res_m=   26.795403417613112     
+   AC iter        1000  res_q=   27.283125143184034       res_m=   23.727841479041238     
+  AC solver block           3 : iterations =        1001  final res_q=   27.283125143184034       res_m=   23.727841479041238     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   35.971350064720710       res_m=   74.415273422623031     
+   AC iter           1  res_q=   35.971350064720710       res_m=   74.415273422623031     
+   AC iter         200  res_q=   17.718222502264418       res_m=   32.648935692372660     
+   AC iter         400  res_q=   18.211434093713791       res_m=   27.188340528019218     
+   AC iter         600  res_q=   14.556355292630707       res_m=   23.535321676011932     
+   AC iter         800  res_q=   12.826059301532636       res_m=   20.097523853151621     
+   AC iter        1000  res_q=   10.158056324054353       res_m=   17.067882413911704     
+  AC solver block           4 : iterations =        1001  final res_q=   10.158056324054353       res_m=   17.067882413911704     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   1994.5626419441519       res_m=   2352.4032647661279     
+   AC iter           1  res_q=   1994.5626419441519       res_m=   2352.4032647661279     
+   AC iter         200  res_q=   51.207797337273746       res_m=   93.523952476225162     
+   AC iter         400  res_q=   26.332532911268249       res_m=   27.856738748537328     
+   AC iter         600  res_q=   19.290835128071894       res_m=   12.831063305627824     
+   AC iter         800  res_q=   16.486162900735625       res_m=   8.7779371674758959     
+   AC iter        1000  res_q=   15.380084389072808       res_m=   8.0542367076571804     
+  AC solver block           1 : iterations =        1001  final res_q=   15.380084389072808       res_m=   8.0542367076571804     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   80.006418961133122       res_m=   103.97959748800361     
+   AC iter           1  res_q=   80.006418961133122       res_m=   103.97959748800361     
+   AC iter         200  res_q=   17.352953654355773       res_m=   52.051275979344311     
+   AC iter         400  res_q=   18.280189737257473       res_m=   33.099825052522426     
+   AC iter         600  res_q=   15.243147034012091       res_m=   16.937143872218055     
+   AC iter         800  res_q=   12.305238552244969       res_m=   11.942085626829588     
+   AC iter        1000  res_q=   11.194861804254638       res_m=   9.1201159621037373     
+  AC solver block           2 : iterations =        1001  final res_q=   11.194861804254638       res_m=   9.1201159621037373     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   55.185463060004366       res_m=   28.357977664755772     
+   AC iter           1  res_q=   55.185463060004366       res_m=   28.357977664755772     
+   AC iter         200  res_q=   26.036341005031154       res_m=   26.624126750722859     
+   AC iter         400  res_q=   20.580290790323101       res_m=   23.727433218289079     
+   AC iter         600  res_q=   16.802294749620795       res_m=   23.979543767453418     
+   AC iter         800  res_q=   12.551846321021962       res_m=   17.963444869613664     
+   AC iter        1000  res_q=   10.242292033242174       res_m=   15.577366714887745     
+  AC solver block           3 : iterations =        1001  final res_q=   10.242292033242174       res_m=   15.577366714887745     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   65.221872137088369       res_m=   50.551342440824584     
+   AC iter           1  res_q=   65.221872137088369       res_m=   50.551342440824584     
+   AC iter         200  res_q=   23.536312830341092       res_m=   32.047122304539904     
+   AC iter         400  res_q=   14.819235786910916       res_m=   30.228662623854650     
+   AC iter         600  res_q=   14.418666332423545       res_m=   19.997225560239254     
+   AC iter         800  res_q=   8.4258056828813555       res_m=   14.682021763142446     
+   AC iter        1000  res_q=   7.1786707529126526       res_m=   9.5282127697665917     
+  AC solver block           4 : iterations =        1001  final res_q=   7.1786707529126526       res_m=   9.5282127697665917     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   2016.0451469142429       res_m=   1392.8672397748753     
+   AC iter           1  res_q=   2016.0451469142429       res_m=   1392.8672397748753     
+   AC iter         200  res_q=   67.237120515547900       res_m=   116.94684587680064     
+   AC iter         400  res_q=   51.490029040308436       res_m=   88.720695593891023     
+   AC iter         600  res_q=   44.082029855988353       res_m=   64.493333299994703     
+   AC iter         800  res_q=   37.143670378420687       res_m=   51.817283482399844     
+   AC iter        1000  res_q=   40.492325866159966       res_m=   44.713266538555068     
+  AC solver block           1 : iterations =        1001  final res_q=   40.492325866159966       res_m=   44.713266538555068     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   40.299973243218979       res_m=   88.548275392591819     
+   AC iter           1  res_q=   40.299973243218979       res_m=   88.548275392591819     
+   AC iter         200  res_q=   16.518707897228353       res_m=   21.419496738034447     
+   AC iter         400  res_q=   9.1475298496553030       res_m=   14.475050675747900     
+   AC iter         600  res_q=   12.520090202260011       res_m=   7.2012931992933620     
+   AC iter         800  res_q=   5.7851439273591891       res_m=   7.9378261414639750     
+   AC iter        1000  res_q=   9.6284773940555741       res_m=   5.4236172694739793     
+  AC solver block           2 : iterations =        1001  final res_q=   9.6284773940555741       res_m=   5.4236172694739793     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   53.110310738365058       res_m=   28.526185531188318     
+   AC iter           1  res_q=   53.110310738365058       res_m=   28.526185531188318     
+   AC iter         200  res_q=   11.892323073373417       res_m=   10.631811035273660     
+   AC iter         400  res_q=   7.4921776297900937       res_m=   9.7224634264280105     
+   AC iter         600  res_q=   5.0780245358464802       res_m=   7.2964576982813529     
+   AC iter         800  res_q=   5.9372008473150260       res_m=   5.1727526952555056     
+   AC iter        1000  res_q=   5.3517603517789958       res_m=   6.3786202286480984     
+  AC solver block           3 : iterations =        1001  final res_q=   5.3517603517789958       res_m=   6.3786202286480984     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   53.225173058323250       res_m=   55.395584616169771     
+   AC iter           1  res_q=   53.225173058323250       res_m=   55.395584616169771     
+   AC iter         200  res_q=   12.433339269247128       res_m=   8.6582918938672968     
+   AC iter         400  res_q=   5.9294219144622220       res_m=   7.9621207138045120     
+   AC iter         600  res_q=   7.3554344908392029       res_m=   9.4055189703393545     
+   AC iter         800  res_q=   9.1802425304483979       res_m=   6.7963025657004907     
+   AC iter        1000  res_q=   4.8861873175232411       res_m=   6.2630739768140291     
+  AC solver block           4 : iterations =        1001  final res_q=   4.8861873175232411       res_m=   6.2630739768140291     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   935.03608643990549       res_m=   779.00961702914776     
+   AC iter           1  res_q=   935.03608643990549       res_m=   779.00961702914776     
+   AC iter         200  res_q=   48.148543431157421       res_m=   47.254383515768311     
+   AC iter         400  res_q=   57.372779491467078       res_m=   40.651169669337314     
+   AC iter         600  res_q=   54.580738558654993       res_m=   33.584303092972704     
+   AC iter         800  res_q=   50.733019782723687       res_m=   29.618362267047111     
+   AC iter        1000  res_q=   47.550043518255187       res_m=   33.615352266796997     
+  AC solver block           1 : iterations =        1001  final res_q=   47.550043518255187       res_m=   33.615352266796997     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   49.253605176888662       res_m=   114.06697355046315     
+   AC iter           1  res_q=   49.253605176888662       res_m=   114.06697355046315     
+   AC iter         200  res_q=   20.905055761947267       res_m=   10.285624044286198     
+   AC iter         400  res_q=   17.918972487741637       res_m=   12.911314531653568     
+   AC iter         600  res_q=   17.766627539347791       res_m=   11.132207323376353     
+   AC iter         800  res_q=   9.2994880994216089       res_m=   9.5514115320936188     
+   AC iter        1000  res_q=   12.047801779408239       res_m=   11.678211223322524     
+  AC solver block           2 : iterations =        1001  final res_q=   12.047801779408239       res_m=   11.678211223322524     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   34.883121849446489       res_m=   14.129095260865020     
+   AC iter           1  res_q=   34.883121849446489       res_m=   14.129095260865020     
+   AC iter         200  res_q=   3.8313523469101001       res_m=   7.2556392413808366     
+   AC iter         400  res_q=   8.1556659514583902       res_m=   7.9551556399023902     
+   AC iter         600  res_q=   7.3633708666666822       res_m=   4.3301742858629479     
+   AC iter         800  res_q=   6.8309083353050033       res_m=   4.9547827283597625     
+   AC iter        1000  res_q=   5.6117024098100101       res_m=   4.3807867963109937     
+  AC solver block           3 : iterations =        1001  final res_q=   5.6117024098100101       res_m=   4.3807867963109937     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   16.460649983085194       res_m=   11.760021398058074     
+   AC iter           1  res_q=   16.460649983085194       res_m=   11.760021398058074     
+   AC iter         200  res_q=   8.2031903799430061       res_m=   6.2920322656470509     
+   AC iter         400  res_q=   6.4380502483999198       res_m=   7.6392710484829287     
+   AC iter         600  res_q=   3.4980769244245247       res_m=   7.2318165645627053     
+   AC iter         800  res_q=   6.8502022398121607       res_m=   2.6837891783751293     
+   AC iter        1000  res_q=   3.1615888367290594       res_m=   3.1698235854813763     
+  AC solver block           4 : iterations =        1001  final res_q=   3.1615888367290594       res_m=   3.1698235854813763     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   1371.8928831554499       res_m=   1467.1940454344813     
+   AC iter           1  res_q=   1371.8928831554499       res_m=   1467.1940454344813     
+   AC iter         200  res_q=   204.13889666768762       res_m=   336.28573321077857     
+   AC iter         400  res_q=   119.29046323371999       res_m=   211.46872911633662     
+   AC iter         600  res_q=   65.698716162918856       res_m=   166.66417990893783     
+   AC iter         800  res_q=   53.914822536866332       res_m=   133.35440934996004     
+   AC iter        1000  res_q=   54.334585660935780       res_m=   125.55377130647294     
+  AC solver block           1 : iterations =        1001  final res_q=   54.334585660935780       res_m=   125.55377130647294     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   46.838594315952108       res_m=   118.85123380524769     
+   AC iter           1  res_q=   46.838594315952108       res_m=   118.85123380524769     
+   AC iter         200  res_q=   28.372768518730005       res_m=   31.196529108285088     
+   AC iter         400  res_q=   20.769081303303746       res_m=   32.808638446213635     
+   AC iter         600  res_q=   22.134402548748504       res_m=   23.282387844049840     
+   AC iter         800  res_q=   15.220149453193587       res_m=   18.625780040836041     
+   AC iter        1000  res_q=   10.130194632120908       res_m=   9.1539927057133550     
+  AC solver block           2 : iterations =        1001  final res_q=   10.130194632120908       res_m=   9.1539927057133550     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   41.474011461034159       res_m=   26.353498030865982     
+   AC iter           1  res_q=   41.474011461034159       res_m=   26.353498030865982     
+   AC iter         200  res_q=   7.6255531617997949       res_m=   10.379142375790583     
+   AC iter         400  res_q=   7.8161334603659807       res_m=   11.492093962871616     
+   AC iter         600  res_q=   10.838079824033946       res_m=   15.160358326724630     
+   AC iter         800  res_q=   10.313407155463402       res_m=   16.228321298803309     
+   AC iter        1000  res_q=   7.5736461134999109       res_m=   12.680772794175869     
+  AC solver block           3 : iterations =        1001  final res_q=   7.5736461134999109       res_m=   12.680772794175869     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   15.322177129493554       res_m=   12.422410010808141     
+   AC iter           1  res_q=   15.322177129493554       res_m=   12.422410010808141     
+   AC iter         200  res_q=   3.7433015804205563       res_m=   4.4927745361004163     
+   AC iter         400  res_q=   4.6943176269788065       res_m=   3.1997499782218783     
+   AC iter         600  res_q=   3.6262417614572486       res_m=   4.6757556651213479     
+   AC iter         800  res_q=   3.8348385671812064       res_m=   5.1824669950106168     
+   AC iter        1000  res_q=   3.3851978933512257       res_m=   4.5498042113731563     
+  AC solver block           4 : iterations =        1001  final res_q=   3.3851978933512257       res_m=   4.5498042113731563     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   2893.6798086635581       res_m=   2199.6516091764965     
+   AC iter           1  res_q=   2893.6798086635581       res_m=   2199.6516091764965     
+   AC iter         200  res_q=   53.346721763862021       res_m=   113.45715464931826     
+   AC iter         400  res_q=   46.630768412329765       res_m=   94.994819196336024     
+   AC iter         600  res_q=   35.273586356619631       res_m=   82.586023974022751     
+   AC iter         800  res_q=   38.480269062429471       res_m=   48.416837695570031     
+   AC iter        1000  res_q=   36.282169574425623       res_m=   54.730459888990474     
+  AC solver block           1 : iterations =        1001  final res_q=   36.282169574425623       res_m=   54.730459888990474     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   69.676578537260554       res_m=   116.39316552117732     
+   AC iter           1  res_q=   69.676578537260554       res_m=   116.39316552117732     
+   AC iter         200  res_q=   52.331020020488246       res_m=   63.121620953498550     
+   AC iter         400  res_q=   66.551268406359270       res_m=   42.768292476387458     
+   AC iter         600  res_q=   53.566813874963188       res_m=   81.542927811291875     
+   AC iter         800  res_q=   38.963546925356830       res_m=   86.857366675747357     
+   AC iter        1000  res_q=   19.189009350940019       res_m=   50.002335537750469     
+  AC solver block           2 : iterations =        1001  final res_q=   19.189009350940019       res_m=   50.002335537750469     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   74.897781274365613       res_m=   34.141691487851965     
+   AC iter           1  res_q=   74.897781274365613       res_m=   34.141691487851965     
+   AC iter         200  res_q=   10.826865671635518       res_m=   8.1528708418352878     
+   AC iter         400  res_q=   9.3973053452453712       res_m=   8.3869056400831106     
+   AC iter         600  res_q=   7.7279709325217691       res_m=   9.4709162888425400     
+   AC iter         800  res_q=   6.2417923580335648       res_m=   9.8004009161743220     
+   AC iter        1000  res_q=   4.0735552555584436       res_m=   8.8449086636406395     
+  AC solver block           3 : iterations =        1001  final res_q=   4.0735552555584436       res_m=   8.8449086636406395     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   18.047993348719157       res_m=   14.343520574759250     
+   AC iter           1  res_q=   18.047993348719157       res_m=   14.343520574759250     
+   AC iter         200  res_q=   5.4319565189092724       res_m=   10.505446598400576     
+   AC iter         400  res_q=   24.147604609156208       res_m=   6.1647524779094525     
+   AC iter         600  res_q=   10.648092465654443       res_m=   8.1685683002792402     
+   AC iter         800  res_q=   7.7729172255847976       res_m=   5.9736111005606052     
+   AC iter        1000  res_q=   6.3575823528029440       res_m=   3.8495882230859015     
+  AC solver block           4 : iterations =        1001  final res_q=   6.3575823528029440       res_m=   3.8495882230859015     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   7008.0889805663946       res_m=   10090.475136566534     
+   AC iter           1  res_q=   7008.0889805663946       res_m=   10090.475136566534     
+   AC iter         200  res_q=   315.65246717985269       res_m=   3398.5834318525740     
+   AC iter         400  res_q=   293.15713065072242       res_m=   2193.9802854421246     
+   AC iter         600  res_q=   77.081814540707853       res_m=   489.12971537616278     
+   AC iter         800  res_q=   52.394103209866316       res_m=   83.825543855933404     
+   AC iter        1000  res_q=   18.257431390852787       res_m=   34.046185774715276     
+  AC solver block           1 : iterations =        1001  final res_q=   18.257431390852787       res_m=   34.046185774715276     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   118.43551785788142       res_m=   886.37147437172678     
+   AC iter           1  res_q=   118.43551785788142       res_m=   886.37147437172678     
+   AC iter         200  res_q=   76.242885686956924       res_m=   448.69849773713679     
+   AC iter         400  res_q=   53.455472120444988       res_m=   325.70033445132117     
+   AC iter         600  res_q=   55.444675415549931       res_m=   391.78958223043196     
+   AC iter         800  res_q=   46.542617370990136       res_m=   264.13706227964002     
+   AC iter        1000  res_q=   42.914152583717623       res_m=   169.75690819402664     
+  AC solver block           2 : iterations =        1001  final res_q=   42.914152583717623       res_m=   169.75690819402664     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   94.545140193440744       res_m=   41.030484988504526     
+   AC iter           1  res_q=   94.545140193440744       res_m=   41.030484988504526     
+   AC iter         200  res_q=   21.016983820939668       res_m=   25.574988117928200     
+   AC iter         400  res_q=   13.362543199910519       res_m=   18.494622772662336     
+   AC iter         600  res_q=   10.893363190013043       res_m=   15.573218718756815     
+   AC iter         800  res_q=   9.2782827472599152       res_m=   14.901296746549557     
+   AC iter        1000  res_q=   7.4602707371199424       res_m=   10.362118437516774     
+  AC solver block           3 : iterations =        1001  final res_q=   7.4602707371199424       res_m=   10.362118437516774     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   90.500312764201439       res_m=   685.01718168064986     
+   AC iter           1  res_q=   90.500312764201439       res_m=   685.01718168064986     
+   AC iter         200  res_q=   53.746637757831223       res_m=   288.72127329169723     
+   AC iter         400  res_q=   37.018106237472857       res_m=   266.18914636839691     
+   AC iter         600  res_q=   33.985575510958775       res_m=   190.48309943643466     
+   AC iter         800  res_q=   30.499197318030404       res_m=   132.23860763777193     
+   AC iter        1000  res_q=   28.538288774292699       res_m=   111.44689164895415     
+  AC solver block           4 : iterations =        1001  final res_q=   28.538288774292699       res_m=   111.44689164895415     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   18530.153165424133       res_m=   13721.348760113984     
+   AC iter           1  res_q=   18530.153165424133       res_m=   13721.348760113984     
+   AC iter         200  res_q=   155.55258401063335       res_m=   143.63178030634586     
+   AC iter         400  res_q=   80.273378196648537       res_m=   74.256300595383223     
+   AC iter         600  res_q=   52.625094638076426       res_m=   22.584975887619034     
+   AC iter         800  res_q=   40.185393351205704       res_m=   12.137148326227310     
+   AC iter        1000  res_q=   32.483800208135385       res_m=   9.3213504902324420     
+  AC solver block           1 : iterations =        1001  final res_q=   32.483800208135385       res_m=   9.3213504902324420     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   143.46460972461725       res_m=   806.38778918801393     
+   AC iter           1  res_q=   143.46460972461725       res_m=   806.38778918801393     
+   AC iter         200  res_q=   118.59864579828111       res_m=   305.50052697443766     
+   AC iter         400  res_q=   104.46843907750588       res_m=   217.24396738114351     
+   AC iter         600  res_q=   93.308837724963666       res_m=   151.11971779807129     
+   AC iter         800  res_q=   58.440849331683907       res_m=   145.27695053807764     
+   AC iter        1000  res_q=   45.296656709017888       res_m=   112.66432334272145     
+  AC solver block           2 : iterations =        1001  final res_q=   45.296656709017888       res_m=   112.66432334272145     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   184.66333632147516       res_m=   53.832870979212700     
+   AC iter           1  res_q=   184.66333632147516       res_m=   53.832870979212700     
+   AC iter         200  res_q=   20.746707349159031       res_m=   9.2120474049070200     
+   AC iter         400  res_q=   11.408910259982845       res_m=   7.6182457753318458     
+   AC iter         600  res_q=   6.4232584704673581       res_m=   8.5094269456978164     
+   AC iter         800  res_q=   10.638447326135436       res_m=   7.2292847181856681     
+   AC iter        1000  res_q=   10.541547023138182       res_m=   6.3328655240790068     
+  AC solver block           3 : iterations =        1001  final res_q=   10.541547023138182       res_m=   6.3328655240790068     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   58.820265231373604       res_m=   760.42593554065729     
+   AC iter           1  res_q=   58.820265231373604       res_m=   760.42593554065729     
+   AC iter         200  res_q=   26.046805557658580       res_m=   96.329404654103982     
+   AC iter         400  res_q=   23.650087925931977       res_m=   81.825972944453127     
+   AC iter         600  res_q=   24.582767764606857       res_m=   73.031202728675908     
+   AC iter         800  res_q=   31.750298156494264       res_m=   54.638361706704096     
+   AC iter        1000  res_q=   30.805424371360111       res_m=   38.842640466122937     
+  AC solver block           4 : iterations =        1001  final res_q=   30.805424371360111       res_m=   38.842640466122937     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   10217.936744227674       res_m=   18882.318590348259     
+   AC iter           1  res_q=   10217.936744227674       res_m=   18882.318590348259     
+   AC iter         200  res_q=   153.78594036691371       res_m=   535.18541194279055     
+   AC iter         400  res_q=   114.73996736635338       res_m=   441.42887224672188     
+   AC iter         600  res_q=   77.080592882625538       res_m=   399.36480960302282     
+   AC iter         800  res_q=   60.908439183632915       res_m=   150.14240357315055     
+   AC iter        1000  res_q=   39.766563921145064       res_m=   99.379790962293114     
+  AC solver block           1 : iterations =        1001  final res_q=   39.766563921145064       res_m=   99.379790962293114     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   122.38486298764776       res_m=   193.91324237983423     
+   AC iter           1  res_q=   122.38486298764776       res_m=   193.91324237983423     
+   AC iter         200  res_q=   29.605309699851063       res_m=   95.724235930842696     
+   AC iter         400  res_q=   40.458088402071468       res_m=   97.919219099788620     
+   AC iter         600  res_q=   50.233476102608059       res_m=   179.19323044407545     
+   AC iter         800  res_q=   31.479242767495450       res_m=   207.77044292330342     
+   AC iter        1000  res_q=   52.380802238620348       res_m=   59.968034481375469     
+  AC solver block           2 : iterations =        1001  final res_q=   52.380802238620348       res_m=   59.968034481375469     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   180.33013020452393       res_m=   63.451714828606676     
+   AC iter           1  res_q=   180.33013020452393       res_m=   63.451714828606676     
+   AC iter         200  res_q=   31.449650618458193       res_m=   19.184836381824063     
+   AC iter         400  res_q=   22.595401675388523       res_m=   13.315090628582398     
+   AC iter         600  res_q=   19.532417206260632       res_m=   12.284517532993734     
+   AC iter         800  res_q=   17.754326031401554       res_m=   9.6221966666323677     
+   AC iter        1000  res_q=   16.290754848570380       res_m=   8.9762171388928849     
+  AC solver block           3 : iterations =        1001  final res_q=   16.290754848570380       res_m=   8.9762171388928849     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   66.142989520842235       res_m=   148.74099106579951     
+   AC iter           1  res_q=   66.142989520842235       res_m=   148.74099106579951     
+   AC iter         200  res_q=   34.141428265045249       res_m=   63.507482473856520     
+   AC iter         400  res_q=   25.595349745744713       res_m=   46.220232121749156     
+   AC iter         600  res_q=   21.969185907638082       res_m=   47.421348002115693     
+   AC iter         800  res_q=   15.747692890527501       res_m=   47.912037907706342     
+   AC iter        1000  res_q=   14.077185005299095       res_m=   44.355263944890801     
+  AC solver block           4 : iterations =        1001  final res_q=   14.077185005299095       res_m=   44.355263944890801     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   2645.9360684666140       res_m=   3846.9836235546868     
+   AC iter           1  res_q=   2645.9360684666140       res_m=   3846.9836235546868     
+   AC iter         200  res_q=   172.06561757417413       res_m=   331.62835792088572     
+   AC iter         400  res_q=   101.72964182267619       res_m=   79.850051824359340     
+   AC iter         600  res_q=   91.876495693871504       res_m=   70.176495225658982     
+   AC iter         800  res_q=   65.256758190457589       res_m=   95.208741808423710     
+   AC iter        1000  res_q=   148.18985687845910       res_m=   230.18232272427574     
+  AC solver block           1 : iterations =        1001  final res_q=   148.18985687845910       res_m=   230.18232272427574     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   58.063945529981616       res_m=   250.56218669893337     
+   AC iter           1  res_q=   58.063945529981616       res_m=   250.56218669893337     
+   AC iter         200  res_q=   63.567552364153407       res_m=   263.71363464179092     
+   AC iter         400  res_q=   52.498999239813621       res_m=   162.97129121407107     
+   AC iter         600  res_q=   35.117499712820901       res_m=   81.730846373865035     
+   AC iter         800  res_q=   23.991617611632790       res_m=   65.981395244204236     
+   AC iter        1000  res_q=   42.616871664090112       res_m=   37.584634403985383     
+  AC solver block           2 : iterations =        1001  final res_q=   42.616871664090112       res_m=   37.584634403985383     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   36.003592275357832       res_m=   25.165319953668327     
+   AC iter           1  res_q=   36.003592275357832       res_m=   25.165319953668327     
+   AC iter         200  res_q=   19.584140004316144       res_m=   10.241682911199332     
+   AC iter         400  res_q=   18.049583194299963       res_m=   10.617624846480405     
+   AC iter         600  res_q=   16.482029095687750       res_m=   12.815815198662252     
+   AC iter         800  res_q=   13.551763082297271       res_m=   16.060722889072196     
+   AC iter        1000  res_q=   9.7694448000092162       res_m=   20.259129733191173     
+  AC solver block           3 : iterations =        1001  final res_q=   9.7694448000092162       res_m=   20.259129733191173     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   104.46297028187840       res_m=   191.75704157397394     
+   AC iter           1  res_q=   104.46297028187840       res_m=   191.75704157397394     
+   AC iter         200  res_q=   44.591483362542228       res_m=   76.132257314249500     
+   AC iter         400  res_q=   49.879607587340708       res_m=   88.488352967163863     
+   AC iter         600  res_q=   24.932454479728818       res_m=   29.969217808314745     
+   AC iter         800  res_q=   21.417334512806359       res_m=   43.409049193365682     
+   AC iter        1000  res_q=   24.622377201614849       res_m=   46.726038657971095     
+  AC solver block           4 : iterations =        1001  final res_q=   24.622377201614849       res_m=   46.726038657971095     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   4248.7474365322887       res_m=   4537.7032419918742     
+   AC iter           1  res_q=   4248.7474365322887       res_m=   4537.7032419918742     
+   AC iter         200  res_q=   146.97776745830865       res_m=   159.62239952954917     
+   AC iter         400  res_q=   151.41649344801596       res_m=   335.51687499954687     
+   AC iter         600  res_q=   125.33798353031959       res_m=   259.98446246931570     
+   AC iter         800  res_q=   149.80475739009648       res_m=   254.02864167298577     
+   AC iter        1000  res_q=   99.632015696479215       res_m=   76.591861607537766     
+  AC solver block           1 : iterations =        1001  final res_q=   99.632015696479215       res_m=   76.591861607537766     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   57.053547451869434       res_m=   227.51150991699538     
+   AC iter           1  res_q=   57.053547451869434       res_m=   227.51150991699538     
+   AC iter         200  res_q=   79.249886064950260       res_m=   98.943273283520440     
+   AC iter         400  res_q=   57.773814434101496       res_m=   22.342019012913624     
+   AC iter         600  res_q=   36.158240899030709       res_m=   29.437900977698582     
+   AC iter         800  res_q=   31.605206850526159       res_m=   22.586057941431530     
+   AC iter        1000  res_q=   32.202438979899703       res_m=   24.075038426683012     
+  AC solver block           2 : iterations =        1001  final res_q=   32.202438979899703       res_m=   24.075038426683012     
+  AC solver (LS_Algorithm=3) block           3  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   25.075455688096440       res_m=   16.934449174554643     
+   AC iter           1  res_q=   25.075455688096440       res_m=   16.934449174554643     
+   AC iter         200  res_q=   8.5309858602749831       res_m=   15.281777197649236     
+   AC iter         400  res_q=   8.0220570524072095       res_m=   14.229543894791565     
+   AC iter         600  res_q=   8.3093799821867993       res_m=   9.9228795012062658     
+   AC iter         800  res_q=   7.0861660250235436       res_m=   5.8257710943720751     
+   AC iter        1000  res_q=   5.3260750002604187       res_m=   12.853301511057285     
+  AC solver block           3 : iterations =        1001  final res_q=   5.3260750002604187       res_m=   12.853301511057285     
+  AC solver (LS_Algorithm=3) block           4  nx,ny,nz=         101          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   75.416794644493606       res_m=   128.33370679535253     
+   AC iter           1  res_q=   75.416794644493606       res_m=   128.33370679535253     
+   AC iter         200  res_q=   23.451418028142257       res_m=   32.445871642219821     
+   AC iter         400  res_q=   29.451488892346237       res_m=   26.351637009879305     
+   AC iter         600  res_q=   12.992320678728023       res_m=   12.583266550528526     
+   AC iter         800  res_q=   8.0325866422962484       res_m=   11.922976994587509     
+   AC iter        1000  res_q=   7.2861604866058425       res_m=   10.345235156251050     
+  AC solver block           4 : iterations =        1001  final res_q=   7.2861604866058425       res_m=   10.345235156251050     
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          61          61           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   3608.3207189724476       res_m=   1954.9501703053945     
+   AC iter           1  res_q=   3608.3207189724476       res_m=   1954.9501703053945     
+   AC iter         200  res_q=   108.54097333857135       res_m=   137.75222027426028     
+   AC iter         400  res_q=   60.912067740805661       res_m=   73.992749352311677     
+   AC iter         600  res_q=   48.796806056227574       res_m=   44.259407758586271     
+   AC iter         800  res_q=   41.111162001720899       res_m=   27.125173717554986     
+   AC iter        1000  res_q=   32.343911579022894       res_m=   23.616064565159181     
+  AC solver block           1 : iterations =        1001  final res_q=   32.343911579022894       res_m=   23.616064565159181     
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          61         101           2  beta=   1.0000000000000000       CFL=   2.0000000000000000       dual=           0  flux=           1  recon=           0  lim=           1
+   AC iter           1  res_q=   90.075618868408299       res_m=   176.46944623792217     
+   AC iter           1  res_q=   90.075618868408299       res_m=   176.46944623792217     
+   AC iter         200  res_q=   19.730137020243305       res_m=   20.431548516074912     

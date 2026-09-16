@@ -1,0 +1,74 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ prepare_bc3d_input: bc3d.inp consistent with bc3d_interface.inp, keep it
+ Check if Multi-Grid can be used ...
+ Total Block number is            2 Total Cell number is         6400
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=        6400
+ Total Grid number=       13284
+ Max grid number is        13284  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is        13284  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           2
+   Block           1 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+   Block           2 : Block_type=           2  rho=   1.0000000000000000       Cp=   1.0000000000000000       k=   0.0000000000000000     
+ porous.inp not found: porous blocks use defaults (eps=0.9, dp=1e-3 m, hv=0)
+ creat main mesh OK, Num_Cell=        6400
+  read main mesh ...
+  Mesh3d.x layout: separate (x,y,z in three records per block)
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ Convert bc3d_interface.inp to bc3d_interface.inc ...
+ Convert bc3d_interface.inp to bc3d_interface.inc OK
+ read bc3d_interface.inc (Interface link file)......
+ read bc3d_interface.inc OK
+ solid_bc.inp not found, no solid thermal BCs
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           2           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+  AC solver (LS_Algorithm=3) block           1  nx,ny,nz=          81          41           2  beta=   1.0000000000000000       CFL=   20.000000000000000       dual=           0  flux=           1  recon=           1  lim=           1
+  AC: shared same-class interfaces =           1
+   AC iter           1  res_q=   0.0000000000000000       res_m=   64.000000000000128     
+   AC iter           1  res_q=   0.0000000000000000       res_m=   64.000000000000128     
+   AC iter        2000  res_q=   7.2094509839479598E-002  res_m=   3.1375572190699287E-002
+   AC iter        4000  res_q=   1.2552680327702955E-002  res_m=   4.7756629609523489E-003
+   AC iter        6000  res_q=   3.4829692929450183E-003  res_m=   1.4139020173169065E-003
+   AC iter        8000  res_q=   9.7748170269918301E-004  res_m=   3.9286599011337703E-004
+   AC iter       10000  res_q=   2.7581907813129084E-004  res_m=   1.1061978578406990E-004
+   AC iter       12000  res_q=   7.8128187178117306E-005  res_m=   3.1317528960536883E-005
+   AC iter       14000  res_q=   2.2136912646020337E-005  res_m=   8.8764611917434857E-006
+   AC iter       16000  res_q=   6.2803531458710800E-006  res_m=   2.5166706942725860E-006
+   AC iter       18000  res_q=   1.7797307266809244E-006  res_m=   7.1352000771628438E-007
+   AC iter       20000  res_q=   5.0493025871567666E-007  res_m=   2.0233678492721873E-007
+   AC iter       22000  res_q=   1.4313314006253522E-007  res_m=   5.7372858478357802E-008
+  AC solver block           1 : iterations =       22570  final res_q=   9.9980954071377381E-008  res_m=   4.0064335230500043E-008
+  AC solver (LS_Algorithm=3) block           2  nx,ny,nz=          81          41           2  beta=   1.0000000000000000       CFL=   20.000000000000000       dual=           0  flux=           1  recon=           1  lim=           1
+   AC iter           1  res_q=   13.988718300959489       res_m=   99.168144622025238     
+   AC iter           1  res_q=   13.988718300959489       res_m=   99.168144622025238     
+   AC iter        2000  res_q=  0.31230639864794685       res_m=  0.27890691940294021     
+   AC iter        4000  res_q=   4.9277664570421716E-002  res_m=   5.5897930442330906E-002
+   AC iter        6000  res_q=   6.9792004828706118E-004  res_m=   8.0737428610360503E-004
+   AC iter        8000  res_q=   1.3067198966265629E-003  res_m=   1.4964071968800578E-003
+   AC iter       10000  res_q=   3.1993200218516382E-004  res_m=   3.6652716179787415E-004
+   AC iter       12000  res_q=   3.3615611377824156E-005  res_m=   3.8518218241110187E-005
+   AC iter       14000  res_q=   1.8355138658998658E-006  res_m=   2.0923366845005104E-006
+   AC iter       16000  res_q=   1.3929462028272614E-006  res_m=   1.5948503121430532E-006
+   AC iter       18000  res_q=   2.5813280957187643E-007  res_m=   2.9547606300500783E-007
+  AC solver block           2 : iterations =       18947  final res_q=   8.7287577166250831E-008  res_m=   9.9949202923229949E-008
+ write flow3d.dat ......
+ write flow3d.dat OK
+ write VTK files ......
+ write VTK files OK

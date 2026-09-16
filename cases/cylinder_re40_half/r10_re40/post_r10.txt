@@ -1,0 +1,11 @@
+---- cylinder (upper half + symmetry), Re=40.0   grid 121x81x2
+ Cd (wall integral, 2nd order) = 1.6659   [pressure 1.0764 + friction 0.5895]
+ Cd (wall integral, 1st order) = 1.6524
+ Cd (far-field momentum bal., r=9.9) = 1.6694
+ Cd (momentum balance on arc r=  2.0) = 1.6659
+ Cd (momentum balance on arc r=  5.0) = 1.6630
+ Cd (momentum balance on arc r=  9.7) = 1.6597
+ lift coefficient of the upper half Cl = 0.3748 (full cylinder = 0 by symmetry)
+ Cp_stagnation = 1.2350   Cp_min = -0.9981   -Cp_rear = 0.5418   p_inf = 2.260e-02
+ separation angle (from front stag.) = 125.9 deg
+ wake length (reattachment, from rear) = 2.043 D   u_min(centerline) = -0.09753

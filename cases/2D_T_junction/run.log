@@ -1,0 +1,40 @@
+nohup: ignoring input
+double free or corruption (out)
+
+Program received signal SIGABRT: Process abort signal.
+
+Backtrace for this error:
+#0  0x73ab14c23e59 in ???
+#1  0x73ab14c22e75 in ???
+#2  0x73ab1484532f in ???
+	at ./signal/../sysdeps/unix/sysv/linux/x86_64/libc_sigaction.c:0
+#3  0x73ab1489ec0c in __pthread_kill_implementation
+	at ./nptl/pthread_kill.c:44
+#4  0x73ab1489ec0c in __pthread_kill_internal
+	at ./nptl/pthread_kill.c:78
+#5  0x73ab1489ec0c in __GI___pthread_kill
+	at ./nptl/pthread_kill.c:89
+#6  0x73ab1484527d in __GI_raise
+	at ../sysdeps/posix/raise.c:26
+#7  0x73ab148288fe in __GI_abort
+	at ./stdlib/abort.c:79
+#8  0x73ab148297b5 in __libc_message_impl
+	at ../sysdeps/posix/libc_fatal.c:134
+#9  0x73ab148a90d4 in malloc_printerr
+	at ./malloc/malloc.c:5775
+#10  0x73ab148ab1ff in _int_free_merge_chunk
+	at ./malloc/malloc.c:4676
+#11  0x73ab148ab519 in _int_free
+	at ./malloc/malloc.c:4646
+#12  0x73ab148adead in __GI___libc_free
+	at ./malloc/malloc.c:3398
+#13  0x73ab14ec2d56 in ???
+#14  0x73ab14eadddc in ???
+#15  0x644084325ccf in read_para_fdm_
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/sub_Finite_Difference1.f90:26
+#16  0x644084326008 in init_fdm_
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/sub_Finite_Difference1.f90:9
+#17  0x64408426393f in MAIN__
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/opencfd_ec3d_v1.16a.f90:154
+#18  0x6440842633fe in main
+	at /home/sundong/Fortran_Project/OpenCFD-EC-1.16a/src/opencfd_ec3d_v1.16a.f90:127

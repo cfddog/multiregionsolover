@@ -1,0 +1,65 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is          400
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=         400
+ Total Grid number=        1604
+ Max grid number is         1604  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is         1604  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           3  rho=   8000.0000000000000       Cp=   500.00000000000000       k=   13.400000000000000     
+ Read porous.inp OK
+   Porous Block           1 : eps=  0.90000000000000002       dp=   1.0000000000000000E-003  hv=   358167.29999999999       rho_s=   8000.0000000000000       k_s=   13.400000000000000     
+ creat main mesh OK, Num_Cell=         400
+  read main mesh ...
+  Mesh3d.x layout: separate (x,y,z in three records per block)
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ Read solid_bc.inp OK
+   Block           1  (solid):           2  thermal BC faces
+     face           1  Tw=   0.0000000000000000       Qw=   0.0000000000000000     
+     face           4  Tw=  -1.0000000000000000       Qw=   2000000.0000000000     
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+  AC porous solver (LS_Algorithm=3) block           1  eps=  0.90000000000000002       dp=   1.0000000000000000E-003  hv=   358167.29999999999       beta=   900.00000000000000       CFL=   20.000000000000000     
+   AC-porous iter           1  res_q=   0.0000000000000000       res_m=   185.25555555555559     
+   AC-porous iter           1  res_q=   0.0000000000000000       res_m=   185.25555555555559     
+   AC-porous iter        5000  res_q=  0.57008660576756198       res_m=   15.897961075375626     
+   AC-porous iter       10000  res_q=   6.1810229565421808E-002  res_m=  0.93744655925531672     
+   AC-porous iter       15000  res_q=   5.0373520031775513E-003  res_m=   5.2363036382448491E-002
+   AC-porous iter       20000  res_q=   3.6556810582792583E-004  res_m=   2.7445282691703418E-003
+   AC-porous iter       25000  res_q=   2.4617505729380616E-005  res_m=   1.3220078725787701E-004
+   AC-porous iter       30000  res_q=   1.5667993651462622E-006  res_m=   5.5674622416150944E-006
+  AC porous solver block           1 : iterations =       32754  final res_q=   2.6559034806807713E-007  res_m=   9.9404608772733928E-007
+   AC-porous LTNE iter        2000  dTf=   11.584208719947696       dTs=   31.539658083784616       Tf[   300.00465138786774      ,   774.72714719180681      ]  Ts[   303.14838383329197      ,   3087.3201463592454      ]
+   AC-porous LTNE iter        4000  dTf=   3.3843817819584956       dTs=   7.4214592440339402       Tf[   300.03855359306863      ,   902.38743383596182      ]  Ts[   326.06156338842891      ,   3399.1636885327293      ]
+   AC-porous LTNE iter        6000  dTf=   1.0949190578581920       dTs=   2.1954563302874703       Tf[   300.06407837273184      ,   941.60669271961865      ]  Ts[   343.30620868821626      ,   3481.4109710349167      ]
+   AC-porous LTNE iter        8000  dTf=  0.37058514158582057       dTs=  0.71520286132090405       Tf[   300.07513939801248      ,   954.58921559556995      ]  Ts[   350.77841642258011      ,   3506.9406039636669      ]
+   AC-porous LTNE iter       10000  dTf=  0.12774803455693018       dTs=  0.24277980774149910       Tf[   300.07928872812374      ,   959.02497236547276      ]  Ts[   353.58139511354682      ,   3515.4336130644715      ]
+   AC-porous LTNE iter       12000  dTf=   4.4352742637556730E-002  dTs=   8.3788220491442189E-002  Tf[   300.08077438788035      ,   960.55973540611046      ]  Ts[   354.58498690811547      ,   3518.3413378253535      ]
+   AC-porous LTNE iter       14000  dTf=   1.5440924876770623E-002  dTs=   2.9103356299401639E-002  Tf[   300.08129758153973      ,   961.09334580353527      ]  Ts[   354.93841309720909      ,   3519.3482017191764      ]
+   AC-porous LTNE iter       16000  dTf=   5.3811767137403876E-003  dTs=   1.0133739295270061E-002  Tf[   300.08148070554506      ,   961.27921686611717      ]  Ts[   355.06211630991368      ,   3519.6983768281639      ]
+   AC-porous LTNE iter       18000  dTf=   1.8760839143396879E-003  dTs=   3.5318453742547717E-003  Tf[   300.08154465400952      ,   961.34400638307704      ]  Ts[   355.10531450605589      ,   3519.8203664185253      ]
+   AC-porous LTNE iter       20000  dTf=   6.5417217456342769E-004  dTs=   1.2313664051362139E-003  Tf[   300.08156696600719      ,   961.36659623962998      ]  Ts[   355.12038660954630      ,   3519.8628904755492      ]
+  AC-porous LTNE block           1 : sweeps =       20400  final dTf=   5.2988750439908472E-004  dTs=   9.9740853875118773E-004
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK

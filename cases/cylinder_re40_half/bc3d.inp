@@ -1,0 +1,12 @@
+! half-cylinder polar grid, upper half with symmetry plane y=0
+     1
+   121    81     2
+blk-1
+     7
+       1       1       1      81       1       2       2
+     121     121       1      41       1       2       6
+     121     121      41      81       1       2       5
+       1     121       1       1       1       2       3
+       1     121      81      81       1       2       3
+       1     121       1      81       1       1       3
+       1     121       1      81       2       2       3

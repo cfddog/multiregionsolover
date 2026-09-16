@@ -1,0 +1,67 @@
+ ----------------- OpenCFD-EC3D ver 1.14a (MPI-OpenMP version)------------------
+         Copyright by Li Xinliang, lixl@imech.ac.cn                            
+         Programming by Li Xinliang  2016-1                                   
+ ----------------------------------------------------------------------------- 
+ Check if Multi-Grid can be used ...
+ Total Block number is            1 Total Cell number is          400
+ Check multigrid OK
+ can not find partation.dat,  create partation ...
+ Partation ......
+ Total Cell number=         400
+ Total Grid number=        1604
+ Max grid number is         1604  ... rato to mean grid is   1.0000000000000000     
+ Min grid number is         1604  ... rato to mean grid is   1.0000000000000000     
+ rato max to min is    1.0000000000000000     
+ Read material.in OK, Total_block=           1
+   Block           1 : Block_type=           3  rho=   8000.0000000000000       Cp=   500.00000000000000       k=   13.400000000000000     
+ Read porous.inp OK
+   Porous Block           1 : eps=  0.90000000000000002       dp=   1.0000000000000000E-003  hv=   287611.40000000002       rho_s=   8000.0000000000000       k_s=   13.400000000000000     
+ creat main mesh OK, Num_Cell=         400
+  read main mesh ...
+  Mesh3d.x layout: separate (x,y,z in three records per block)
+ read Mesh3d.x OK
+ Convert bc3d.inp to bc3d.inc ...
+ Convert bc3d.inp to bc3d.inc OK
+ read bc3d.inc (Link/boundary file)......
+ read bc3d.inc OK
+ bc3d_interface.inp not found, skip interface
+ Read solid_bc.inp OK
+   Block           1  (solid):           2  thermal BC faces
+     face           1  Tw=   0.0000000000000000       Qw=   0.0000000000000000     
+     face           4  Tw=  -1.0000000000000000       Qw=   1000000.0000000000     
+  Need not read wall_dist.dat 
+ No FDM.in, Donot use hybrid FVM/FDM
+ my_id, block_no, FDM, FD_Flux, FD_Scheme=           0           1           0
+ comput Jocabian OK ...
+ Check mesh quality ......
+ Check mesh quality OK
+ Initial by Free-stream flow ......
+  Start ......
+  AC porous solver (LS_Algorithm=3) block           1  eps=  0.90000000000000002       dp=   1.0000000000000000E-003  hv=   287611.40000000002       beta=   400.00000000000000       CFL=   20.000000000000000     
+   AC-porous iter           1  res_q=   0.0000000000000000       res_m=   190.38333333333333     
+   AC-porous iter           1  res_q=   0.0000000000000000       res_m=   190.38333333333333     
+   AC-porous iter        5000  res_q=  0.57973652172638157       res_m=   15.937204717712365     
+   AC-porous iter       10000  res_q=   6.1415324053015738E-002  res_m=  0.91410872818032740     
+   AC-porous iter       15000  res_q=   4.8761108040196168E-003  res_m=   4.9530386047677115E-002
+   AC-porous iter       20000  res_q=   3.4422004802081568E-004  res_m=   2.5087902785217771E-003
+   AC-porous iter       25000  res_q=   2.2518578113306372E-005  res_m=   1.1600545822337912E-004
+   AC-porous iter       30000  res_q=   1.3908429963294109E-006  res_m=   4.6146301027357921E-006
+  AC porous solver block           1 : iterations =       32743  final res_q=   2.1738610911370410E-007  res_m=   9.9872963631873320E-007
+   AC-porous LTNE iter        2000  dTf=   8.7405497104385859       dTs=   20.847366296125529       Tf[   300.00362544872183      ,   609.85115497516972      ]  Ts[   302.03807816660265      ,   1798.5991752664811      ]
+   AC-porous LTNE iter        4000  dTf=   3.3264618771825099       dTs=   6.4602542075449492       Tf[   300.03616033412175      ,   717.91392300052155      ]  Ts[   320.30072963295453      ,   2030.1679015440948      ]
+   AC-porous LTNE iter        6000  dTf=   1.4047235348097047       dTs=   2.4994992713732245       Tf[   300.06811687324279      ,   761.28925809669204      ]  Ts[   338.23215373546196      ,   2110.6850748063284      ]
+   AC-porous LTNE iter        8000  dTf=  0.62222581490061657       dTs=   1.0646496536473933       Tf[   300.08641475792490      ,   780.07159345466891      ]  Ts[   348.49853557138601      ,   2143.4233887731539      ]
+   AC-porous LTNE iter       10000  dTf=  0.28127361990038935       dTs=  0.47338742987585647       Tf[   300.09547573534951      ,   788.48185284532758      ]  Ts[   353.58223117899666      ,   2157.6874293229757      ]
+   AC-porous LTNE iter       12000  dTf=  0.12820410293431905       dTs=  0.21432817163031359       Tf[   300.09975065050799      ,   792.30056618476567      ]  Ts[   355.98066469261920      ,   2164.0913077903051      ]
+   AC-porous LTNE iter       14000  dTf=   5.8628517526244650E-002  dTs=   9.7751992698704271E-002  Tf[   300.10173191814903      ,   794.04422392478352      ]  Ts[   357.09224718623346      ,   2167.0021206308666      ]
+   AC-porous LTNE iter       16000  dTf=   2.6846265821632187E-002  dTs=   4.4713751893141307E-002  Tf[   300.10264391294271      ,   794.84217088569937      ]  Ts[   357.60391756719315      ,   2168.3317890074118      ]
+   AC-porous LTNE iter       18000  dTf=   1.2299376588430277E-002  dTs=   2.0476652270190243E-002  Tf[   300.10306259597968      ,   795.20765606979865      ]  Ts[   357.83881757786327      ,   2168.9403853141571      ]
+   AC-porous LTNE iter       20000  dTf=   5.6359966910122239E-003  dTs=   9.3815603640905465E-003  Tf[   300.10325460639450      ,   795.37511820330451      ]  Ts[   357.94654403057956      ,   2169.2191603970705      ]
+   AC-porous LTNE iter       22000  dTf=   2.5828144356410121E-003  dTs=   4.2990190800082928E-003  Tf[   300.10334262729441      ,   795.45185842026262      ]  Ts[   357.99592769800887      ,   2169.3468960662822      ]
+   AC-porous LTNE iter       24000  dTf=   1.1836666474209778E-003  dTs=   1.9701281289599137E-003  Tf[   300.10338297107404      ,   795.48702684333659      ]  Ts[   358.01856236468120      ,   2169.4054320712867      ]
+  AC-porous LTNE block           1 : sweeps =       25800  final dTf=   5.8648476488087908E-004  dTs=   9.7615256208882784E-004
+ write flow3d.dat ......
+ write flow3d.dat OK
+ Output Ts to Ts_block_1.dat
+ write VTK files ......
+ write VTK files OK
