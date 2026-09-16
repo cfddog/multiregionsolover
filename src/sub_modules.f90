@@ -240,10 +240,14 @@
    real(PRE_EC),save:: AC_CFLv=0.5d0 ! viscous CFL limit for the pseudo time step
    real(PRE_EC),save:: AC_Tol=1.d-7  ! convergence: dimensionless res_q & res_m < AC_Tol
    real(PRE_EC),save:: AC_w=1.d0     ! LU-SGS relaxation (>=0.5)
-   integer,save:: AC_Flux=1   ! AC inviscid flux: 1=Rusanov(LLF), 2=Steger-Warming, 3=AUSM+
+   integer,save:: AC_Flux=1   ! AC inviscid flux: 1=Rusanov(LLF), 2=Steger-Warming (3=AUSM+ removed 2026-09-17)
    integer,save:: AC_Recon=1  ! AC face reconstruction: 1=2nd-order MUSCL(van Leer), 2=WENO5, 3=WENO3
    integer,save:: AC_Limiter=1 ! MUSCL limiter: 1=van Leer, 2=minmod (more robust/dissipative)
    real(PRE_EC),save:: AC_WenoBlend=0.d0 ! WENO only: blend fraction of the 1st-order Rusanov flux (0..1)
+   integer,save:: AC_WallRecon=1 ! 1 = de-bias the tangential state at wall/symmetry faces (one-sided 2nd order)
+   integer,save:: AC_WallP=1     ! 1 = 2nd-order wall-face pressure (linear extrapolation, keeps dq/dn)
+   integer,save:: AC_MomDiss=0   ! 0 = lumped Rusanov dissipation (default, validated); 1 = split (blend), 2 = pure |un| (unstable)
+   real(PRE_EC),save:: AC_MomFrac=0.2d0 ! AC_MomDiss=1: fraction of c kept as the momentum-dissipation floor
 
    integer,save:: FD_Flux,FD_scheme !
    integer,save:: KRK=0 !

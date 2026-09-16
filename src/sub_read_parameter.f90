@@ -135,10 +135,14 @@
     AC_CFLv=0.5d0       ! viscous CFL
     AC_Tol=1.d-7        ! convergence tolerance (dimensionless residual)
     AC_w=1.d0           ! LU-SGS relaxation
-    AC_Flux=1           ! inviscid flux: 1=Rusanov(LLF), 2=Steger-Warming, 3=AUSM+
+    AC_Flux=1           ! inviscid flux: 1=Rusanov(LLF), 2=Steger-Warming (3=AUSM+ REMOVED 2026-09-17)
     AC_Recon=1          ! reconstruction: 1=2nd-order MUSCL, 2=WENO5, 3=WENO3
     AC_Limiter=1        ! MUSCL limiter: 1=van Leer, 2=minmod
     AC_WenoBlend=0.d0   ! WENO: blend in this fraction of 1st-order Rusanov flux
+    AC_WallRecon=1      ! wall/symmetry faces: 1=one-sided 2nd-order tangential state, 0=off
+    AC_WallP=1          ! wall/symmetry faces: 1=2nd-order wall pressure, 0=cell value
+    AC_MomDiss=0        ! Rusanov dissipation: 1=split/blend (|un|+frac*c on momentum), 0=lumped max|un|+c (default), 2=pure |un|
+    AC_MomFrac=0.2d0    ! AC_MomDiss=1: floor fraction of c kept in the momentum dissipation
 
 !---- Porous-media solver parameters (SI units) --------------------------------
     Porous_T_ref=288.15d0   ! initial/reference solid-frame temperature [K]
@@ -191,7 +195,8 @@ end
 		LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, &
 		LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm, &
 		AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, &
-         AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, &
+         AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, AC_WallRecon, AC_WallP, AC_MomDiss, &
+         AC_MomFrac, &
 		Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, &
 		Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in, &
 		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
@@ -364,6 +369,7 @@ end
     rpara(65)=AC_Tol
     rpara(66)=AC_w
     rpara(73)=AC_WenoBlend
+    rpara(74)=AC_MomFrac
 
 
 
@@ -416,6 +422,9 @@ end
     Ipara(49)=AC_Flux
     Ipara(50)=AC_Recon
     Ipara(51)=AC_Limiter
+    Ipara(52)=AC_WallRecon
+    Ipara(53)=AC_WallP
+    Ipara(54)=AC_MomDiss
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -489,6 +498,7 @@ end
     AC_Tol=rpara(65)
     AC_w=rpara(66)
     AC_WenoBlend=rpara(73)
+    AC_MomFrac=rpara(74)
     Tol_Couple_p=rpara(67)
     Tol_Couple_u=rpara(68)
 
@@ -542,6 +552,9 @@ end
     AC_Flux=Ipara(49)
     AC_Recon=Ipara(50)
     AC_Limiter=Ipara(51)
+    AC_WallRecon=Ipara(52)
+    AC_WallP=Ipara(53)
+    AC_MomDiss=Ipara(54)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)

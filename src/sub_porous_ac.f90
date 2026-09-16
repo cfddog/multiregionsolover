@@ -33,12 +33,16 @@
 
    if(.not. allocated(XW) .or. ac_nxw/=nx .or. ac_nyw/=ny .or. ac_nzw/=nz &
       .or. ac_lap /= LAP) then
-     if(allocated(XW)) deallocate(XW,RAC,DU4,DTAC,SIG,dragc)
+     if(allocated(XW)) deallocate(XW,RAC,DU4,DTAC,SIG,dragc,ac_wallface,QWF)
      allocate( XW(4, 1-LAP:nx+LAP-1, 1-LAP:ny+LAP-1, 1-LAP:nz+LAP-1) )
      allocate( RAC(4, nx, ny, nz), DU4(4, nx, ny, nz) )
      allocate( DTAC(nx, ny, nz), SIG(nx, ny, nz), dragc(nx, ny, nz) )
+     allocate( ac_wallface(nx, ny, nz, 3), QWF(nx, ny, nz) )
      ac_nxw=nx; ac_nyw=ny; ac_nzw=nz; ac_lap=LAP
+     ac_wallface = 0
    endif
+   dragc = 0.d0
+   call ac_check_controls()
 
    call lowspeed_inlet_velocity(B, uin_x, uin_y, uin_z)
 !  dedicated porous coolant inlet (overrides the low-speed LS_U_in if set)
@@ -64,6 +68,7 @@
    do iter = 1, AC_Max_Iter
      call ac_fill_ghost(nMesh, mBlock, uin_x, uin_y, uin_z)
      call ac_load_state(nMesh, mBlock)
+     call ac_wall_pressure(nMesh, mBlock)   ! wall-face pressure (needs fresh XW)
      call ac_boundary_flux(nMesh, mBlock, beta, uin_x, uin_y, uin_z)
      call ac_internal_flux(nMesh, mBlock, beta)
      if(If_viscous .eq. 1 .and. LS_mu .gt. 0.d0) call ac_viscous_res(nMesh, mBlock)
