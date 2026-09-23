@@ -305,10 +305,10 @@
    real(PRE_EC):: ax_p, ax_m, ay_p, ay_m, az_p, az_m
    real(PRE_EC):: coef_diff, coef_tr, T_neighbor_sum
    logical:: is_unsteady
-   real(PRE_EC),parameter:: GS_OMEGA = 1.7d0   ! SOR over-relaxation
-   integer,parameter:: MAX_GS_ITER = 20000
-   integer,parameter:: MIN_GS_ITER = 5
-   real(PRE_EC),parameter:: GS_TOL = 1.d-9
+!  NOTE: the solid Gauss-Seidel controls (SOR factor / sweep limits / tolerance)
+!  are now read from control.ec namelist "$solid_ec" (globals Solid_GS_Omega,
+!  Solid_Max_Iter, Solid_Min_Iter, Solid_Tol).  Their default values are exactly
+!  the constants that used to be hard-coded here, so results are unchanged.
    real(PRE_EC),parameter:: EPS_DIST = 1.d-15   ! min distance to avoid div-by-zero
 
    B=>Mesh(nMesh)%Block(mBlock)
@@ -325,7 +325,7 @@
 !    k * sum[A_face * (T_neighbor - T_i) / d_face] = 0
 !  where A_face = Si/Sj/Sk (face area), d_face = distance between cell centers.
 !  Solving for T_i gives a distance-weighted average of neighbors.
-   do ii = 1, MAX_GS_ITER
+   do ii = 1, Solid_Max_Iter
 !    Re-set physical BC ghost cells each iteration
      call set_solid_ghost_BC(nMesh, mBlock)
 !    Exchange Ts buffer for periodic/internal interfaces
@@ -461,7 +461,7 @@
        endif
 
 !      SOR: Ts_new = (1-omega)*Ts_old + omega*T_new
-       B%Ts(i,j,k) = (1.d0-GS_OMEGA)*T_old + GS_OMEGA*T_new
+       B%Ts(i,j,k) = (1.d0-Solid_GS_Omega)*T_old + Solid_GS_Omega*T_new
 
        res = max(res, abs(B%Ts(i,j,k) - T_old))
      enddo; enddo; enddo
@@ -472,8 +472,8 @@
                " Ts(nx-1,ny-1,1)=", B%Ts(nx-1,ny-1,1)
      endif
 
-     if(mod(ii,100) == 0 .and. ii >= MIN_GS_ITER) then
-       if(res < GS_TOL) exit
+     if(mod(ii,100) == 0 .and. ii >= Solid_Min_Iter) then
+       if(res < Solid_Tol) exit
      endif
    enddo
 
@@ -1282,7 +1282,7 @@
       integer:: nMesh
       Type (Block_TYPE),pointer:: B, Bn
       TYPE (BC_MSG_TYPE),pointer:: Bc2
-      integer:: face_s, face1, i, k, jc_h, jc_l, jg_l, n1, n2
+      integer:: face_s, face1, i, k, jc_h, jc_l, jg_l, n1, n2, ic_h
       real(PRE_EC):: rho, uu, vv, TT, rho_s, u_s, v_s, T_s, p_nd, E_s
       real(PRE_EC),parameter:: R_AIR = 287.0d0
       real(PRE_EC),parameter:: MU_SI0 = 1.716d-5, T_SI0 = 273.15d0, S_SI = 110.4d0
@@ -1298,70 +1298,137 @@
 
       face_s = Bc2%face
       face1  = Bc2%face1
-      if(face_s /= 2 .or. face1 /= 5) then
-        print*, 'couple_highlow: supports comp face=2, low face=5 only; got', face_s, face1
+ !    Accepted topological pairs (both have the PHYSICAL interface normal along
+ !    y, so the Cartesian component roles used below - U(2)=tangential x,
+ !    U(3)=normal y - are identical and only the index bookkeeping differs):
+ !      (2,5) gas j-  <-> low-speed j+     (legacy high_low_fluid grids)
+ !      (4,2) gas i+  <-> low-speed j-     (cases/fluid_solid: the gas block2
+ !                                          i=max face touches block1 j=1)
+      if(.not. ((face_s == 2 .and. face1 == 5) .or. &
+                (face_s == 4 .and. face1 == 2))) then
+        print*, 'couple_highlow: supports comp j-/low j+ (2/5) or comp i+/low j-'// &
+                ' (4/2); got', face_s, face1
         return
       endif
       a_ref = sqrt(gamma*R_AIR*T_inf)
       mu_inf_p = MU_SI0*sqrt((T_inf/T_SI0)**3)*(T_SI0+S_SI)/(T_inf+S_SI)
       RHO_REF = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
       U_ref = Ma*a_ref
-!     compressible block B (j- face): interior row jc_h = jb, ghost row 0
-      jc_h = Bc2%jb
-!     low-speed block Bn (j+ face): interior row jc_l = je1-1? ranges are in
-!     nodes of the low-speed block: top face j = je1 (node), interior cell je1-1
-      jc_l = Bc2%je1 - 1
-      jg_l = Bc2%je1        ! first ghost cell row of the low-speed block
 
-!     j- interface of B: ghost row j=0 ; low-speed interior at row jc_l
-      do k = Bc2%kb, Bc2%ke-1
-      do i = Bc2%ib, Bc2%ie-1
-!       --- compressible ghost <- low-speed interior ---
-        rho = Bn%U(1,i,jc_l,k)          ! physical density [kg/m3]
-        uu  = Bn%U(2,i,jc_l,k)          ! velocity [m/s] (LS stores velocity in U(2..4))
-        vv  = Bn%U(3,i,jc_l,k)
-        TT  = Bn%U(5,i,jc_l,k)          ! temperature [K]
-        rho_s = rho/RHO_REF
-        u_s   = uu/U_ref
-        v_s   = vv/U_ref
-        T_s   = TT/T_inf
-        p_nd  = rho_s*T_s/(gamma*Ma*Ma)
-        E_s   = p_nd/(gamma-1.d0) + 0.5d0*rho_s*(u_s*u_s+v_s*v_s)
-        B%U(1,i,jc_h-1,k) = rho_s
-        B%U(2,i,jc_h-1,k) = rho_s*u_s
-        B%U(3,i,jc_h-1,k) = rho_s*v_s
-        B%U(4,i,jc_h-1,k) = 0.d0
-        B%U(5,i,jc_h-1,k) = E_s
-!       --- low-speed ghost <- compressible interior ---
-        U1 = B%U(1,i,jc_h,k)
-        U2 = B%U(2,i,jc_h,k)
-        U3 = B%U(3,i,jc_h,k)
-        U5 = B%U(5,i,jc_h,k)
-        r1  = max(U1,1.d-20)
-        u1s = U2/r1
-        v1s = U3/r1
-        p1n = (U5 - 0.5d0*U1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
-        T1s = gamma*Ma*Ma*p1n/max(r1,1.d-20)
-        rho = r1*RHO_REF
-        uu  = u1s*U_ref
-        vv  = v1s*U_ref
-!       The low-speed (incompressible) solver cannot sustain supersonic
-!       drag from the interface; clamp the exchanged velocity so the
-!       low-speed model stays in its valid (Ma << 1) regime.
-        uu  = max(min(uu,  U_MAX_LS), -U_MAX_LS)
-        vv  = max(min(vv,  V_MAX_LS), -V_MAX_LS)
-        TT  = T1s*T_inf
-        do n1 = jg_l, jg_l+LAP-1
-          Bn%U(1,i,n1,k) = rho
-!         low-speed block stores VELOCITY in U(2..4) (U(1)=density); the old
-!         rho*uu form was only harmless while rho=1 kg/m^3
-          Bn%U(2,i,n1,k) = uu
-          Bn%U(3,i,n1,k) = vv
-          Bn%U(4,i,n1,k) = 0.d0
-          Bn%U(5,i,n1,k) = TT
-          Bn%p(i,n1,k)   = Bn%p(i,jc_l,k)
-        enddo
-      enddo; enddo
+      if(face_s == 2) then
+ !      ---- legacy: gas j- face against low-speed j+ face ------------------
+ !      compressible block B (j- face): interior row jc_h = jb, ghost row jb-1
+        jc_h = Bc2%jb
+ !      low-speed block Bn (j+ face): interior cell row je1-1, ghosts je1..
+        jc_l = Bc2%je1 - 1
+        jg_l = Bc2%je1
+        do k = Bc2%kb, Bc2%ke-1
+        do i = Bc2%ib, Bc2%ie-1
+ !        --- compressible ghost <- low-speed interior ---
+          rho = Bn%U(1,i,jc_l,k)          ! physical density [kg/m3]
+          uu  = Bn%U(2,i,jc_l,k)          ! velocity [m/s] (LS stores velocity in U(2..4))
+          vv  = Bn%U(3,i,jc_l,k)
+          TT  = Bn%U(5,i,jc_l,k)          ! temperature [K]
+          rho_s = rho/RHO_REF
+          u_s   = uu/U_ref
+          v_s   = vv/U_ref
+          T_s   = TT/T_inf
+          p_nd  = rho_s*T_s/(gamma*Ma*Ma)
+          E_s   = p_nd/(gamma-1.d0) + 0.5d0*rho_s*(u_s*u_s+v_s*v_s)
+          B%U(1,i,jc_h-1,k) = rho_s
+          B%U(2,i,jc_h-1,k) = rho_s*u_s
+          B%U(3,i,jc_h-1,k) = rho_s*v_s
+          B%U(4,i,jc_h-1,k) = 0.d0
+          B%U(5,i,jc_h-1,k) = E_s
+ !        --- low-speed ghost <- compressible interior ---
+          U1 = B%U(1,i,jc_h,k)
+          U2 = B%U(2,i,jc_h,k)
+          U3 = B%U(3,i,jc_h,k)
+          U5 = B%U(5,i,jc_h,k)
+          r1  = max(U1,1.d-20)
+          u1s = U2/r1
+          v1s = U3/r1
+          p1n = (U5 - 0.5d0*U1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+          T1s = gamma*Ma*Ma*p1n/max(r1,1.d-20)
+          rho = r1*RHO_REF
+          uu  = u1s*U_ref
+          vv  = v1s*U_ref
+ !        The low-speed (incompressible) solver cannot sustain supersonic
+ !        drag from the interface; clamp the exchanged velocity so the
+ !        low-speed model stays in its valid (Ma << 1) regime.
+          uu  = max(min(uu,  U_MAX_LS), -U_MAX_LS)
+          vv  = max(min(vv,  V_MAX_LS), -V_MAX_LS)
+          TT  = T1s*T_inf
+          do n1 = jg_l, jg_l+LAP-1
+            Bn%U(1,i,n1,k) = rho
+ !          low-speed block stores VELOCITY in U(2..4) (U(1)=density); the old
+ !          rho*uu form was only harmless while rho=1 kg/m^3
+            Bn%U(2,i,n1,k) = uu
+            Bn%U(3,i,n1,k) = vv
+            Bn%U(4,i,n1,k) = 0.d0
+            Bn%U(5,i,n1,k) = TT
+            Bn%p(i,n1,k)   = Bn%p(i,jc_l,k)
+          enddo
+        enddo; enddo
+      else
+ !      ---- cases/fluid_solid: gas i+ face (i=ie) against low-speed j- face --
+ !      compressible block B: interior column ic_h = ie-1, ghost columns
+ !      ie, ie+1, ..., ie+LAP-1
+        ic_h = Bc2%ie - 1
+ !      low-speed block Bn (j- face): interior cell row jb1 (=1), ghost rows
+ !      jb1-1, jb1-2, ... (the coolant enters through the far j=max face)
+        jc_l = Bc2%jb1
+        jg_l = Bc2%jb1 - 1
+ !      tangential map: gas j cell <-> low-speed i cell (reversed; this mesh
+ !      has the L=(2,-1,3) connection descriptor for the gas entry):
+ !        ls_i = ie1-1 - (gas_j - jb)   ->   gas_j = jb + (ie1-1) - ls_i
+        do k = Bc2%kb1, Bc2%ke1-1
+        do i = Bc2%ib1, Bc2%ie1-1        ! low-speed tangential cell index
+          i2 = Bc2%jb + (Bc2%ie1-1) - i  ! corresponding gas tangential cell
+ !        --- compressible ghost (i=ie..) <- low-speed interior ---
+          rho = Bn%U(1,i,jc_l,k)
+          uu  = Bn%U(2,i,jc_l,k)
+          vv  = Bn%U(3,i,jc_l,k)
+          TT  = Bn%U(5,i,jc_l,k)
+          rho_s = rho/RHO_REF
+          u_s   = uu/U_ref
+          v_s   = vv/U_ref
+          T_s   = TT/T_inf
+          p_nd  = rho_s*T_s/(gamma*Ma*Ma)
+          E_s   = p_nd/(gamma-1.d0) + 0.5d0*rho_s*(u_s*u_s+v_s*v_s)
+          do n1 = 0, LAP-1
+            B%U(1,ic_h+1+n1,i2,k) = rho_s
+            B%U(2,ic_h+1+n1,i2,k) = rho_s*u_s
+            B%U(3,ic_h+1+n1,i2,k) = rho_s*v_s
+            B%U(4,ic_h+1+n1,i2,k) = 0.d0
+            B%U(5,ic_h+1+n1,i2,k) = E_s
+          enddo
+ !        --- low-speed ghost (j=jb1-1, jb1-2, ...) <- compressible interior ---
+          U1 = B%U(1,ic_h,i2,k)
+          U2 = B%U(2,ic_h,i2,k)
+          U3 = B%U(3,ic_h,i2,k)
+          U5 = B%U(5,ic_h,i2,k)
+          r1  = max(U1,1.d-20)
+          u1s = U2/r1
+          v1s = U3/r1
+          p1n = (U5 - 0.5d0*U1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+          T1s = gamma*Ma*Ma*p1n/max(r1,1.d-20)
+          rho = r1*RHO_REF
+          uu  = u1s*U_ref
+          vv  = v1s*U_ref
+          uu  = max(min(uu,  U_MAX_LS), -U_MAX_LS)
+          vv  = max(min(vv,  V_MAX_LS), -V_MAX_LS)
+          TT  = T1s*T_inf
+          do n1 = 0, LAP-1
+            Bn%U(1,i,jg_l-n1,k) = rho
+            Bn%U(2,i,jg_l-n1,k) = uu
+            Bn%U(3,i,jg_l-n1,k) = vv
+            Bn%U(4,i,jg_l-n1,k) = 0.d0
+            Bn%U(5,i,jg_l-n1,k) = TT
+            Bn%p(i,jg_l-n1,k)   = Bn%p(i,jc_l,k)
+          enddo
+        enddo; enddo
+      endif
 
 !     Anchor the low-speed pressure only when the block has NO pressure-
 !     Dirichlet face (velocity inlet + walls + exchange face): with a
@@ -1411,60 +1478,115 @@
       integer:: nMesh
       Type (Block_TYPE),pointer:: B, Bn
       TYPE (BC_MSG_TYPE),pointer:: Bc2
-      integer:: face_s, face1, i, k, n1, jc_h, jc_l, jg_l, jg
+      integer:: face_s, face1, i, k, n1, jc_h, jc_l, jg_l, jg, ic_h, i2, ig
       real(PRE_EC):: G, T_w, v_w, rho_w, p_phys
       real(PRE_EC):: r1, u1s, v1s, p1n, v_w_s, v_int_s, vg_s, ug_s, T_s, rho_s, E_s
       real(PRE_EC):: RHO_REF, mu_inf_p, a_ref, U_ref
-      real(PRE_EC),parameter:: R_AIR = 287.0d0
+     real(PRE_EC),parameter:: R_AIR = 287.0d0
+     logical:: pair42
       real(PRE_EC),parameter:: MU_SI0 = 1.716d-5, T_SI0 = 273.15d0, S_SI = 110.4d0
 
       face_s = Bc2%face
       face1  = Bc2%face1
-      if(face_s /= 2 .or. face1 /= 5) then
-        if(my_id == 0) print*, 'couple_compressible_porous_blowing: unsupported face pair', face_s, face1, '(skipped)'
+!     Accepted topologies (the porous block is always the coolant side):
+!       (2,5) gas j-  <-> porous j+   (porous_fluid_phaseB, high_low_fluid_800K)
+!       (4,2) gas i+  <-> porous j-   (cases/fluid_solid: the gas block2 i=max
+!                                      face touches block1 j=1; coolant enters
+!                                      through the far j=max face)
+      if(.not. ((face_s == 2 .and. face1 == 5) .or. &
+                (face_s == 4 .and. face1 == 2))) then
+        if(my_id == 0) print*, 'couple_compressible_porous_blowing: unsupported'// &
+            ' face pair', face_s, face1, '(skipped)'
         return
       endif
+      pair42 = (face_s == 4 .and. face1 == 2)
       a_ref = sqrt(gamma*R_AIR*T_inf)
       mu_inf_p = MU_SI0*sqrt((T_inf/T_SI0)**3)*(T_SI0+S_SI)/(T_inf+S_SI)
       RHO_REF = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
       U_ref = Ma*a_ref
-      G = LS_rho*max(LS_V_in,0.d0)          ! coolant mass flux kg/(m2 s), normal +y
-      jc_h = Bc2%jb          ! compressible first interior cell row (j- face)
-      jc_l = Bc2%je1 - 1     ! porous first interior cell row (j+ face)
-      jg_l = Bc2%je1         ! porous first ghost cell row (j+ face)
+      G = LS_rho*max(LS_V_in,0.d0)          ! coolant mass flux kg/(m2 s), +y
 
-      do k = Bc2%kb, Bc2%ke-1
-      do i = Bc2%ib, Bc2%ie-1
-        r1  = max(B%U(1,i,jc_h,k), 1.d-20)
-        u1s = B%U(2,i,jc_h,k)/r1
-        v1s = B%U(3,i,jc_h,k)/r1
-        p1n = (B%U(5,i,jc_h,k) - 0.5d0*B%U(1,i,jc_h,k)*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
-        p_phys = p1n*RHO_REF*U_ref*U_ref
-        T_w = Bn%U(5,i,jc_l,k)              ! coolant exit temperature [K]
-!       porous ghost layers: coolant outlet (zero-gradient) + wall pressure
-        do n1 = 0, LAP-1
-          jg = jg_l + n1
-          Bn%U(1,i,jg,k)=Bn%U(1,i,jc_l,k); Bn%U(2,i,jg,k)=Bn%U(2,i,jc_l,k)
-          Bn%U(3,i,jg,k)=Bn%U(3,i,jc_l,k); Bn%U(4,i,jg,k)=Bn%U(4,i,jc_l,k)
-          Bn%U(5,i,jg,k)=Bn%U(5,i,jc_l,k); Bn%p(i,jg,k) = p_phys
-        enddo
-!       compressible ghost layers: blowing wall (temperature T_w)
-        rho_w = p_phys/(R_AIR*max(T_w,1.d0))
-        v_w   = G/max(rho_w,1.d-30)
-        v_w_s = v_w/U_ref
-        do n1 = 1, LAP
-          jg = jc_h - n1
-          v_int_s = v1s
-          vg_s = 2.d0*v_w_s - v_int_s
-          ug_s = -u1s                       ! mirror tangential (wall at rest)
-          T_s  = T_w/T_inf
-          rho_s = p1n*gamma*Ma*Ma/max(T_s,1.d-30)
-          E_s  = p1n/(gamma-1.d0) + 0.5d0*rho_s*(ug_s*ug_s+vg_s*vg_s)
-          B%U(1,i,jg,k)=rho_s; B%U(2,i,jg,k)=rho_s*ug_s
-          B%U(3,i,jg,k)=rho_s*vg_s; B%U(4,i,jg,k)=0.d0
-          B%U(5,i,jg,k)=E_s
-        enddo
-      enddo; enddo
+      if(pair42) then
+!      --- gas i+ face against porous j- face -------------------------------
+!      gas: interior column ic_h = ie-1, ghost columns ig = ie..ie+LAP-1
+!      (the gas normal direction is its i index, i.e. the physical y axis, so
+!      U(3) carries the wall-normal velocity and U(2) the tangential one)
+        ic_h = Bc2%ie - 1
+!      porous: interior row jc_l = jb1 (=1), ghost rows jb1-1, jb1-2, ...
+        jc_l = Bc2%jb1
+        jg_l = Bc2%jb1 - 1
+!      tangential map (L=(2,-1,3) for the gas entry): gas_j = jb + (ie1-1) - i
+        do k = Bc2%kb1, Bc2%ke1-1
+        do i = Bc2%ib1, Bc2%ie1-1
+          i2 = Bc2%jb + (Bc2%ie1-1) - i
+          r1  = max(B%U(1,ic_h,i2,k), 1.d-20)
+          u1s = B%U(2,ic_h,i2,k)/r1
+          v1s = B%U(3,ic_h,i2,k)/r1
+          p1n = (B%U(5,ic_h,i2,k) - 0.5d0*r1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+          p_phys = p1n*RHO_REF*U_ref*U_ref
+          T_w = Bn%U(5,i,jc_l,k)            ! coolant exit temperature [K]
+!         porous ghost layers: coolant outlet (zero-gradient) + wall pressure
+          do n1 = 0, LAP-1
+            jg = jg_l - n1
+            Bn%U(1,i,jg,k)=Bn%U(1,i,jc_l,k); Bn%U(2,i,jg,k)=Bn%U(2,i,jc_l,k)
+            Bn%U(3,i,jg,k)=Bn%U(3,i,jc_l,k); Bn%U(4,i,jg,k)=Bn%U(4,i,jc_l,k)
+            Bn%U(5,i,jg,k)=Bn%U(5,i,jc_l,k); Bn%p(i,jg,k) = p_phys
+          enddo
+!         compressible ghost layers: blowing wall (temperature T_w)
+          rho_w = p_phys/(R_AIR*max(T_w,1.d0))
+          v_w   = G/max(rho_w,1.d-30)
+          v_w_s = v_w/U_ref
+          do n1 = 1, LAP
+            ig = ic_h + n1
+            vg_s = 2.d0*v_w_s - v1s
+            ug_s = -u1s                     ! mirror tangential (wall at rest)
+            T_s  = T_w/T_inf
+            rho_s = p1n*gamma*Ma*Ma/max(T_s,1.d-30)
+            E_s  = p1n/(gamma-1.d0) + 0.5d0*rho_s*(ug_s*ug_s+vg_s*vg_s)
+            B%U(1,ig,i2,k)=rho_s; B%U(2,ig,i2,k)=rho_s*ug_s
+            B%U(3,ig,i2,k)=rho_s*vg_s; B%U(4,ig,i2,k)=0.d0
+            B%U(5,ig,i2,k)=E_s
+          enddo
+        enddo; enddo
+      else
+!      --- legacy: gas j- face against porous j+ face -----------------------
+        jc_h = Bc2%jb          ! compressible first interior cell row (j- face)
+        jc_l = Bc2%je1 - 1     ! porous first interior cell row (j+ face)
+        jg_l = Bc2%je1         ! porous first ghost cell row (j+ face)
+
+        do k = Bc2%kb, Bc2%ke-1
+        do i = Bc2%ib, Bc2%ie-1
+          r1  = max(B%U(1,i,jc_h,k), 1.d-20)
+          u1s = B%U(2,i,jc_h,k)/r1
+          v1s = B%U(3,i,jc_h,k)/r1
+          p1n = (B%U(5,i,jc_h,k) - 0.5d0*B%U(1,i,jc_h,k)*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+          p_phys = p1n*RHO_REF*U_ref*U_ref
+          T_w = Bn%U(5,i,jc_l,k)              ! coolant exit temperature [K]
+!         porous ghost layers: coolant outlet (zero-gradient) + wall pressure
+          do n1 = 0, LAP-1
+            jg = jg_l + n1
+            Bn%U(1,i,jg,k)=Bn%U(1,i,jc_l,k); Bn%U(2,i,jg,k)=Bn%U(2,i,jc_l,k)
+            Bn%U(3,i,jg,k)=Bn%U(3,i,jc_l,k); Bn%U(4,i,jg,k)=Bn%U(4,i,jc_l,k)
+            Bn%U(5,i,jg,k)=Bn%U(5,i,jc_l,k); Bn%p(i,jg,k) = p_phys
+          enddo
+!         compressible ghost layers: blowing wall (temperature T_w)
+          rho_w = p_phys/(R_AIR*max(T_w,1.d0))
+          v_w   = G/max(rho_w,1.d-30)
+          v_w_s = v_w/U_ref
+          do n1 = 1, LAP
+            jg = jc_h - n1
+            v_int_s = v1s
+            vg_s = 2.d0*v_w_s - v_int_s
+            ug_s = -u1s                       ! mirror tangential (wall at rest)
+            T_s  = T_w/T_inf
+            rho_s = p1n*gamma*Ma*Ma/max(T_s,1.d-30)
+            E_s  = p1n/(gamma-1.d0) + 0.5d0*rho_s*(ug_s*ug_s+vg_s*vg_s)
+            B%U(1,i,jg,k)=rho_s; B%U(2,i,jg,k)=rho_s*ug_s
+            B%U(3,i,jg,k)=rho_s*vg_s; B%U(4,i,jg,k)=0.d0
+            B%U(5,i,jg,k)=E_s
+          enddo
+        enddo; enddo
+      endif
      end subroutine couple_compressible_porous_blowing_face
 
 
@@ -1877,14 +1999,14 @@
    integer:: face_s, face1, ib,ie,jb,je,kb,ke, ib1,ie1,jb1,je1,kb1,ke1
    Type (Block_TYPE),pointer:: Bf, Bp, B, Bn
    TYPE (BC_MSG_TYPE),pointer:: Bc2
-   integer:: i, k, jc_h, jc_l, jg, n1
-   real(PRE_EC):: Sfac, Sfac1, twmax, qwmax
+   integer:: i, k, jc_h, jc_l, jg, n1, ic_h, jg_l, gi
+  real(PRE_EC):: Sfac, Sfac1, twmax, qwmax, xw, vcmax
    real(PRE_EC):: a_ref, U_ref, RHO_REF, mu_inf_p, mu_ref, cp_ref
    real(PRE_EC),parameter:: R_AIR=287.d0
    real(PRE_EC),parameter:: MU_SI0=1.716d-5, T_SI0=273.15d0, S_SI=110.4d0
    real(PRE_EC):: r1, u1s, v1s, p1n, T1_nd, T1_K, mu_SI, k_gas, dxp
    real(PRE_EC):: mu1c, dwc
-   logical:: found, converged
+   logical:: found, converged, pair42
    real(PRE_EC):: Utmp(7)
 
 !  ---- locate compressible and porous blocks --------------------------------
@@ -1922,243 +2044,389 @@
        enddo
        if(mBlock2 == 0) cycle
        if(Bn%Block_type /= BLOCK_POROUS) cycle
-       face_s = Bc2%face; face1 = Bc2%face1
-       if(face_s /= 2 .or. face1 /= 5) then
-         if(my_id == 0) print*, 'run_staggered: supports gas j- (face=2) vs porous j+ (face1=5) only; got', face_s, face1
-         return
-       endif
-       ib=Bc2%ib; ie=Bc2%ie; jb=Bc2%jb; je=Bc2%je; kb=Bc2%kb; ke=Bc2%ke
-       ib1=Bc2%ib1; ie1=Bc2%ie1; jb1=Bc2%jb1; je1=Bc2%je1; kb1=Bc2%kb1; ke1=Bc2%ke1
-       Bf => Mesh(nMesh)%Block(mb); mf = mb
-       found = .true.
-       exit
-     enddo
-     if(found) exit
-   enddo
-   if(.not. found) then
-     print*, 'run_staggered_fluid_porous: no FLUID-POROUS (code 19) interface found'
-     return
-   endif
+      face_s = Bc2%face; face1 = Bc2%face1
+!     Accepted topologies:
+!       (2,5) gas j-  <-> porous j+   (porous_fluid_phaseB / high_low_fluid_800K)
+!       (4,2) gas i+  <-> porous j-   (cases/fluid_solid: gas block2 i=max
+!                                      touches block1 j=1)
+      if(.not. ((face_s == 2 .and. face1 == 5) .or. &
+                (face_s == 4 .and. face1 == 2))) then
+        if(my_id == 0) print*, 'run_staggered: supports gas j-(2)/porous j+(5)'// &
+            ' or gas i+(4)/porous j-(2); got', face_s, face1
+        return
+      endif
+      pair42 = (face_s == 4 .and. face1 == 2)
+      ib=Bc2%ib; ie=Bc2%ie; jb=Bc2%jb; je=Bc2%je; kb=Bc2%kb; ke=Bc2%ke
+      ib1=Bc2%ib1; ie1=Bc2%ie1; jb1=Bc2%jb1; je1=Bc2%je1; kb1=Bc2%kb1; ke1=Bc2%ke1
+      Bf => Mesh(nMesh)%Block(mb); mf = mb
+      found = .true.
+      exit
+    enddo
+    if(found) exit
+  enddo
+  if(.not. found) then
+    print*, 'run_staggered_fluid_porous: no FLUID-POROUS (code 19) interface found'
+    return
+  endif
 
+!  ---- interface index descriptors -------------------------------------------
+!   pair42 = .false. : gas j- face (interior row jc_h=jb, ghost rows jb-1..)
+!                      against porous j+ face (interior row jc_l=je1-1,
+!                      ghost rows jg_l.. = je1..)
+!   pair42 = .true.  : gas i+ face (interior column ic_h=ie-1, ghost columns
+!                      ie..) against porous j- face (interior row jc_l=jb1=1,
+!                      ghost rows jg_l.. = jb1-1, jb1-2, ...)
+!   The fp_* work arrays are always indexed by the POROUS interface cell
+!   (i = ib1..ie1-1, k = kb1..ke1-1); the corresponding gas tangential cell is
+!     gas_j = jb + (ie1-1) - ls_i        (reversed L=(2,-1,3) descriptor)
+  if(pair42) then
+    ic_h = ie - 1
+    jc_l = jb1
+    jg_l = jb1 - 1
+  else
+    ic_h = 0
+    jc_h = jb
+    jc_l = je1 - 1
+    jg_l = je1
+  endif
 
-!  ---- per-face work arrays (gas face cells i=ib..ie-1, k=kb..ke-1) ----------
-   if(.not. allocated(fp_Tw)) then
-     allocate(fp_Tw(1:Bf%nx-1, 1:Bf%nz-1))
-     allocate(fp_Tw_old(1:Bf%nx-1, 1:Bf%nz-1))
-     allocate(fp_qw(1:Bf%nx-1, 1:Bf%nz-1))
-     allocate(fp_pw(1:Bf%nx-1, 1:Bf%nz-1))
-   endif
-   fp_Tw = Twall_Couple_Init
-   fp_qw = 0.d0
-   fp_pw = 0.d0
+!  ---- per-face work arrays (porous interface cells) -------------------------
+  if(.not. allocated(fp_Tw)) then
+    allocate(fp_Tw(1:max(Bf%nx,Bp%nx)+1, 1:max(Bf%nz,Bp%nz)+1))
+    allocate(fp_Tw_old(1:max(Bf%nx,Bp%nx)+1, 1:max(Bf%nz,Bp%nz)+1))
+    allocate(fp_qw(1:max(Bf%nx,Bp%nx)+1, 1:max(Bf%nz,Bp%nz)+1))
+    allocate(fp_pw(1:max(Bf%nx,Bp%nx)+1, 1:max(Bf%nz,Bp%nz)+1))
+  endif
+  fp_Tw = Twall_Couple_Init
+  fp_qw = 0.d0
+  fp_pw = 0.d0
 
 !  ---- physical references (same convention as couple_highlow) --------------
-   a_ref   = sqrt(gamma*R_AIR*T_inf)
-   mu_inf_p= MU_SI0*sqrt((T_inf/T_SI0)**3)*(T_SI0+S_SI)/(T_inf+S_SI)
-   RHO_REF = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
-   U_ref   = Ma*a_ref
-   mu_ref  = RHO_REF*U_ref*max(Lscale,1.d-30)/Re
-   cp_ref  = gamma*R_AIR/(gamma-1.d0)
+  a_ref   = sqrt(gamma*R_AIR*T_inf)
+  mu_inf_p= MU_SI0*sqrt((T_inf/T_SI0)**3)*(T_SI0+S_SI)/(T_inf+S_SI)
+  RHO_REF = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
+  U_ref   = Ma*a_ref
+  mu_ref  = RHO_REF*U_ref*max(Lscale,1.d-30)/Re
+  cp_ref  = gamma*R_AIR/(gamma-1.d0)
 
-   Mesh(nMesh)%tt = 0.d0
-   Mesh(nMesh)%Kstep = 0
-   if(my_id == 0) then
-     print*, ' run_staggered_fluid_porous: Kstep_Couple_Comp=', Kstep_Couple_Comp, &
-             ' Niter_Couple_Outer=', Niter_Couple_Outer, &
-             ' Twall_Couple_Init=', Twall_Couple_Init, ' K'
-     print*, '   gas block', mf, ' (nx-1 x nz-1 =', Bf%nx-1, 'x', Bf%nz-1, &
-             '), porous block', mp, '; interface j- cells i=', ib, '..', ie-1
-   endif
+  !  restart file: keep the saved counters instead of resetting
+  if(restart_found == 1) then
+    Mesh(nMesh)%tt    = restart_tt_saved
+    Mesh(nMesh)%Kstep = restart_Kstep_saved
+    if(my_id == 0) print*, ' restart: continue staggered run at Kstep=', &
+        restart_Kstep_saved, ' tt=', restart_tt_saved
+  !    NOTE: the per-face interface quantities (fp_Tw/fp_u) are re-seeded
+  !    from the control.ec initial guess; the outer iterations re-converge
+  !    them within a few rounds (state itself is fully restored).
+  else
+  Mesh(nMesh)%tt = 0.d0
+  Mesh(nMesh)%Kstep = 0
+  endif
+  if(my_id == 0) then
+    print*, ' run_staggered_fluid_porous: Kstep_Couple_Comp=', Kstep_Couple_Comp, &
+            ' Niter_Couple_Outer=', Niter_Couple_Outer, &
+            ' Twall_Couple_Init=', Twall_Couple_Init, ' K'
+    print*, '   gas block', mf, ' porous block', mp, ' pair42(gas i+/porous j-)=', pair42
+    print*, '   interface cells (porous index) i=', ib1, '..', ie1-1, ' k=', kb1, '..', ke1-1
+  endif
 
-   converged = .false.
-   outer: do it=1, Niter_Couple_Outer
-     fp_Tw_old = fp_Tw
-!    adaptive gas-chunk length: keep the full Kstep_Couple_Comp for the first
-!    Niter_Couple_Warm outer iterations (warm start), then halve it each outer
-!    iteration down to Kstep_Couple_Min for the final refinement stage.
-     nstep = Kstep_Couple_Comp
-     if(it > Niter_Couple_Warm) then
-       nhalve = it - Niter_Couple_Warm
-       do i=1, nhalve
-         nstep = max(Kstep_Couple_Min, nstep/2)
-       enddo
-     endif
-     nstep = max(1, nstep)
-     if(my_id == 0) print*, ' outer iter', it, ': gas chunk steps =', nstep
+  converged = .false.
+  outer: do it=1, Niter_Couple_Outer
+    fp_Tw_old = fp_Tw
+!   adaptive gas-chunk length: keep the full Kstep_Couple_Comp for the first
+!   Niter_Couple_Warm outer iterations (warm start), then halve it each outer
+!   iteration down to Kstep_Couple_Min for the final refinement stage.
+    nstep = Kstep_Couple_Comp
+    if(it > Niter_Couple_Warm) then
+      nhalve = it - Niter_Couple_Warm
+      do i=1, nhalve
+        nstep = max(Kstep_Couple_Min, nstep/2)
+      enddo
+    endif
+    nstep = max(1, nstep)
+    if(my_id == 0) print*, ' outer iter', it, ': gas chunk steps =', nstep
 
 !   ==================== (1) GAS CHUNK ===========================
-     do step=1, nstep
+    do step=1, nstep
 !     impose the isothermal wall on the code-19 face of the gas block
-       call fill_gas_wall_ghost(Bf, ib, ie, jb, kb, ke, NVAR1)
+      call fill_gas_wall_ghost(NVAR1)
 !     advance compressible blocks only
-       call comput_Sfac(Sfac,Sfac1)
-       call Set_Un(nMesh)
-       do mBlock=1, Mesh(nMesh)%Num_Block
-         B => Mesh(nMesh)%Block(mBlock)
-         if(B%Block_type == BLOCK_FLUID) call solver_one_block(nMesh, mBlock, Sfac, Sfac1)
-       enddo
-       if(IFLAG_LIMIT_FLOW == 1) call limit_flow(nMesh)
-       call Boundary_condition_onemesh(nMesh)
-       call update_buffer_onemesh(nMesh)
-       call update_Ts_buffer_onemesh(nMesh)
-       Mesh(nMesh)%tt = Mesh(nMesh)%tt + dt_global
-       Mesh(nMesh)%Kstep = Mesh(nMesh)%Kstep + 1
-       if(my_id == 0 .and. mod(Mesh(nMesh)%Kstep, Kstep_show) == 0) then
-         call comput_force
-         call output_Res(nMesh)
-       endif
-       if(my_id == 0 .and. mod(Mesh(nMesh)%Kstep, Kstep_save) == 0) then
-         call output_flow
-         call output_Ts
-         call output_vtk
-       endif
-     enddo
-     if(my_id == 0) print*, ' gas chunk done, Kstep=', Mesh(nMesh)%Kstep, ' tt=', Mesh(nMesh)%tt
+      call comput_Sfac(Sfac,Sfac1)
+      call Set_Un(nMesh)
+      do mBlock=1, Mesh(nMesh)%Num_Block
+        B => Mesh(nMesh)%Block(mBlock)
+        if(B%Block_type == BLOCK_FLUID) call solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+      enddo
+      if(IFLAG_LIMIT_FLOW == 1) call limit_flow(nMesh)
+      call Boundary_condition_onemesh(nMesh)
+      call update_buffer_onemesh(nMesh)
+      call update_Ts_buffer_onemesh(nMesh)
+      Mesh(nMesh)%tt = Mesh(nMesh)%tt + dt_global
+      Mesh(nMesh)%Kstep = Mesh(nMesh)%Kstep + 1
+      if(my_id == 0 .and. mod(Mesh(nMesh)%Kstep, Kstep_show) == 0) then
+        call comput_force
+        call output_Res(nMesh)
+      endif
+      if(my_id == 0 .and. mod(Mesh(nMesh)%Kstep, Kstep_save) == 0) then
+        call output_flow
+        call output_Ts
+        call output_vtk
+      endif
+      !  restart file + node-centred SI flow field: MUST be called by ALL
+      !  ranks (the routine does its own MPI + Kstep-based due check)
+      call restart_step_output(nMesh)
+    enddo
+    if(my_id == 0) print*, ' gas chunk done, Kstep=', Mesh(nMesh)%Kstep, ' tt=', Mesh(nMesh)%tt
 
-!     refresh the wall ghost once more against the final gas interior so the
-!     extracted q_w is consistent with this chunk's isothermal wall state
-      call fill_gas_wall_ghost(Bf, ib, ie, jb, kb, ke, NVAR1)
-
+!   refresh the wall ghost once more against the final gas interior so the
+!   extracted q_w is consistent with this chunk's isothermal wall state
+    call fill_gas_wall_ghost(NVAR1)
 
 !   ==================== (2) EXTRACT q_w, p_w =========================
-     jc_h = jb
-     qwmax = 0.d0
-     do k=kb, ke-1
-     do i=ib, ie-1
-       r1  = max(Bf%U(1,i,jc_h,k), 1.d-20)
-       u1s = Bf%U(2,i,jc_h,k)/r1
-       v1s = Bf%U(3,i,jc_h,k)/r1
-       p1n = (Bf%U(5,i,jc_h,k) - 0.5d0*r1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
-       T1_nd = gamma*Ma*Ma*p1n/max(r1,1.d-20)
-       T1_K  = T1_nd*T_inf
-       mu_SI = MU_SI0*sqrt((T1_K/T_SI0)**3)*(T_SI0+S_SI)/(T1_K+S_SI)
-       k_gas  = mu_SI*cp_ref/max(PrL,1.d-30)
-       dxp = max((Bf%yc(i,jc_h,k)-Bf%yc(i,jc_h-1,k))*Lscale, 1.d-20)
-       Utmp(1:NVAR1) = Bf%U(1:NVAR1,i,jc_h-1,k)
-!      wall heat flux into the wall (>0): q = k_gas*(T_int - T_ghost)/dx
-       fp_qw(i,k) = k_gas*(T1_nd - T_nd_from_U(Utmp, NVAR1, Ma, gamma))/dxp * T_inf
-       fp_pw(i,k) = p1n*RHO_REF*U_ref*U_ref
-       qwmax = max(qwmax, abs(fp_qw(i,k)))
-     enddo; enddo
-     if(my_id == 0) print*, ' gas heat-flux max|q_w|=', qwmax, ' W/m2'
-
-!   ==================== (3) POROUS CHUNK =========================
-     jc_l = je1 - 1     ! porous first interior row below the hot face
-     do pc=1, Porous_Chunk_Iter
-!     porous hot-face boundary: outlet pressure fp_pw + heat-flux Ts BC
-       do k=kb1, ke1-1
-       do i=ib1, ie1-1
-         do n1=0, LAP-1
-           jg = je1 + n1
-           Bp%U(1,i,jg,k) = Bp%U(1,i,jc_l,k)
-           Bp%U(2,i,jg,k) = Bp%U(2,i,jc_l,k)
-           Bp%U(3,i,jg,k) = Bp%U(3,i,jc_l,k)
-           Bp%U(4,i,jg,k) = Bp%U(4,i,jc_l,k)
-           Bp%U(5,i,jg,k) = Bp%U(5,i,jc_l,k)
-           Bp%p(i,jg,k)   = fp_pw(i,k)
-         enddo
-         call set_porous_Ts_flux(Bp, i, jc_l, je1, k, fp_qw(i,k))
-       enddo; enddo
-       do mBlock=1, Mesh(nMesh)%Num_Block
-         B => Mesh(nMesh)%Block(mBlock)
-         if(B%Block_type == BLOCK_POROUS) call solver_one_block(nMesh, mBlock, Sfac, Sfac1)
-       enddo
-     enddo
-
-!   ==================== (4) RETURN T_w from porous hot face ========
-     do k=kb1, ke1-1
-     do i=ib1, ie1-1
-       fp_Tw(i,k) = 0.5d0*(Bp%Ts(i,jc_l,k) + Bp%Ts(i,jc_l+1,k))
-     enddo; enddo
-     twmax = 0.d0
-     do k=kb1, ke1-1
-     do i=ib1, ie1-1
-       twmax = max(twmax, abs(fp_Tw(i,k)-fp_Tw_old(i,k)))
-     enddo; enddo
-     if(my_id == 0) then
-       print*, ' porous chunk done, outer iter', it, ' max|dT_w|=', twmax, ' K', &
-               '  T_w range [', minval(fp_Tw(ib:ie-1,kb:ke-1)), ',', &
-               maxval(fp_Tw(ib:ie-1,kb:ke-1)), ']'
-       open(203, file='iface_couple.dat', status='replace')
-       write(203,'(A)') '# x_w(m)  T_w(K)  q_w(W/m2)  p_w(Pa)'
-       do k=kb, ke-1
-       do i=ib, ie-1
-         write(203,'(4ES16.7)') 0.5d0*(Bf%x(i,jb,k)+Bf%x(i+1,jb,k)), &
-                                fp_Tw(i,k), fp_qw(i,k), fp_pw(i,k)
-       enddo; enddo
-       close(203)
-     endif
-     if(it >= 2 .and. twmax < Tol_Couple_Tw) then
-       converged = .true.
-       if(my_id == 0) print*, ' Staggered coupling converged at outer iter', it, &
-                              ' (max|dT_w| <', Tol_Couple_Tw, ')'
-       exit outer
-     endif
-   enddo outer
-
-   if(.not. converged) then
-     if(my_id == 0) print*, ' Staggered coupling reached Niter_Couple_Outer=', &
-                            Niter_Couple_Outer, ' (not fully converged)'
-   endif
-
-   call output_flow
-   call output_Ts
-   call output_vtk
-
-  contains
-
-!   Impose the isothermal wall state on the gas block code-19 face cells
-!   (j- face, rows j=jb.., ghost row jb-1..).  T_w = fp_Tw(i,k) [K].
-    subroutine fill_gas_wall_ghost(Bf, ib, ie, jb, kb, ke, nv)
-      implicit none
-      Type (Block_TYPE),pointer:: Bf
-      integer:: ib, ie, jb, kb, ke, nv
-      integer:: i, k, n1
-      real(PRE_EC):: mu1c, dwc
+    qwmax = 0.d0
+    if(pair42) then
+      do k = kb1, ke1-1
+      do i = ib1, ie1-1
+        gi = jb + (ie1-1) - i
+        r1  = max(Bf%U(1,ic_h,gi,k), 1.d-20)
+        u1s = Bf%U(2,ic_h,gi,k)/r1
+        v1s = Bf%U(3,ic_h,gi,k)/r1
+        p1n = (Bf%U(5,ic_h,gi,k) - 0.5d0*r1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+        T1_nd = gamma*Ma*Ma*p1n/max(r1,1.d-20)
+        T1_K  = T1_nd*T_inf
+        mu_SI = MU_SI0*sqrt((T1_K/T_SI0)**3)*(T_SI0+S_SI)/(T1_K+S_SI)
+        k_gas  = mu_SI*cp_ref/max(PrL,1.d-30)
+        dxp = sqrt( (Bf%xc(ic_h,gi,k)-Bf%xc(ic_h+1,gi,k))**2 &
+                  + (Bf%yc(ic_h,gi,k)-Bf%yc(ic_h+1,gi,k))**2 &
+                  + (Bf%zc(ic_h,gi,k)-Bf%zc(ic_h+1,gi,k))**2 )*Lscale
+        dxp = max(dxp, 1.d-20)
+        Utmp(1:NVAR1) = Bf%U(1:NVAR1,ic_h+1,gi,k)
+!       wall heat flux into the wall (>0): q = k_gas*(T_int - T_ghost)/dx
+        fp_qw(i,k) = k_gas*(T1_nd - T_nd_from_U(Utmp, NVAR1, Ma, gamma))/dxp * T_inf
+        fp_pw(i,k) = p1n*RHO_REF*U_ref*U_ref
+        qwmax = max(qwmax, abs(fp_qw(i,k)))
+      enddo; enddo
+    else
       do k=kb, ke-1
       do i=ib, ie-1
-        if(If_viscous == 1) then
-          mu1c = Bf%mu(i,jb,k); dwc = Bf%dw(i,jb,k)
-        else
-          mu1c = 1.d0/Re; dwc = 0.d0
-        endif
-        call wall_bound_with_Tw(nv, Bf%U(:,i,jb,k), Bf%U(:,i,jb-1,k), &
-             Ma, gamma, fp_Tw(i,k)/T_inf, mu1c, dwc, Re)
-        do n1=2, LAP
-          Bf%U(:,i,jb-n1,k) = Bf%U(:,i,jb-1,k)   ! deeper ghosts (copy of layer 1)
-        enddo
+        r1  = max(Bf%U(1,i,jc_h,k), 1.d-20)
+        u1s = Bf%U(2,i,jc_h,k)/r1
+        v1s = Bf%U(3,i,jc_h,k)/r1
+        p1n = (Bf%U(5,i,jc_h,k) - 0.5d0*r1*(u1s*u1s+v1s*v1s))*(gamma-1.d0)
+        T1_nd = gamma*Ma*Ma*p1n/max(r1,1.d-20)
+        T1_K  = T1_nd*T_inf
+        mu_SI = MU_SI0*sqrt((T1_K/T_SI0)**3)*(T_SI0+S_SI)/(T1_K+S_SI)
+        k_gas  = mu_SI*cp_ref/max(PrL,1.d-30)
+        dxp = max((Bf%yc(i,jc_h,k)-Bf%yc(i,jc_h-1,k))*Lscale, 1.d-20)
+        Utmp(1:NVAR1) = Bf%U(1:NVAR1,i,jc_h-1,k)
+        fp_qw(i,k) = k_gas*(T1_nd - T_nd_from_U(Utmp, NVAR1, Ma, gamma))/dxp * T_inf
+        fp_pw(i,k) = p1n*RHO_REF*U_ref*U_ref
+        qwmax = max(qwmax, abs(fp_qw(i,k)))
       enddo; enddo
-    end subroutine fill_gas_wall_ghost
+    endif
+    if(my_id == 0) print*, ' gas heat-flux max|q_w|=', qwmax, ' W/m2'
+
+!   ==================== (3) POROUS CHUNK =========================
+    do pc=1, Porous_Chunk_Iter
+!     porous interface face boundary: outlet pressure fp_pw + heat-flux Ts BC
+      do k=kb1, ke1-1
+      do i=ib1, ie1-1
+        if(pair42) then
+          do n1=0, LAP-1
+            jg = jg_l - n1
+            Bp%U(1,i,jg,k) = Bp%U(1,i,jc_l,k)
+            Bp%U(2,i,jg,k) = Bp%U(2,i,jc_l,k)
+            Bp%U(3,i,jg,k) = Bp%U(3,i,jc_l,k)
+            Bp%U(4,i,jg,k) = Bp%U(4,i,jc_l,k)
+            Bp%U(5,i,jg,k) = Bp%U(5,i,jc_l,k)
+            Bp%p(i,jg,k)   = fp_pw(i,k)
+          enddo
+          call set_porous_Ts_flux(Bp, i, jc_l, jg_l, k, -1, fp_qw(i,k))
+        else
+          do n1=0, LAP-1
+            jg = jg_l + n1
+            Bp%U(1,i,jg,k) = Bp%U(1,i,jc_l,k)
+            Bp%U(2,i,jg,k) = Bp%U(2,i,jc_l,k)
+            Bp%U(3,i,jg,k) = Bp%U(3,i,jc_l,k)
+            Bp%U(4,i,jg,k) = Bp%U(4,i,jc_l,k)
+            Bp%U(5,i,jg,k) = Bp%U(5,i,jc_l,k)
+            Bp%p(i,jg,k)   = fp_pw(i,k)
+          enddo
+          call set_porous_Ts_flux(Bp, i, jc_l, jg_l, k, +1, fp_qw(i,k))
+        endif
+      enddo; enddo
+      do mBlock=1, Mesh(nMesh)%Num_Block
+        B => Mesh(nMesh)%Block(mBlock)
+        if(B%Block_type == BLOCK_POROUS) call solver_one_block(nMesh, mBlock, Sfac, Sfac1)
+      enddo
+    enddo
+
+!   ==================== (4) RETURN T_w from porous interface face ===
+    do k=kb1, ke1-1
+    do i=ib1, ie1-1
+      if(pair42) then
+        fp_Tw(i,k) = 0.5d0*(Bp%Ts(i,jc_l,k) + Bp%Ts(i,jg_l,k))
+      else
+        fp_Tw(i,k) = 0.5d0*(Bp%Ts(i,jc_l,k) + Bp%Ts(i,jc_l+1,k))
+      endif
+    enddo; enddo
+    !   coolant exit (transpiration) velocity at the porous interface face
+        vcmax = 0.d0
+        do k=kb1, ke1-1
+        do i=ib1, ie1-1
+          vcmax = max(vcmax, abs(Bp%U(3,i,jc_l,k)))
+        enddo; enddo
+    twmax = 0.d0
+    do k=kb1, ke1-1
+    do i=ib1, ie1-1
+      twmax = max(twmax, abs(fp_Tw(i,k)-fp_Tw_old(i,k)))
+    enddo; enddo
+    if(my_id == 0) then
+      print*, ' porous chunk done, outer iter', it, ' max|dT_w|=', twmax, ' K', &
+              '  coolant exit |v|_max=', vcmax, ' m/s', &
+              '  T_w range [', minval(fp_Tw(ib1:ie1-1,kb1:ke1-1)), ',', &
+              maxval(fp_Tw(ib1:ie1-1,kb1:ke1-1)), ']'
+      open(203, file='iface_couple.dat', status='replace')
+      write(203,'(A)') '# x_w(m)  T_w(K)  q_w(W/m2)  p_w(Pa)'
+      do k=kb1, ke1-1
+      do i=ib1, ie1-1
+        if(pair42) then
+          gi = jb + (ie1-1) - i
+          xw = 0.5d0*(Bf%x(ie,gi,k)+Bf%x(ie,gi+1,k))
+        else
+          xw = 0.5d0*(Bf%x(i,jb,k)+Bf%x(i+1,jb,k))
+        endif
+        write(203,'(4ES16.7)') xw*Lscale, fp_Tw(i,k), fp_qw(i,k), fp_pw(i,k)
+      enddo; enddo
+      close(203)
+    endif
+    if(it >= 2 .and. twmax < Tol_Couple_Tw) then
+      converged = .true.
+      if(my_id == 0) print*, ' Staggered coupling converged at outer iter', it, &
+                             ' (max|dT_w| <', Tol_Couple_Tw, ')'
+      exit outer
+    endif
+  enddo outer
+
+  if(.not. converged) then
+    if(my_id == 0) print*, ' Staggered coupling reached Niter_Couple_Outer=', &
+                           Niter_Couple_Outer, ' (not fully converged)'
+  endif
+
+  call output_flow
+  call output_Ts
+  call output_vtk
+  call write_restart
+  contains
+
+!   Impose the isothermal wall state on the gas block code-19 face cells.
+!   pair42=.false. : j- face, interior row j=jb, ghost rows jb-1, jb-2, ...
+!   pair42=.true.  : i+ face, interior column i=ie-1, ghost columns ie, ie+1,...
+!   T_w = fp_Tw(porous cell index, k) [K].
+   subroutine fill_gas_wall_ghost(nv)
+     implicit none
+     integer:: nv
+     integer:: i2, k2, n1
+     real(PRE_EC):: mu1c, dwc
+     if(pair42) then
+       do k2 = kb, ke-1
+       do i2 = jb, je-1
+         if(If_viscous == 1) then
+           mu1c = Bf%mu(ic_h,i2,k2); dwc = Bf%dw(ic_h,i2,k2)
+         else
+           mu1c = 1.d0/Re; dwc = 0.d0
+         endif
+         gi = jb + (ie1-1) - i2
+         if(LS_Inlet_Type == 1 .and. Bp%U(3,gi,jc_l,k2) > 0.d0) then
+         ! transpiration (blowing) wall: the coolant leaves the porous block
+         ! in +y with the velocity Bp%U(3,gi,jc_l,k2) [m/s] and enters the gas
+           call wall_bound_blowing(nv, Bf%U(:,ic_h,i2,k2), Bf%U(:,ic_h+1,i2,k2), &
+              Ma, gamma, fp_Tw(gi,k2)/T_inf, Bp%U(3,gi,jc_l,k2), U_ref)
+         else
+         call wall_bound_with_Tw(nv, Bf%U(:,ic_h,i2,k2), Bf%U(:,ic_h+1,i2,k2), &
+              Ma, gamma, fp_Tw(gi,k2)/T_inf, mu1c, dwc, Re)
+         endif
+         do n1=1, LAP-1
+           Bf%U(:,ic_h+1+n1,i2,k2) = Bf%U(:,ic_h+1,i2,k2)
+         enddo
+       enddo; enddo
+     else
+       do k2 = kb, ke-1
+       do i2 = ib, ie-1
+         if(If_viscous == 1) then
+           mu1c = Bf%mu(i2,jc_h,k2); dwc = Bf%dw(i2,jc_h,k2)
+         else
+           mu1c = 1.d0/Re; dwc = 0.d0
+         endif
+         call wall_bound_with_Tw(nv, Bf%U(:,i2,jc_h,k2), Bf%U(:,i2,jc_h-1,k2), &
+              Ma, gamma, fp_Tw(i2,k2)/T_inf, mu1c, dwc, Re)
+         do n1=2, LAP
+           Bf%U(:,i2,jc_h-n1,k2) = Bf%U(:,i2,jc_h-1,k2)   ! deeper ghosts
+         enddo
+       enddo; enddo
+     endif
+   end subroutine fill_gas_wall_ghost
+!   Isothermal wall with normal mass injection (blowing / transpiration).
+!   Tw is non-dimensional (T/T_inf), Vn the wall-normal velocity [m/s] in +y,
+!   Uref the velocity scale.  Tangential velocity mirrored (wall at rest),
+!   pressure copied, T = 2*Tw - T_int (clamped at 0.5*T_int).
+   subroutine wall_bound_blowing(nvar, U1, Ug1, Ma1, gam, Tw, Vn, Uref)
+     implicit none
+     integer:: nvar
+     real(PRE_EC):: U1(nvar), Ug1(nvar), Ma1, gam, Tw, Vn, Uref
+     real(PRE_EC):: d1, uu1, v1, w1, p1, T1, p2, T2, u2, v2, w2, d2
+     d1 = max(U1(1),1.d-20)
+     uu1 = U1(2)/d1; v1 = U1(3)/d1; w1 = U1(4)/d1
+     p1 = (U1(5) - 0.5d0*d1*(uu1*uu1+v1*v1+w1*w1))*(gam-1.d0)
+     T1 = gam*Ma1*Ma1*p1/d1
+     p2 = p1
+     T2 = 2.d0*Tw - T1
+     if(T2 .lt. 0.5d0*T1) T2 = 0.5d0*T1
+     d2 = gam*Ma1*Ma1*p2/T2
+     u2 = -uu1
+     v2 = 2.d0*(Vn/max(Uref,1.d-30)) - v1
+     w2 = -w1
+     Ug1(1)=d2
+     Ug1(2)=d2*u2
+     Ug1(3)=d2*v2
+     Ug1(4)=d2*w2
+     Ug1(5)=p2/(gam-1.d0)+0.5d0*d2*(u2*u2+v2*v2+w2*w2)
+     if(nvar .ge. 6) Ug1(6)=U1(6)
+     if(nvar .ge. 7) Ug1(7)=U1(7)
+   end subroutine wall_bound_blowing
 
 !   Non-dimensional temperature T/T_inf of a compressible state U(:)
-    real(PRE_EC) function T_nd_from_U(U1, nv, Ma1, gam)
-      implicit none
-      real(PRE_EC):: U1(nv)
-      integer:: nv
-      real(PRE_EC):: Ma1, gam, d1, uu, vv, ww, p1
-      d1 = max(U1(1), 1.d-20)
-      uu = U1(2)/d1; vv = U1(3)/d1; ww = U1(4)/d1
-      p1 = (U1(5) - 0.5d0*d1*(uu*uu+vv*vv+ww*ww))*(gam-1.d0)
-      T_nd_from_U = gam*Ma1*Ma1*p1/max(d1,1.d-20)
-    end function T_nd_from_U
+   real(PRE_EC) function T_nd_from_U(U1, nv, Ma1, gam)
+     implicit none
+     real(PRE_EC):: U1(nv)
+     integer:: nv
+     real(PRE_EC):: Ma1, gam, d1, uu, vv, ww, p1
+     d1 = max(U1(1), 1.d-20)
+     uu = U1(2)/d1; vv = U1(3)/d1; ww = U1(4)/d1
+     p1 = (U1(5) - 0.5d0*d1*(uu*uu+vv*vv+ww*ww))*(gam-1.d0)
+     T_nd_from_U = gam*Ma1*Ma1*p1/max(d1,1.d-20)
+   end function T_nd_from_U
 
-!   Solid-frame Ts ghost on the porous hot face from incoming heat flux
-!   qw>0 (W/m2, heat entering the wall): Ts_g = Ts_i + qw*dx/ks_eff
-    subroutine set_porous_Ts_flux(B, i, jint, jgh, k, qw)
-      implicit none
-      Type (Block_TYPE),pointer:: B
-      integer:: i, jint, jgh, k
-      real(PRE_EC):: qw, dx_g, ks_eff
-      integer:: n1
-      ks_eff = max((1.d0 - B%porous_eps)*B%solid_k, 1.d-30)
-      do n1 = 0, LAP-1
-        dx_g = sqrt( (B%xc(i,jint,k)-B%xc(i,jgh+n1,k))**2 &
-                   + (B%yc(i,jint,k)-B%yc(i,jgh+n1,k))**2 &
-                   + (B%zc(i,jint,k)-B%zc(i,jgh+n1,k))**2 ) * Lscale
-        B%Ts(i,jgh+n1,k) = B%Ts(i,jint,k) + qw*dx_g/ks_eff
-      enddo
-    end subroutine set_porous_Ts_flux
+!   Solid-frame Ts ghost on the porous interface face from the incoming heat
+!   flux qw>0 (W/m2, heat entering the wall): Ts_g = Ts_i + qw*dx/ks_eff.
+!   sgn = +1 : ghost rows grow with +j (j+ face);  sgn = -1 : with -j (j- face)
+   subroutine set_porous_Ts_flux(B, i, jint, jgh, k, sgn, qw)
+     implicit none
+     Type (Block_TYPE),pointer:: B
+     integer:: i, jint, jgh, k, sgn
+     real(PRE_EC):: qw, dx_g, ks_eff
+     integer:: n1, jg2
+     ks_eff = max((1.d0 - B%porous_eps)*B%solid_k, 1.d-30)
+     do n1 = 0, LAP-1
+       jg2 = jgh + sgn*n1
+       dx_g = sqrt( (B%xc(i,jint,k)-B%xc(i,jg2,k))**2 &
+                  + (B%yc(i,jint,k)-B%yc(i,jg2,k))**2 &
+                  + (B%zc(i,jint,k)-B%zc(i,jg2,k))**2 ) * Lscale
+       B%Ts(i,jg2,k) = B%Ts(i,jint,k) + qw*dx_g/ks_eff
+     enddo
+   end subroutine set_porous_Ts_flux
   end subroutine run_staggered_fluid_porous
+
 !==============================================================================
 ! Staggered segmented coupling for FLUID<->SOLID / LOWSPEED(AC)<->SOLID
 ! (interface codes 11 / 13), conjugate-heat-transfer (CHT) variant.
@@ -2227,9 +2495,9 @@
      if(Bn%Block_type /= ftype) cycle
      face_s = Bc2%face; face1 = Bc2%face1
      if(paircode .eq. 11) then
-       if(face_s /= 2 .or. face1 /= 1) then
+       if(face_s /= 2 .or. .not.(face1 == 1 .or. face1 == 4)) then
          if(my_id == 0) print*, 'run_staggered_fluid_solid(11): supports solid j- (2) vs'// &
-             ' comp i- (1) only; got', face_s, face1
+             ' comp i-/i+ (1/4) only; got', face_s, face1
          return
        endif
      else
@@ -2272,8 +2540,19 @@
    fp_Tw_old = fp_Tw; fp_qw = 0.d0; fp_pw = 0.d0; fp_u = 0.d0
    fp_pw_old = 0.d0; fp_u_old = 0.d0
 
+   !  restart file: keep the saved counters instead of resetting
+   if(restart_found == 1) then
+     Mesh(nMesh)%tt    = restart_tt_saved
+     Mesh(nMesh)%Kstep = restart_Kstep_saved
+     if(my_id == 0) print*, ' restart: continue staggered run at Kstep=', &
+         restart_Kstep_saved, ' tt=', restart_tt_saved
+   !    NOTE: the per-face interface quantities (fp_Tw/fp_u) are re-seeded
+   !    from the control.ec initial guess; the outer iterations re-converge
+   !    them within a few rounds (state itself is fully restored).
+   else
    Mesh(nMesh)%tt = 0.d0
    Mesh(nMesh)%Kstep = 0
+   endif
    if(my_id == 0) then
      print*, ' run_staggered_fluid_solid(paircode=', paircode, '): solid block', s1, &
              ' fluid block', f1, ' Kstep_Couple_Comp=', Kstep_Couple_Comp, &
@@ -2327,6 +2606,9 @@
          call output_Ts
          call output_vtk
        endif
+       !  restart file + node-centred SI flow field: MUST be called by ALL
+       !  ranks (the routine does its own MPI + Kstep-based due check)
+       call restart_step_output(nMesh)
      enddo
       if(wfmode) then
         call stagger_fill_flow_wall
@@ -2405,6 +2687,7 @@
    call output_Ts
    call output_vtk
 
+  call write_restart
   contains
 
 !   Fill the flow-side interface ghost as an isothermal wall at fp_Tw.
@@ -2525,10 +2808,10 @@
    implicit none
    integer:: nMesh
    integer:: mf, ml, mBlock, mBlock2, ksub, nb, it, step, i1, i, k
-   integer:: nstep, nhalve, nf, nk
+   integer:: nstep, nhalve, nf, nk, ia1, ia2, ka1, ka2, gi
    integer:: face_s, face1, ib,ie,jb,je,kb,ke, ib1,ie1,jb1,je1,kb1,ke1, jc_l
    real(PRE_EC):: Sfac, Sfac1, dtw, dpw, duw, xw, uu, vv
-   logical:: found, converged
+   logical:: found, converged, pair42
    Type (Block_TYPE),pointer:: Bf, Bp, B, Bn
    TYPE (BC_MSG_TYPE),pointer:: Bc2
 
@@ -2564,9 +2847,10 @@
        Bn => Mesh(nMesh)%Block(mBlock2)
        if(Bn%Block_type /= BLOCK_LOWSPEED) cycle
        face_s = Bc2%face; face1 = Bc2%face1
-       if(face_s /= 2 .or. face1 /= 5) then
+       if(.not. ((face_s == 2 .and. face1 == 5) .or. &
+                 (face_s == 4 .and. face1 == 2))) then
          if(my_id == 0) print*, 'run_staggered_highlow: supports comp j- (2) vs LS j+ (5)'// &
-             ' only; got', face_s, face1
+             ' (2/5) or comp i+/LS j- (4/2) only; got', face_s, face1
          return
        endif
        ib=Bc2%ib; ie=Bc2%ie; jb=Bc2%jb; je=Bc2%je; kb=Bc2%kb; ke=Bc2%ke
@@ -2583,10 +2867,22 @@
      print*, 'run_staggered_highlow: no FLUID-LOWSPEED (code 12) interface found'
      return
    endif
-   jc_l = Bc2%je1 - 1          ! low-speed first interior row below its j+ face
+   pair42 = (face_s == 4 .and. face1 == 2)
+   if(pair42) then
+   ! cases/fluid_solid topology: gas i+ face <-> low-speed j- face.  The
+   ! low-speed interface cells are i=ib1..ie1-1 (tangential index) at the single
+   ! interior row j=jb1; the coolant enters through the far j=max face.
+   jc_l = jb1
+   ia1 = ib1; ia2 = ie1 - 1
+   ka1 = kb1; ka2 = ke1 - 1
+   else
+   jc_l = je1 - 1             ! low-speed first interior row below its j+ face
+   ia1 = ib;  ia2 = ie - 1
+   ka1 = kb;  ka2 = ke - 1
+   endif
 
-   nf = ie - ib
-   nk = ke - kb
+   nf = ia2 - ia1 + 1
+   nk = ka2 - ka1 + 1
    if(.not. allocated(fp_Tw)) then
      allocate(fp_Tw(1:nf,1:nk), fp_Tw_old(1:nf,1:nk), fp_qw(1:nf,1:nk))
      allocate(fp_pw(1:nf,1:nk), fp_u(1:nf,1:nk), fp_pw_old(1:nf,1:nk), fp_u_old(1:nf,1:nk))
@@ -2600,8 +2896,19 @@
    fp_Tw = 0.d0; fp_pw = 0.d0; fp_u = 0.d0; fp_Tw_old = 0.d0
    fp_pw_old = 0.d0; fp_u_old = 0.d0; fp_qw = 0.d0
 
+   !  restart file: keep the saved counters instead of resetting
+   if(restart_found == 1) then
+     Mesh(nMesh)%tt    = restart_tt_saved
+     Mesh(nMesh)%Kstep = restart_Kstep_saved
+     if(my_id == 0) print*, ' restart: continue staggered run at Kstep=', &
+         restart_Kstep_saved, ' tt=', restart_tt_saved
+   !    NOTE: the per-face interface quantities (fp_Tw/fp_u) are re-seeded
+   !    from the control.ec initial guess; the outer iterations re-converge
+   !    them within a few rounds (state itself is fully restored).
+   else
    Mesh(nMesh)%tt = 0.d0
    Mesh(nMesh)%Kstep = 0
+   endif
    if(my_id == 0) then
      print*, ' run_staggered_highlow(12): gas block', mf, ' LS block', ml, &
              ' Kstep_Couple_Comp=', Kstep_Couple_Comp, ' Niter_Couple_Outer=', Niter_Couple_Outer
@@ -2646,6 +2953,9 @@
          call output_Ts
          call output_vtk
        endif
+       !  restart file + node-centred SI flow field: MUST be called by ALL
+       !  ranks (the routine does its own MPI + Kstep-based due check)
+       call restart_step_output(nMesh)
      enddo
      if(my_id == 0) print*, ' gas chunk done, Kstep=', Mesh(nMesh)%Kstep, &
          ' tt=', Mesh(nMesh)%tt
@@ -2668,16 +2978,16 @@
 
 !   ============ (3) RECORD interface metrics & convergence =========
      dtw = 0.d0; dpw = 0.d0; duw = 0.d0
-     do k = kb, ke-1
-     do i = ib, ie-1
-       fp_Tw(i-ib+1,k-kb+1) = Bp%U(5,i,jc_l,k)
-       fp_pw(i-ib+1,k-kb+1) = Bp%p(i,jc_l,k)
+       do k = ka1, ka2
+       do i = ia1, ia2
+       fp_Tw(i-ia1+1,k-ka1+1) = Bp%U(5,i,jc_l,k)
+       fp_pw(i-ia1+1,k-ka1+1) = Bp%p(i,jc_l,k)
        uu = Bp%U(2,i,jc_l,k); vv = Bp%U(3,i,jc_l,k)
-       fp_u(i-ib+1,k-kb+1) = sqrt(uu*uu + vv*vv)
-       dtw = max(dtw, abs(fp_Tw(i-ib+1,k-kb+1)-fp_Tw_old(i-ib+1,k-kb+1)))
-       dpw = max(dpw, abs(fp_pw(i-ib+1,k-kb+1)-fp_pw_old(i-ib+1,k-kb+1)))
-       duw = max(duw, abs(fp_u(i-ib+1,k-kb+1)-fp_u_old(i-ib+1,k-kb+1)))
-     enddo; enddo
+       fp_u(i-ia1+1,k-ka1+1) = sqrt(uu*uu + vv*vv)
+       dtw = max(dtw, abs(fp_Tw(i-ia1+1,k-ka1+1)-fp_Tw_old(i-ia1+1,k-ka1+1)))
+       dpw = max(dpw, abs(fp_pw(i-ia1+1,k-ka1+1)-fp_pw_old(i-ia1+1,k-ka1+1)))
+       duw = max(duw, abs(fp_u(i-ia1+1,k-ka1+1)-fp_u_old(i-ia1+1,k-ka1+1)))
+       enddo; enddo
      if(my_id == 0) then
        print*, ' highlow interface metrics, outer iter', it, ': max|dT|=', dtw, &
                ' K max|dp|=', dpw, ' Pa max|du|=', duw, ' m/s'
@@ -2685,11 +2995,16 @@
                minval(fp_pw), ',', maxval(fp_pw), '] Pa'
        open(204, file='iface_highlow.dat', status='replace')
        write(204,'(A)') '# x_w(m)  T_w(K)  p_w(Pa)  |u|_w(m/s)'
-       do k = kb, ke-1
-       do i = ib, ie-1
+       do k = ka1, ka2
+       do i = ia1, ia2
+         if(pair42) then
+         gi = jb + (ie1-1) - i
+         xw = 0.5d0*(Bf%x(ie,gi,k)+Bf%x(ie,gi+1,k))
+         else
          xw = 0.5d0*(Bf%x(i,jb,k)+Bf%x(i+1,jb,k))
-         write(204,'(4ES16.7)') xw*Lscale, fp_Tw(i-ib+1,k-kb+1), &
-                                fp_pw(i-ib+1,k-kb+1), fp_u(i-ib+1,k-kb+1)
+         endif
+         write(204,'(4ES16.7)') xw*Lscale, fp_Tw(i-ia1+1,k-ka1+1), &
+         fp_pw(i-ia1+1,k-ka1+1), fp_u(i-ia1+1,k-ka1+1)
        enddo; enddo
        close(204)
      endif
@@ -2709,6 +3024,8 @@
    call output_flow
    call output_Ts
    call output_vtk
+!  final restart file so an interrupted run can be resumed from the end state
+   call write_restart
   end subroutine run_staggered_highlow
 !==============================================================================
 ! Staggered segmented coupling dispatcher.  Detects which cross-region pair
@@ -2754,6 +3071,7 @@
      if(my_id == 0) print*, ' run_staggered_multiregion: no cross-region block combination - abort'
      return
    endif
+   if(IF_Debug == 1) call dbg_dump_interfaces(nMesh)
    if(npairs > 1) then
      if(my_id == 0) print*, ' run_staggered_multiregion: multiple cross-region combos present,', &
          ' staggered driver supports a single pair (11/12/13/19) - abort'
@@ -2770,3 +3088,36 @@
      call run_staggered_highlow(nMesh)
    endif
   end subroutine run_staggered_multiregion
+!==============================================================================
+! Diagnostic dump of every block-to-block interface connection (face/face1,
+! node ranges and the L1..L3 connection descriptors) as seen by the coupling
+! routines.  Enabled with IF_Debug = 1 in control.ec.  face numbering:
+!   1=i-, 2=j-, 3=k-, 4=i+, 5=j+, 6=k+
+!==============================================================================
+   subroutine dbg_dump_interfaces(nMesh)
+    use Global_Var
+    use const_var
+    implicit none
+    integer:: nMesh
+    integer:: mBlock, ksub
+    Type (Block_TYPE),pointer:: B
+    TYPE (BC_MSG_TYPE),pointer:: Bc2
+
+    if(my_id .ne. 0) return
+    print*, ' ---- interface connection dump (block type / bc / face / nb1 / face1) ----'
+    do mBlock = 1, Mesh(nMesh)%Num_Block
+      B => Mesh(nMesh)%Block(mBlock)
+      if(.not. associated(B%bc_msg2)) cycle
+      do ksub = 1, B%subface
+        Bc2 => B%bc_msg2(ksub)
+        if(Bc2%nb1 <= 0 .and. .not. is_interface_bc(Bc2%bc)) cycle
+        print*, '  blk', mBlock, 'type', B%Block_type, 'sub', ksub, &
+                ' bc=', Bc2%bc, ' face=', Bc2%face, ' nb1=', Bc2%nb1, &
+                ' face1=', Bc2%face1, ' L=', Bc2%L1, Bc2%L2, Bc2%L3
+        print*, '     own  rng:', Bc2%ib, Bc2%ie, Bc2%jb, Bc2%je, Bc2%kb, Bc2%ke
+        print*, '     nb   rng:', Bc2%ib1, Bc2%ie1, Bc2%jb1, Bc2%je1, Bc2%kb1, Bc2%ke1
+      enddo
+    enddo
+    print*, ' ---------------------------------------------------------------------------'
+   end subroutine dbg_dump_interfaces
+

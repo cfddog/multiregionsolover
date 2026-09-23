@@ -567,6 +567,152 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
   end subroutine output_flow
 
 !----------------------------------------------------------------------
+! Node-centred SI flow field for display together with Mesh3d.x
+!   file: flow3d_node.dat (unformatted; name in Global_Var FLOWNODE_FILE)
+!   - one record per block, GLOBAL block order (= the Mesh3d.x / flow3d.dat
+!     block order), each record holds d,u,v,w,T at the nx*ny*nz GRID NODES
+!   - the cell-centred state is averaged to the nodes with the standard
+!     8-cell average (the same formula as util/readflow3d-ver2.x
+!     comput_value_in_mesh), so the file pairs directly with Mesh3d.x
+!   - units are SI: compressible blocks are rescaled with the free-stream
+!     reference state (U_ref=Ma*a_ref, rho_ref=Re*mu_SI(T_inf)/(Ma*a_ref*Lscale),
+!     T_ref=T_inf); low-speed/porous blocks already store SI values
+!   - solid blocks follow the flow3d.vtk convention: d=u=v=w=0, T=Ts [K],
+!     so the block count always matches Mesh3d.x
+!----------------------------------------------------------------------
+  subroutine output_flow_node
+   use Global_Var
+   use const_var
+   implicit none
+   Type (Mesh_TYPE),pointer:: MP
+   Type (Block_TYPE),pointer:: B
+   real(PRE_EC),allocatable,dimension(:,:,:,:):: U
+   integer:: m,m1,i,j,k,nx,ny,nz,mt,Num_data,ierr,tag
+   integer:: Recv_from_ID, status(MPI_status_size)
+   real(PRE_EC),parameter:: R_AIR_SI=287.0d0
+   real(PRE_EC),parameter:: MU_SI0=1.716d-5, T_SI0=273.15d0, S_SI=110.4d0
+   real(PRE_EC):: sc_rho,sc_u,sc_T,a_ref,mu_inf_p
+
+   MP=>Mesh(1)
+
+!  SI conversion scales (identical to output_vtk / Iflag_vtk_SI)
+   a_ref    = sqrt(gamma*R_AIR_SI*T_inf)
+   mu_inf_p = MU_SI0*sqrt((T_inf/T_SI0)**3)*(T_SI0+S_SI)/(T_inf+S_SI)
+   sc_u     = Ma*a_ref
+   sc_rho   = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
+   sc_T     = T_inf
+
+   if(my_id .eq. 0) then
+     print*, " write ", trim(FLOWNODE_FILE), " (node-centred, SI units) ......"
+     open(99,file=FLOWNODE_FILE,form="unformatted",status="replace")
+   endif
+
+   if(my_id .eq. 0) then
+     do m=1,Total_block
+       nx=bNi(m); ny=bNj(m); nz=bNk(m)
+       Num_data=5*nx*ny*nz
+       allocate(U(5,nx,ny,nz))
+       if(B_proc(m) .eq. 0) then
+         mt=B_n(m); B=>MP%Block(mt)
+         call flow_node_one_block(B, nx, ny, nz, U, sc_rho, sc_u, sc_T)
+       else
+         Recv_from_ID=B_proc(m); tag=B_n(m)+300
+         call MPI_Recv(U,Num_data,OCFD_DATA_TYPE,Recv_from_ID,tag, &
+                       MPI_COMM_WORLD,status,ierr)
+       endif
+       write(99) ((((U(m1,i,j,k),i=1,nx),j=1,ny),k=1,nz),m1=1,5)
+       deallocate(U)
+     enddo
+     close(99)
+   else
+!    worker ranks: send their OWN blocks, in local order (the master receives
+!    them in global order, which matches because the block partition assigns a
+!    contiguous global range to every rank -- same assumption as output_flow)
+     do m=1,MP%Num_Block
+       B=>MP%Block(m)
+       nx=B%nx; ny=B%ny; nz=B%nz
+       Num_data=5*nx*ny*nz
+       allocate(U(5,nx,ny,nz))
+       call flow_node_one_block(B, nx, ny, nz, U, sc_rho, sc_u, sc_T)
+       call MPI_Send(U,Num_data,OCFD_DATA_TYPE,0,m+300,MPI_COMM_WORLD,ierr)
+       deallocate(U)
+     enddo
+   endif
+
+   call MPI_Barrier(MPI_COMM_WORLD,ierr)
+   if(my_id .eq. 0) print*, " write ", trim(FLOWNODE_FILE), " OK"
+  end subroutine output_flow_node
+
+!----------------------------------------------------------------------
+! Cell-centred state -> grid-node values (8-cell average), in SI units,
+! for one block.  U(5,nx,ny,nz) receives (d,u,v,w,T) at the nodes
+! (i=1..nx, j=1..ny, k=1..nz).  Solid blocks carry Ts in the T slot.
+!----------------------------------------------------------------------
+  subroutine flow_node_one_block(B, nx, ny, nz, U, sc_rho, sc_u, sc_T)
+   use Global_Var
+   use const_var
+   implicit none
+!  NOTE: the dummy is deliberately NOT a pointer (a pointer dummy would need an
+!  explicit interface).  Block_TYPE keeps its data in pointer components, so a
+!  non-pointer dummy still references the same arrays for the read-only use here.
+   Type (Block_TYPE),intent(in):: B
+   integer,intent(in):: nx,ny,nz
+   real(PRE_EC),intent(in):: sc_rho,sc_u,sc_T
+   real(PRE_EC),intent(out):: U(5,nx,ny,nz)
+   real(PRE_EC),allocatable:: dc(:,:,:),uc(:,:,:),vc(:,:,:),wc(:,:,:),Tc(:,:,:)
+   integer:: i,j,k
+   real(PRE_EC):: r1,u1,v1,w1,p1,T1
+
+   allocate(dc(0:nx,0:ny,0:nz),uc(0:nx,0:ny,0:nz),vc(0:nx,0:ny,0:nz), &
+            wc(0:nx,0:ny,0:nz),Tc(0:nx,0:ny,0:nz))
+
+   if(B%Block_type == BLOCK_SOLID) then
+!    solid block: no flow, temperature = solid-frame Ts (already in K)
+     do k=0,nz; do j=0,ny; do i=0,nx
+       dc(i,j,k)=0.d0; uc(i,j,k)=0.d0; vc(i,j,k)=0.d0; wc(i,j,k)=0.d0
+       Tc(i,j,k)=B%Ts(i,j,k)
+     enddo; enddo; enddo
+   else if(B%Block_type == BLOCK_LOWSPEED .or. B%Block_type == BLOCK_POROUS) then
+!    low-speed / porous blocks store SI (rho [kg/m3], u [m/s], T [K])
+     do k=0,nz; do j=0,ny; do i=0,nx
+       dc(i,j,k)=B%U(1,i,j,k)
+       uc(i,j,k)=B%U(2,i,j,k)
+       vc(i,j,k)=B%U(3,i,j,k)
+       wc(i,j,k)=B%U(4,i,j,k)
+       Tc(i,j,k)=B%U(5,i,j,k)
+     enddo; enddo; enddo
+   else
+!    compressible block: non-dimensional state -> SI
+     do k=0,nz; do j=0,ny; do i=0,nx
+       r1=max(B%U(1,i,j,k),1.d-20)
+       u1=B%U(2,i,j,k)/r1; v1=B%U(3,i,j,k)/r1; w1=B%U(4,i,j,k)/r1
+       p1=(B%U(5,i,j,k)-0.5d0*r1*(u1*u1+v1*v1+w1*w1))*(gamma-1.d0)
+       T1=gamma*Ma*Ma*p1/r1
+       dc(i,j,k)=r1*sc_rho
+       uc(i,j,k)=u1*sc_u; vc(i,j,k)=v1*sc_u; wc(i,j,k)=w1*sc_u
+       Tc(i,j,k)=T1*sc_T
+     enddo; enddo; enddo
+   endif
+
+!  average the 8 surrounding cells onto every grid node
+   do k=1,nz; do j=1,ny; do i=1,nx
+     U(1,i,j,k)=0.125d0*( dc(i-1,j-1,k-1)+dc(i,j-1,k-1)+dc(i-1,j,k-1)+dc(i,j,k-1) &
+                         +dc(i-1,j-1,k  )+dc(i,j-1,k  )+dc(i-1,j,k  )+dc(i,j,k  ) )
+     U(2,i,j,k)=0.125d0*( uc(i-1,j-1,k-1)+uc(i,j-1,k-1)+uc(i-1,j,k-1)+uc(i,j,k-1) &
+                         +uc(i-1,j-1,k  )+uc(i,j-1,k  )+uc(i-1,j,k  )+uc(i,j,k  ) )
+     U(3,i,j,k)=0.125d0*( vc(i-1,j-1,k-1)+vc(i,j-1,k-1)+vc(i-1,j,k-1)+vc(i,j,k-1) &
+                         +vc(i-1,j-1,k  )+vc(i,j-1,k  )+vc(i-1,j,k  )+vc(i,j,k  ) )
+     U(4,i,j,k)=0.125d0*( wc(i-1,j-1,k-1)+wc(i,j-1,k-1)+wc(i-1,j,k-1)+wc(i,j,k-1) &
+                         +wc(i-1,j-1,k  )+wc(i,j-1,k  )+wc(i-1,j,k  )+wc(i,j,k  ) )
+     U(5,i,j,k)=0.125d0*( Tc(i-1,j-1,k-1)+Tc(i,j-1,k-1)+Tc(i-1,j,k-1)+Tc(i,j,k-1) &
+                         +Tc(i-1,j-1,k  )+Tc(i,j-1,k  )+Tc(i-1,j,k  )+Tc(i,j,k  ) )
+   enddo; enddo; enddo
+
+   deallocate(dc,uc,vc,wc,Tc)
+  end subroutine flow_node_one_block
+
+
+!----------------------------------------------------------------------
 ! Output VTK format (legacy STRUCTURED_GRID) for Paraview
 ! Writes one file per block:
 !   flow3d_block_NNN.vtk  - fluid blocks (cell-centered d,u,v,w,T,p)

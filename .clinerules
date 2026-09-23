@@ -1,0 +1,28 @@
+# Cline 项目记忆规则
+
+## 每次新任务开始时，必须执行
+在分析代码、提出方案或修改文件之前，先按顺序读取：
+1. memory-bank/projectbrief.md
+2. memory-bank/activeContext.md
+3. memory-bank/progress.md
+4. memory-bank/worklog.md（只读最近 5 条）
+5. memory-bank/constraints.md
+
+读完后，先用不超过 10 行总结：
+- 当前项目目标
+- 已完成
+- 当前任务
+- 关键约束
+- 建议下一步
+
+然后问我是否继续。不要直接改代码。
+
+## 禁止
+- 未读完上述文件前，不要重新扫描整个项目。
+- 不要凭猜测补充缺失信息，缺失就问我。
+- 除非我明确要求，否则不要重新通读整个代码库。
+
+## 每次任务结束或关键决策后，必须更新
+- memory-bank/activeContext.md：当前任务、最近决策、下一步
+- memory-bank/progress.md：已完成 / 待办
+- memory-bank/worklog.md：追加一条简要记录

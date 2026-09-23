@@ -154,6 +154,19 @@
     Porous_W_in=0.d0
     Porous_T_in=0.d0        ! porous coolant inlet temperature [K]; <=0 -> use LS_T_ref
 
+!---- solid (conduction) GS controls, namelist "$solid_ec" --------------------
+!     Formerly hard-coded in solid_solver_one_block; these defaults are exactly
+!     the former constants (1.7 / 20000 / 5 / 1.d-9), so no existing case changes.
+    Solid_GS_Omega=1.7d0    ! SOR over-relaxation factor
+    Solid_Max_Iter=20000    ! max GS sweeps per solver call
+    Solid_Min_Iter=5        ! min sweeps before the tolerance check is allowed
+    Solid_Tol=1.d-9         ! GS convergence tolerance on max|dTs|
+
+!---- restart file / node-centred flow-field output (namelist "$flow_ec") ------
+    Iflag_restart=0         ! 0=auto(read field_restart.dat if present) 1=force -1=off
+    Kstep_restart=0         ! restart write interval (<=0 -> use Kstep_save)
+    Iflag_flow_node=0       ! 1=also write node-centred SI flow field (flow3d_node.dat)
+
 !---- interface-19 staggered (segmented) coupling controls --------------------
     Iflag_Couple_Scheme=0   ! 0 = per-step coupling; 1 = staggered segmented (gas chunk / porous chunk)
     Kstep_Couple_Comp=1000  ! compressible steps per gas chunk
@@ -173,8 +186,79 @@ end
    use Global_var
    implicit none
    real(PRE_EC):: R0, a0, d0, mu0,mu1
+   integer:: ios
+   logical:: has_legacy, has_freestream, has_flow, has_lowspeed, &
+             has_ac, has_solid, has_porous, has_couple
 
- 	namelist /control_ec/ Ma, Re, AoA, AoS, p_outlet, t_end, &
+ !=============================================================================
+! control.ec namelists
+!
+! The historical single group "$control_ec" (all 128 variables) is STILL fully
+! supported, so every existing case file keeps working unchanged.
+!
+! New case files may instead use the following 7 physics/functional groups.
+! Every group is OPTIONAL: an absent group simply keeps the code default from
+! set_default_parameter(), and an absent variable inside a present group keeps
+! its default as well.  So a case file only has to list what differs from the
+! defaults.  If a group is present but cannot be parsed (unknown variable name,
+! missing terminator) the run aborts with an explicit message.
+!
+!   $freestream_ec : freestream / reference state / gas properties
+!   $flow_ec       : flow solver control (time, scheme, model, output, I/O)
+!   $lowspeed_ec   : low-speed (incompressible) block
+!   $ac_ec         : artificial-compressibility solver (low-speed and porous)
+!   $solid_ec      : solid (conduction) block
+!   $porous_ec     : porous-media block
+!   $couple_ec     : cross-region (staggered) coupling schedule
+!
+! When both the legacy group and grouped namelists are present, the grouped
+! ones are read afterwards and therefore win (gradual migration is possible).
+!=============================================================================
+  namelist /freestream_ec/ &
+      Ma, Re, AoA, AoS, p_outlet, gamma, PrL, PrT, T_inf, Twall, Lscale, &
+      Ref_S, Ref_L, Centroid, Cood_Y_UP, Kt_inf, Wt_inf, &
+      IF_TurboMachinary, Ref_medium_usrdef, &
+      Turbo_P0, Turbo_T0, Turbo_L0, Turbo_w, Turbo_Periodic_seta
+
+  namelist /flow_ec/ &
+      t_end, Kstep_save, Kstep_show, Kstep_average, &
+      Kstep_smooth, Kstep_init_smooth, CFL, dt_global, dtmax, dtmin, &
+      Iflag_local_dt, Time_Method, Step_Inner_Limit, Res_Inner_Limit, w_LU, &
+      If_Residual_smoothing, If_dtime_mesh, &
+      Iflag_Scheme, Iflag_Flux, IFlag_Reconstruction, Bound_Scheme, &
+      IF_Scheme_Positivity, IFLAG_LIMIT_FLOW, Iflag_turbulence_model, &
+      If_viscous, Iflag_init, MUT_MAX, CP1_NSA, CP2_NSA, &
+      Ldmin, Ldmax, Lpmin, Lpmax, Lumax, LSAmax, &
+      Mesh_File_Format, Num_Mesh, Pre_Step_Mesh, NUM_THREADS, IF_Debug, Pdebug, &
+      Periodic_dX, Periodic_dY, Periodic_dZ, IF_Innerflow, &
+      Iflag_savefile, Iflag_vtk_onefile, Iflag_vtk_SI, Iflag_bc_check, &
+      Iflag_restart, Kstep_restart, Iflag_flow_node
+
+  namelist /lowspeed_ec/ &
+      LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref, LS_Inlet_Type, &
+      LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, &
+      LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, &
+      LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm
+
+  namelist /ac_ec/ &
+      AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, &
+      AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, AC_WallRecon, AC_WallP, &
+      AC_MomDiss, AC_MomFrac
+
+  namelist /solid_ec/ Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol
+
+  namelist /porous_ec/ &
+      Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, &
+      Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in
+
+  namelist /couple_ec/ &
+      Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
+      Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
+      Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, &
+      Iflag_Couple_WallFlux
+
+!---- legacy single group (variable list unchanged; Solid_* appended at the end)
+  namelist /control_ec/ Ma, Re, AoA, AoS, p_outlet, t_end, &
 	    gamma, PrL, PrT, &
 	    Kstep_save, &
 	    Iflag_turbulence_model,Iflag_init,If_viscous,  &
@@ -201,13 +285,58 @@ end
 		Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in, &
 		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
 		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
-		Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux
+		Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux, &
+		Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol, &
+		Iflag_restart, Kstep_restart, Iflag_flow_node
 
 
 	open(99,file="control.ec")
-	read(99,nml=control_ec)
-    close(99)
- 
+!  a0/d0/mu0/mu1 are only assigned in the turbomachinery re-scaling branch
+!  below; initialise them so the output_para.out echo never prints garbage
+!  (pre-existing latent bug: uninitialised values varied from run to run).
+    R0=0.d0; a0=0.d0; d0=0.d0; mu0=0.d0; mu1=0.d0
+    call scan_control_ec_groups(has_legacy, has_freestream, has_flow, &
+         has_lowspeed, has_ac, has_solid, has_porous, has_couple)
+    print*, ' control.ec namelist groups found: legacy=', has_legacy, &
+            ' freestream=', has_freestream, ' flow=', has_flow, &
+            ' lowspeed=', has_lowspeed
+    print*, '   ac=', has_ac, ' solid=', has_solid, &
+            ' porous=', has_porous, ' couple=', has_couple
+!  Read the legacy single group first (if present), then the grouped
+!  namelists so that they override it (gradual migration is supported).
+    if(has_legacy) then
+      rewind(99); read(99,nml=control_ec,iostat=ios)
+      call check_nml_ios(ios,'control_ec')
+    endif
+    if(has_freestream) then
+      rewind(99); read(99,nml=freestream_ec,iostat=ios)
+      call check_nml_ios(ios,'freestream_ec')
+    endif
+    if(has_flow) then
+      rewind(99); read(99,nml=flow_ec,iostat=ios)
+      call check_nml_ios(ios,'flow_ec')
+    endif
+    if(has_lowspeed) then
+      rewind(99); read(99,nml=lowspeed_ec,iostat=ios)
+      call check_nml_ios(ios,'lowspeed_ec')
+    endif
+    if(has_ac) then
+      rewind(99); read(99,nml=ac_ec,iostat=ios)
+      call check_nml_ios(ios,'ac_ec')
+    endif
+    if(has_solid) then
+      rewind(99); read(99,nml=solid_ec,iostat=ios)
+      call check_nml_ios(ios,'solid_ec')
+    endif
+    if(has_porous) then
+      rewind(99); read(99,nml=porous_ec,iostat=ios)
+      call check_nml_ios(ios,'porous_ec')
+    endif
+    if(has_couple) then
+      rewind(99); read(99,nml=couple_ec,iostat=ios)
+      call check_nml_ios(ios,'couple_ec')
+    endif
+    close(99) 
  !---- convert parameters ----------------------
  ! Ref_medium_usrdef==0 ????????? (Ma=1, ???????????????? Re) ?? ==1 ??????????? ?????????Ma, Re???
  ! ??????????????????????
@@ -277,6 +406,16 @@ end
 	write(99,*) "IF_Scheme_Positivity =", IF_Scheme_Positivity
 	write(99,*) "Iflag_savefile=", Iflag_savefile
 	write(99,*) "NUM_THREADS=",NUM_THREADS
+	write(99,*) "---- control.ec namelist groups found in file (T=from file, F=defaults) ----"
+	write(99,*) " legacy control_ec=", has_legacy, " freestream_ec=", has_freestream, &
+	            " flow_ec=", has_flow, " lowspeed_ec=", has_lowspeed
+	write(99,*) " ac_ec=", has_ac, " solid_ec=", has_solid, &
+	            " porous_ec=", has_porous, " couple_ec=", has_couple
+	write(99,*) " solid GS controls Solid_GS_Omega/Max_Iter/Min_Iter/Tol=", &
+	            Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol
+	write(99,*) " restart: Iflag_restart=", Iflag_restart, " Kstep_restart=", &
+	            Kstep_restart, " Iflag_flow_node=", Iflag_flow_node, &
+	            " (file='", trim(RESTART_FILE), "')"
     write(99,*) "--------------------------------------------"
 
     close(99)
@@ -425,6 +564,9 @@ end
     Ipara(52)=AC_WallRecon
     Ipara(53)=AC_WallP
     Ipara(54)=AC_MomDiss
+    Ipara(55)=Iflag_restart
+    Ipara(56)=Kstep_restart
+    Ipara(57)=Iflag_flow_node
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -555,6 +697,9 @@ end
     AC_WallRecon=Ipara(52)
     AC_WallP=Ipara(53)
     AC_MomDiss=Ipara(54)
+    Iflag_restart=Ipara(55)
+    Kstep_restart=Ipara(56)
+    Iflag_flow_node=Ipara(57)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -811,3 +956,86 @@ end
 
    deallocate(nface_global, face_global, Tw_global, Qw_global, htc_global, Tinf_global)
   end subroutine read_solid_bc
+
+!==============================================================================
+! control.ec group detection (see read_parameter_ec).  Reports which namelist
+! groups are present in the file.  Text after '!' is ignored so that a
+! commented-out group does not count; the scan is case-insensitive and accepts
+! both '$' and '&' as the namelist delimiter.
+!==============================================================================
+  subroutine scan_control_ec_groups(has_legacy, has_freestream, has_flow, &
+       has_lowspeed, has_ac, has_solid, has_porous, has_couple)
+   implicit none
+   logical,intent(out):: has_legacy, has_freestream, has_flow, has_lowspeed, &
+       has_ac, has_solid, has_porous, has_couple
+   character(len=512):: line
+   integer:: ios, k, nz
+   has_legacy=.false.; has_freestream=.false.; has_flow=.false.
+   has_lowspeed=.false.; has_ac=.false.; has_solid=.false.
+   has_porous=.false.; has_couple=.false.
+   open(98,file="control.ec",status='old')
+   do
+     read(98,'(A)',iostat=ios) line
+     if(ios /= 0) exit
+     k=index(line,'!')
+     if(k > 0) line(k:)=' '
+     call str_to_lower(line)
+!    Only a real group header counts: the first non-blank character must be
+!    '$' or '&' (so a group name mentioned inside prose/comment never matches).
+     nz=1
+     do
+       if(nz > len(line)) exit
+       if(line(nz:nz) == ' ' .or. iachar(line(nz:nz)) == 9) then
+         nz=nz+1
+       else
+         exit
+       endif
+     enddo
+     if(nz > len(line)) cycle
+     if(line(nz:nz) /= '$' .and. line(nz:nz) /= '&') cycle
+     if(index(line,'control_ec') > 0)    has_legacy=.true.
+     if(index(line,'freestream_ec') > 0) has_freestream=.true.
+     if(index(line,'flow_ec') > 0)       has_flow=.true.
+     if(index(line,'lowspeed_ec') > 0)   has_lowspeed=.true.
+     if(index(line,'ac_ec') > 0)         has_ac=.true.
+     if(index(line,'solid_ec') > 0)      has_solid=.true.
+     if(index(line,'porous_ec') > 0)     has_porous=.true.
+     if(index(line,'couple_ec') > 0)     has_couple=.true.
+   enddo
+   close(98)
+  end subroutine scan_control_ec_groups
+
+!==============================================================================
+! Lower-case a string in place (helper for the namelist-group scan).
+!==============================================================================
+  subroutine str_to_lower(s)
+   implicit none
+   character(len=*),intent(inout):: s
+   integer:: i, ic
+   do i=1,len(s)
+     ic=iachar(s(i:i))
+     if(ic >= 65 .and. ic <= 90) s(i:i)=achar(ic+32)   ! 'A'..'Z' -> 'a'..'z'
+   enddo
+  end subroutine str_to_lower
+
+!==============================================================================
+! Fatal namelist input error.  The group was found in control.ec by the text
+! scan but could not be parsed -- almost always a misspelled/unknown variable
+! name inside the group, or a missing "$end" (or "/") terminator.  Aborting is
+! intentional: silently falling back to the defaults would be worse.
+!==============================================================================
+  subroutine check_nml_ios(ios, group_name)
+   implicit none
+   integer,intent(in):: ios
+   character(len=*),intent(in):: group_name
+   if(ios /= 0) then
+     print*, '----------------------------------------------------------------'
+     print*, ' ERROR: cannot read namelist group "', trim(group_name), &
+             '" in control.ec'
+     print*, '   iostat =', ios
+     print*, '   Most likely cause: a misspelled/unknown variable name inside'
+     print*, '   that group, or a missing "$end" (or "/") terminator.'
+     print*, '----------------------------------------------------------------'
+     stop 1
+   endif
+  end subroutine check_nml_ios

@@ -159,6 +159,8 @@
 
    if(my_id .eq. 0) print*, " Start ......"
 
+   if(IF_Debug == 1) call dbg_dump_interfaces(1)
+
 !------------------------------------------------------------------------
 ! Staggered segmented coupling: dispatches by detected cross-region pair
 ! (11 FLUID<->SOLID CHT, 12 FLUID<->LOWSPEED matching block-GS, 13
@@ -278,6 +280,9 @@
           call output_Ts                                    ! ???????????
           call output_vtk                                   ! ???VTK???(Paraview??????)
 	  endif
+!  restart file field_restart.dat + node-centred SI flow field flow3d_node.dat
+!  (self-scheduled by Kstep_restart / Kstep_save; must run on ALL ranks)
+      call restart_step_output(1)
  
  ! ??????????
     if(Kstep_average > 0) then     

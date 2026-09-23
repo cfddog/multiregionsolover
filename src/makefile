@@ -1,7 +1,7 @@
 #f77=ifort
 #f77=mpif90
 f77 =mpif90
-opt= -g -std=legacy -fallow-argument-mismatch -ffree-line-length-none -freal-4-real-8 -O3 
+opt= -g -std=legacy -ffree-line-length-none -freal-4-real-8 -O3 
 #opt=-O3 -openmp
 
 srs=  sub_modules.f90 \
@@ -18,6 +18,7 @@ srs=  sub_modules.f90 \
 	  sub_debug.f90 sub_filtering.f90 sub_boundary_user.f90  \
 	  sub_udate_Meshlink_mpi.f90  \
 	  sub_Finite_Difference1.f90  sub_Finite_Difference2.f90 \
+	  sub_restart.f90 \
 	  sub_Post_timeAverage.f90 sub_limitflow.f90 sub_multi_region.f90 \
 	  sub_lowspeed.f90 sub_porous.f90 sub_lowspeed_ac.f90 sub_porous_ac.f90
 

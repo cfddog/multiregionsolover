@@ -1,16 +1,16 @@
 !-----------------------------------------------------------
 ! Copyright by LiXinliang
-! Ver 1.2   ½«¸ñÐÄ×ø±ê×ª»»µ½¸ñµãÉÏ
-! Ver 1.3 ¿É¶ÁÈ¡flow3d.dat (tecplot¸ñÊ½ÎÄ¼þ)¼°flow.dat (ÎÞ¸ñÊ½ÎÄ¼þ)
-! Ver 1.4  ¶ÁÈ¡ ver 0.8 ÒÔÉÏ°æ±¾µÄÊý¾Ý £¨°üº¬k,w,mu_tµÈ£©
-! Ver 1.5 ¶ÁÈ¡ver0.82ÒÔÉÏµÄÊý¾Ý
-! Ver 1.6 ¶ÁÈ¡ver 0.84ÒÔÉÏ°æ±¾µÄÊý¾Ý£¨.inpÎÄ¼þ£©
+! Ver 1.2   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×ªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+! Ver 1.3 ï¿½É¶ï¿½È¡flow3d.dat (tecplotï¿½ï¿½Ê½ï¿½Ä¼ï¿½)ï¿½ï¿½flow.dat (ï¿½Þ¸ï¿½Ê½ï¿½Ä¼ï¿½)
+! Ver 1.4  ï¿½ï¿½È¡ ver 0.8 ï¿½ï¿½ï¿½Ï°æ±¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½k,w,mu_tï¿½È£ï¿½
+! Ver 1.5 ï¿½ï¿½È¡ver0.82ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½
+! Ver 1.6 ï¿½ï¿½È¡ver 0.84ï¿½ï¿½ï¿½Ï°æ±¾ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½.inpï¿½Ä¼ï¿½ï¿½ï¿½
 ! Ver 1.7 Plot 3D flow
 ! Ver 1.8 Plot Cp and Cf on the wall
-! Ver 1.8a, vt ÎÞÐè³ËÒÔRe
-! Ver 2.3, ¿É¶ÁÈ¡BC_user
-! Ver 2.4a, ÐÞÕýÁËread wall_dist() ÖÐµÄBug
-! Ver 2.5, ¿ÉÊä³öÍø¸ñµãÉÏµÄÁ÷³¡ 
+! Ver 1.8a, vt ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Re
+! Ver 2.3, ï¿½É¶ï¿½È¡BC_user
+! Ver 2.4a, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½read wall_dist() ï¿½Ðµï¿½Bug
+! Ver 2.5, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ 
 !------------------------------------------------------------
   module Const_Variables
   implicit none
@@ -32,15 +32,15 @@ end module Const_Variables
   real(PRE_EC),save:: Ma,Re,gamma,T_inf,p00
   integer,save:: Num_Block, Mesh_File_Format, BC_number,BC_type(100)
 !-----------------------------------------------------------------------------------------
-! Íø¸ñÁ¬½ÓÐÅÏ¢ 
+! ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ 
   TYPE BC_MSG_TYPE
    integer::   ib,ie,jb,je,kb,ke,bc
   END TYPE BC_MSG_TYPE
 
-!  ºËÐÄ±äÁ¿¡ª¡ªÃ¿¿éÍø¸ñ´æ´¢µÄÐÅÏ¢ £¨È«¾Ö±äÁ¿£©
+!  ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ´¢ï¿½ï¿½ï¿½ï¿½Ï¢ ï¿½ï¿½È«ï¿½Ö±ï¿½ï¿½ï¿½ï¿½ï¿½
    TYPE Block_TYPE           !  variables for each block 
      integer :: Block_no,nx,ny,nz,subface
-     real(PRE_EC),pointer,dimension(:,:,:):: xc,yc,zc  ! coordinates of cell center, Íø¸ñÖÐÐÄ×ø±ê 
+     real(PRE_EC),pointer,dimension(:,:,:):: xc,yc,zc  ! coordinates of cell center, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 
      real(PRE_EC),pointer,dimension(:,:,:):: dc,uc,vc,wc,Tc,pc,mut,vt,kt,wt
 	 real(PRE_EC),pointer,dimension(:,:,:):: d,u,v,w,T,p,mut1,vt1
 	 real(PRE_EC),pointer,dimension(:,:,:):: x,y,z,dw
@@ -337,9 +337,9 @@ end module Const_Variables
 
 !------------------------------------------------------------------------------     
 ! Read the message of the mesh and the initial flow;
-! ¶ÁÈ¡Íø¸ñ£¬³õÊ¼Á÷³¡ÐÅÏ¢; 
-! ·ÖÅäÄÚ´æ±äÁ¿£»
-! ¼ÆËã¼¸ºÎÁ¿£»
+! ï¿½ï¿½È¡ï¿½ï¿½ï¿½ñ£¬³ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢; 
+! ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+! ï¿½ï¿½ï¿½ã¼¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 !------------------------------------------------------------------------------
    subroutine init
    use  Global_Variables
@@ -363,33 +363,33 @@ end module Const_Variables
     p00=1.d0/(gamma*Ma*Ma)
 
 ! ---------node Coordinates----------------------------------------  
-!  Íø¸ñÎÄ¼þ£ºPLOT3D¸ñÊ½£»   
+!  ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½PLOT3Dï¿½ï¿½Ê½ï¿½ï¿½   
    print*, "read Mesh3d.dat... (PLOT3D Format)"
    if(Mesh_File_Format .eq. 0) then
     open(99,file="Mesh3d.dat",form="unformatted")
-    read(99) Num_Block         ! ×Ü¿éÊý
+    read(99) Num_Block         ! ï¿½Ü¿ï¿½ï¿½ï¿½
    else
     open(99,file="Mesh3d.dat")
-    read(99,*) Num_Block         ! ×Ü¿éÊý
+    read(99,*) Num_Block         ! ï¿½Ü¿ï¿½ï¿½ï¿½
    endif
    print*, "Num_Block=", Num_Block
    
    
       
     allocate(Block(Num_Block))             
-    allocate(NI(Num_Block),NJ(Num_Block),NK(Num_Block) )   ! Ã¿¿éµÄ´óÐ¡
+    allocate(NI(Num_Block),NJ(Num_Block),NK(Num_Block) )   ! Ã¿ï¿½ï¿½Ä´ï¿½Ð¡
   if(Mesh_File_Format .eq. 0) then
    read(99) (NI(k), NJ(k), NK(k), k=1,Num_Block)
   else
    read(99,*) (NI(k), NJ(k), NK(k), k=1,Num_Block)
   endif
 
-! ¶ÁÈ¡Ã¿¿éÐÅÏ¢----------------------------------------   
+! ï¿½ï¿½È¡Ã¿ï¿½ï¿½ï¿½ï¿½Ï¢----------------------------------------   
     do m=1,Num_Block
      B => Block(m)
-     B%nx=NI(m); B%ny=NJ(m) ; B%nz=NK(m)   ! nx,ny,nz Ã¿¿éµÄ´óÐ¡
+     B%nx=NI(m); B%ny=NJ(m) ; B%nz=NK(m)   ! nx,ny,nz Ã¿ï¿½ï¿½Ä´ï¿½Ð¡
      nx=B%nx ; ny= B%ny ; nz=B%nz
-! ----------  ¼¸ºÎÁ¿ -----------------------------------------------
+! ----------  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ -----------------------------------------------
     allocate(B%xc(0:nx,0:ny,0:nz), B%yc(0:nx,0:ny,0:nz), B%zc(0:nx,0:ny,0:nz)) 
     allocate(B%dc(0:nx,0:ny,0:nz),B%uc(0:nx,0:ny,0:nz),B%vc(0:nx,0:ny,0:nz), &
        B%wc(0:nx,0:ny,0:nz),B%Tc(0:nx,0:ny,0:nz),B%pc(0:nx,0:ny,0:nz), &
@@ -418,7 +418,7 @@ end module Const_Variables
                (((B%z(i,j,k),i=1,nx),j=1,ny),k=1,nz)
    endif
    print*, "read mesh ok "
-!----------²åÖµ³öÍø¸ñÖÐÐÄµãµÄÊý¾Ý-----------------------------------
+!----------ï¿½ï¿½Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Äµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½-----------------------------------
    do k=1,B%nz-1
    do j=1,B%ny-1
    do i=1,B%nx-1
@@ -449,7 +449,7 @@ end module Const_Variables
      close(100)
    endif
    
-!---------------´Óflow3d.datÖÐ¶ÁÈ¡³¡×÷Îª³õÖµ----------------------
+!---------------ï¿½ï¿½flow3d.datï¿½Ð¶ï¿½È¡ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½Öµ----------------------
   print*, "input 1 or 2,  1 read flow3d.dat,  2 read flow3d_average.dat "
   read(*,*) Iflag
   
@@ -566,7 +566,7 @@ end module Const_Variables
    do m=1, NUM_BLOCK
    B=> Block(m)
    nx=B%nx; ny=B%ny; nz=B%nz
-!  ½«¸ñÐÄ´¦µÄÎïÀíÁ¿²åÖµµ½¸ñµãÉÏ   
+!  ï¿½ï¿½ï¿½ï¿½ï¿½Ä´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½   
    do k=1,B%nz
    do j=1,B%ny
    do i=1,B%nx
@@ -605,8 +605,25 @@ end module Const_Variables
    implicit none
    real(PRE_EC),parameter:: PI=3.14159265358979d0
    real(PRE_EC):: R0, a0, d0, mu0,mu1
+   logical:: has_legacy, has_freestream, has_flow
+   integer:: ios
+!---- Extra declarations so that ANY case control.ec can be parsed (legacy
+!---- single group or the new grouped namelists).  These names are not used by
+!---- this tool, but they MUST be declared: a namelist group containing a name
+!---- the namelist does not know is a read error.
+   real(PRE_EC):: LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref, LS_U_in, LS_V_in, LS_W_in, &
+       LS_Mdot_in, LS_P_in, LS_P_out, LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, &
+       LS_alpha_T, LS_Tol, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, AC_WenoBlend, &
+       AC_MomFrac, Porous_T_ref, Porous_alpha_Ts, Porous_Tol, Porous_U_in, &
+       Porous_V_in, Porous_W_in, Porous_T_in, Twall_Couple_Init, Tol_Couple_Tw, &
+       Tol_Couple_p, Tol_Couple_u, Solid_GS_Omega, Solid_Tol
+   integer:: LS_Inlet_Type, LS_Max_Iter, LS_Scheme, LS_Algorithm, AC_Max_Iter, &
+       AC_Print, AC_Flux, AC_Recon, AC_Limiter, AC_WallRecon, AC_WallP, AC_MomDiss, &
+       Porous_Max_Iter, Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
+       Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, Iflag_Couple_WallFlux, &
+       Solid_Max_Iter, Solid_Min_Iter
    
-   real(PRE_EC)::  AoA, AoS, p_outlet, t_end, &
+   real(PRE_EC)::  AoA, AoS, p_outlet, t_end, Lscale, &
 	    PrL, PrT, &
         dt_global,CFL,dtmax,dtmin,Time_Method, &
 		w_LU, Twall,Kt_inf,Wt_inf,&
@@ -621,8 +638,30 @@ end module Const_Variables
 		   Iflag_Scheme,Iflag_Flux,IFlag_Reconstruction, Pre_Step_Mesh(3), &
            Kstep_show,Kstep_smooth,Kstep_init_smooth, Bound_Scheme,  &
            Num_Mesh,IF_Debug, NUM_THREADS, Cood_Y_UP,IFLAG_LIMIT_FLOW,Pdebug(4),  &
-           IF_TurboMachinary, Ref_medium_usrdef, IF_Scheme_Positivity, IF_Innerflow,Iflag_savefile
+           IF_TurboMachinary, Ref_medium_usrdef, IF_Scheme_Positivity, IF_Innerflow,Iflag_savefile, &
+		   Iflag_vtk_onefile, Iflag_vtk_SI, Iflag_bc_check
 
+!---- grouped namelists (new-style control.ec).  Only the two groups this tool
+!---- needs are declared, but ALL of their variables must be listed: reading a
+!---- group that contains a name the namelist does not know is an error.
+	namelist /freestream_ec/ Ma, Re, AoA, AoS, p_outlet, gamma, PrL, PrT, &
+	    T_inf, Twall, Lscale, Ref_S, Ref_L, Centroid, Cood_Y_UP, Kt_inf, Wt_inf, &
+	    IF_TurboMachinary, Ref_medium_usrdef, &
+	    Turbo_P0, Turbo_T0, Turbo_L0, Turbo_w, Turbo_Periodic_seta
+
+	namelist /flow_ec/ t_end, Kstep_save, Kstep_show, Kstep_average, &
+	    Kstep_smooth, Kstep_init_smooth, CFL, dt_global, dtmax, dtmin, &
+	    Iflag_local_dt, Time_Method, Step_Inner_Limit, Res_Inner_Limit, w_LU, &
+	    If_Residual_smoothing, If_dtime_mesh, &
+	    Iflag_Scheme, Iflag_Flux, IFlag_Reconstruction, Bound_Scheme, &
+	    IF_Scheme_Positivity, IFLAG_LIMIT_FLOW, Iflag_turbulence_model, &
+	    If_viscous, Iflag_init, MUT_MAX, CP1_NSA, CP2_NSA, &
+	    Ldmin, Ldmax, Lpmin, Lpmax, Lumax, LSAmax, &
+	    Mesh_File_Format, Num_Mesh, Pre_Step_Mesh, NUM_THREADS, IF_Debug, Pdebug, &
+	    Periodic_dX, Periodic_dY, Periodic_dZ, IF_Innerflow, &
+	    Iflag_savefile, Iflag_vtk_onefile, Iflag_vtk_SI, Iflag_bc_check
+
+!---- legacy single group (all existing case files)
 	namelist /control_ec/ Ma, Re, AoA, AoS, p_outlet, t_end, &
 	    gamma, PrL, PrT, &
 	    Kstep_save, &
@@ -638,7 +677,21 @@ end module Const_Variables
         IF_TurboMachinary, Ref_medium_usrdef, IF_Scheme_Positivity, &
 		Turbo_P0,Turbo_T0, Turbo_L0,Turbo_w, Turbo_Periodic_seta, &
 		Periodic_dX, Periodic_dY, Periodic_dZ, &
-		IF_Innerflow, Iflag_savefile
+		IF_Innerflow, Iflag_savefile, &
+		Lscale, LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref, LS_Inlet_Type, &
+		LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, &
+		LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, &
+		LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm, &
+		AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, &
+		AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, AC_WallRecon, AC_WallP, &
+		AC_MomDiss, AC_MomFrac, &
+		Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, &
+		Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in, &
+		Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol, &
+		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
+		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
+		Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, &
+		Iflag_Couple_WallFlux
 
 
 	
@@ -652,26 +705,49 @@ end module Const_Variables
         
 !---------------------------------
 	open(99,file="control.ec")
-	read(99,nml=control_ec)
+    call util_scan_groups(has_legacy, has_freestream, has_flow)
+    print*, ' readflow3d: control.ec groups found: legacy=', has_legacy, &
+            ' freestream_ec=', has_freestream, ' flow_ec=', has_flow
+    if(has_legacy) then
+      rewind(99); read(99,nml=control_ec,iostat=ios)
+      if(ios /= 0) then
+        print*, ' ERROR: cannot read namelist $control_ec in control.ec, iostat=', ios
+        stop 1
+      endif
+    endif
+    if(has_freestream) then
+      rewind(99); read(99,nml=freestream_ec,iostat=ios)
+      if(ios /= 0) then
+        print*, ' ERROR: cannot read namelist $freestream_ec in control.ec, iostat=', ios
+        stop 1
+      endif
+    endif
+    if(has_flow) then
+      rewind(99); read(99,nml=flow_ec,iostat=ios)
+      if(ios /= 0) then
+        print*, ' ERROR: cannot read namelist $flow_ec in control.ec, iostat=', ios
+        stop 1
+      endif
+    endif
     close(99)
  
  !---- convert parameters ----------------------
- ! Ref_medium_usrdef==0 Ê¹ÓÃÄ¬ÈÏ½éÖÊ (Ma=1, ¸ù¾Ý×ÜÎÂ¡¢×ÜÑ¹¼ÆËã Re) £» ==1 Ê¹ÓÃ×Ô¶¨Òå½éÖÊ £¨ÈËÎªÊäÈëMa, ReµÈ£©
-    if( (IF_TurboMachinary ==1 .or. IF_Innerflow ==1) .and.  Ref_medium_usrdef == 0) then   ! Ä¬ÈÏ¿ÕÆø½éÖÊ£¬¼ÆËãMachÊý£¬ ReynoldsÊý
+ ! Ref_medium_usrdef==0 Ê¹ï¿½ï¿½Ä¬ï¿½Ï½ï¿½ï¿½ï¿½ (Ma=1, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¡ï¿½ï¿½ï¿½Ñ¹ï¿½ï¿½ï¿½ï¿½ Re) ï¿½ï¿½ ==1 Ê¹ï¿½ï¿½ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½Ma, Reï¿½È£ï¿½
+    if( (IF_TurboMachinary ==1 .or. IF_Innerflow ==1) .and.  Ref_medium_usrdef == 0) then   ! Ä¬ï¿½Ï¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê£ï¿½ï¿½ï¿½ï¿½ï¿½Machï¿½ï¿½ï¿½ï¿½ Reynoldsï¿½ï¿½
       
-	  T_inf=Turbo_T0  ! ²Î¿¼ÎÂ¶È £¨À´Á÷×ÜÎÂ£©
+	  T_inf=Turbo_T0  ! ï¿½Î¿ï¿½ï¿½Â¶ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â£ï¿½
       gamma=1.4d0    ! 
-	  PrL=0.7d0   ! PrandtlÊý
+	  PrL=0.7d0   ! Prandtlï¿½ï¿½
 	  PrT=0.9d0
-      R0= 287.06d0   ! ¿ÕÆøµÄÆøÌå³£ÊýR
-	  a0= sqrt(gamma*R0*Turbo_T0)    ! ²Î¿¼ÎÂ¶ÈÏÂµÄÉùËÙ 
-	  mu0=1.179d-5     ! ¿ÕÆøÕ³ÐÔÏµÊý (288.15K)  
-      mu1=mu0* sqrt((Turbo_T0/288.15d0)**3)*(288.15d0+110.4d0)/(Turbo_T0+110.4d0)  ! ²Î¿¼ÎÂ¶ÈÏÂµÄ¿ÕÆøÕ³ÐÔÏµÊý
+      R0= 287.06d0   ! ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½å³£ï¿½ï¿½R
+	  a0= sqrt(gamma*R0*Turbo_T0)    ! ï¿½Î¿ï¿½ï¿½Â¶ï¿½ï¿½Âµï¿½ï¿½ï¿½ï¿½ï¿½ 
+	  mu0=1.179d-5     ! ï¿½ï¿½ï¿½ï¿½Õ³ï¿½ï¿½Ïµï¿½ï¿½ (288.15K)  
+      mu1=mu0* sqrt((Turbo_T0/288.15d0)**3)*(288.15d0+110.4d0)/(Turbo_T0+110.4d0)  ! ï¿½Î¿ï¿½ï¿½Â¶ï¿½ï¿½ÂµÄ¿ï¿½ï¿½ï¿½Õ³ï¿½ï¿½Ïµï¿½ï¿½
       d0=Turbo_P0/(R0*Turbo_T0)
-	  Re=d0*a0*Turbo_L0/mu1    ! ²Î¿¼ÎÂ¶ÈÏÂ£¬ÒÔÉùËÙÔË¶¯µÄReynoldsÊý
-	  Ma=1.d0     ! MachÊý    £¨ÒÔÉùËÙ×÷Îª²Î¿¼ËÙ¶È£¬Òò¶ø²Î¿¼MachÊýÎª1£©
-      Turbo_w= 2.d0*PI*Turbo_w/(a0/Turbo_L0)   ! ÎÞÁ¿¸Ù½ÇËÙ¶È Turbo_W£¨×ª/Ãë£©
-      P_outlet=P_outlet/Turbo_P0    ! ±³Ñ¹ £¨ÎÞÁ¿¸Ù£©
+	  Re=d0*a0*Turbo_L0/mu1    ! ï¿½Î¿ï¿½ï¿½Â¶ï¿½ï¿½Â£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë¶ï¿½ï¿½ï¿½Reynoldsï¿½ï¿½
+	  Ma=1.d0     ! Machï¿½ï¿½    ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îªï¿½Î¿ï¿½ï¿½Ù¶È£ï¿½ï¿½ï¿½ï¿½ï¿½Î¿ï¿½Machï¿½ï¿½Îª1ï¿½ï¿½
+      Turbo_w= 2.d0*PI*Turbo_w/(a0/Turbo_L0)   ! ï¿½ï¿½ï¿½ï¿½ï¿½Ù½ï¿½ï¿½Ù¶ï¿½ Turbo_Wï¿½ï¿½×ª/ï¿½ë£©
+      P_outlet=P_outlet/Turbo_P0    ! ï¿½ï¿½Ñ¹ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ù£ï¿½
 	endif
 
  !  print*, "Re, Ma, gamma, T_inf=", Re, Ma, gamma, T_inf
@@ -683,4 +759,58 @@ end module Const_Variables
 !--------------------------------------------------
  
 
+
+
+!==============================================================================
+! Lower-case a string in place (used by the control.ec group scan below).
+!==============================================================================
+  subroutine util_lower(s)
+   implicit none
+   character(len=*),intent(inout):: s
+   integer:: i, ic
+   do i=1,len(s)
+     ic=iachar(s(i:i))
+     if(ic >= 65 .and. ic <= 90) s(i:i)=achar(ic+32)   ! 'A'..'Z' -> 'a'..'z'
+   enddo
+  end subroutine util_lower
+
+!==============================================================================
+! Report which control.ec namelist groups are present: the historical single
+! group "$control_ec" and/or the new grouped namelists "$freestream_ec" and
+! "$flow_ec" (the only two this post-processing tool needs).  Text after '!' is
+! ignored; both '$' and '&' delimiters are accepted; the scan is case
+! insensitive.  Reading an absent namelist group is a runtime error in Fortran,
+! hence the pre-scan.
+!==============================================================================
+  subroutine util_scan_groups(has_legacy, has_freestream, has_flow)
+   implicit none
+   logical,intent(out):: has_legacy, has_freestream, has_flow
+   character(len=512):: line
+   integer:: ios, k, nz
+   has_legacy=.false.; has_freestream=.false.; has_flow=.false.
+   open(96,file="control.ec",status='old')
+   do
+     read(96,'(A)',iostat=ios) line
+     if(ios /= 0) exit
+     k=index(line,'!')
+     if(k > 0) line(k:)=' '
+     call util_lower(line)
+!    only a real group header counts (first non-blank char must be '$' or '&')
+     nz=1
+     do
+       if(nz > len(line)) exit
+       if(line(nz:nz) == ' ' .or. iachar(line(nz:nz)) == 9) then
+         nz=nz+1
+       else
+         exit
+       endif
+     enddo
+     if(nz > len(line)) cycle
+     if(line(nz:nz) /= '$' .and. line(nz:nz) /= '&') cycle
+     if(index(line,'control_ec') > 0)    has_legacy=.true.
+     if(index(line,'freestream_ec') > 0) has_freestream=.true.
+     if(index(line,'flow_ec') > 0)       has_flow=.true.
+   enddo
+   close(96)
+  end subroutine util_scan_groups
 

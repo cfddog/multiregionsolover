@@ -1,0 +1,167 @@
+! =============================================================================
+!  control.ec 模板 —— 7 组 namelist（分组按物理/功能域）
+!
+!  用法：复制本文件为算例目录下的 control.ec，只保留/修改与默认值不同的项。
+!  规则：
+!   1) 每组都是【可选】的：整组不写 = 该组全部用代码默认值；
+!      组内某变量不写 = 该变量用默认值。
+!   2) 旧式单组 $control_ec（128 个变量写在一起）仍然完全兼容，
+!      现有算例无需改动；新旧同时存在时，分组值优先（可逐组渐进迁移）。
+!   3) 某组写了但解析失败（变量名拼错 / 缺少 $end）⇒ 程序立即报错退出，
+!      并指出是哪一组（不会静默用默认值）。
+!   4) 逐块/逐面数据不在本文件：块类型与 (rho,Cp,k) 见 material.in；
+!      固体热边界见 solid_bc.inp；多孔参数 (eps,dp,hv) 见 porous.inp。
+!
+!  注释里 "默认:" 后面就是代码默认值（src/sub_read_parameter.f90）。
+! =============================================================================
+
+$freestream_ec
+!---- ① 来流条件 / 参考态 / 气体物性 -----------------------------------------
+  Ma=1.0d0               ! 马赫数             (默认: 1.0)
+  Re=1000.d0             ! 雷诺数(以 Lscale 为参考长度)  (默认: 1000.)
+  T_inf=288.15d0         ! 来流温度 [K]（粘性系数与无量纲化参考） (默认: 288.15)
+  Lscale=1.0d0           ! 网格长度单位换算到 m（mm 网格写 0.001）  (默认: 1.0)
+  gamma=1.4d0            ! 比热比             (默认: 1.4)
+  PrL=0.7d0              ! 层流 Prandtl 数    (默认: 0.7)
+  PrT=0.9d0              ! 湍流 Prandtl 数    (默认: 0.9)
+!  AoA=0.d0              ! 攻角 [deg]         (默认: 0.)
+!  AoS=0.d0              ! 侧滑角 [deg]       (默认: 0.)
+!  p_outlet=-1.d0        ! 出口背压(<0 表示外插)  (默认: -1.)
+!  Twall=-1.d0           ! 壁面温度 [K](<0 表示绝热)  (默认: -1.)
+!  Ref_S=1.d0            ! 参考面积           (默认: 1.)
+!  Ref_L=1.d0            ! 参考长度           (默认: 1.)
+!  Centroid=0.d0,0.d0,0.d0  ! 力矩参考点      (默认: 0,0,0)
+!  Cood_Y_UP=1           ! 1: Y 轴朝上  0: Z 轴朝上   (默认: 1)
+!  Kt_inf=1.d-5          ! SST 来流 Kt        (默认: 1e-5)
+!  Wt_inf=0.01d0         ! SST 来流 Wt        (默认: 0.01)
+!  IF_TurboMachinary=0   ! 叶轮机械模式      (默认: 0)
+!  Ref_medium_usrdef=0   ! 0: 由 Turbo_* 反算 Ma/Re  1: 用户直接给  (默认: 0)
+!  Turbo_P0=101330.d0    ! 叶轮机械参考总压 [Pa]   (默认: 101330.)
+!  Turbo_T0=288.15d0     ! 叶轮机械参考总温 [K]    (默认: 288.15)
+!  Turbo_L0=1.d0         ! 叶轮机械参考长度 [m]    (默认: 1.)
+!  Turbo_w=0.d0          ! 转速 [rpm]              (默认: 0.)
+!  Turbo_Periodic_seta=0.d0 ! 周期性扇区角 [deg]   (默认: 0.)
+$end
+
+$flow_ec
+!---- ② 流场控制：时间步 / 格式 / 模型 / 网格并行 / 限制器 / 输出 ------------
+  t_end=100.d0           ! 结束时间(无量纲; 交错耦合模式不用它)  (默认: 100.)
+  Kstep_save=1000        ! 每多少步输出一次流场          (默认: 1000)
+  Kstep_show=1           ! 每多少步打印残差/时间          (默认: 1)
+  If_viscous=1           ! 1: 粘性  0: 无粘           (默认: 1)
+  Iflag_turbulence_model=0 ! 0 无 / 1 BL / 2 SA / 3 SST   (默认: 0)
+  Iflag_Scheme=5         ! 0 UD1,1 NND2,2 UD3,3 MUSCL2U,4 MUSCL2C,5 MUSCL3,
+                         ! 6 OMUSCL2,7 WENO5,8 UD5,9 WENO7   (默认: 5)
+  Iflag_Flux=5           ! 1 Steger-Warming,2 HLL,3 HLLC,4 Roe,5 Van_Leer,
+                         ! 6 AUSM                (默认: 5)
+  Mesh_File_Format=0     ! 0: Mesh3d.dat(无格式) 1: Mesh3d.dat(文本)
+                         ! 2: Mesh3d.x(PLOT3D)   (默认: 0)
+  Iflag_init=0           ! 0: 均匀场  1/其它: 读 flow3d.dat   (默认: 0)
+  Time_Method=0          ! 0 LU-SGS,1 Euler1,3 RK3,-1 双时间步   (默认: 0)
+!  Iflag_local_dt=1      ! 0 全局时间步 1 局部时间步   (默认: 1)
+!  CFL=1.d0              ! CFL 数                 (默认: 1.)
+!  dt_global=0.01d0      ! 全局时间步             (默认: 0.01)
+!  dtmax=10.d0           ! 最大时间步限           (默认: 10.)
+!  dtmin=1.d-9           ! 最小时间步限           (默认: 1e-9)
+!  IFlag_Reconstruction=0! 0 Original,1 Conservative,2 Characteristic (默认: 0)
+!  Bound_Scheme=-1       ! 边界重构格式(默认 MUSCL2C=4; -1 = none)
+!  IF_Scheme_Positivity=1! 保正性处理开关         (默认: 1)
+!  IFLAG_LIMIT_FLOW=1    ! 流场限幅开关           (默认: 1)
+!  If_Residual_smoothing=0, w_LU=1.d0, If_dtime_mesh=1  ! 其余 LU-SGS 控制
+!  MUT_MAX=-1.d0         ! vt/v 上限(<0 不限)     (默认: -1.)
+!  Ldmin=1.d-6,Ldmax=1000.d0,Lpmin=1.d-6,Lpmax=1000.d0,Lumax=1000.d0,LSAmax=1000.d0
+!  CP1_NSA=0.2d0,CP2_NSA=100.d0                    ! New-SA 系数
+!  Kstep_average=0, Kstep_smooth=-1, Kstep_init_smooth=0
+!  Step_Inner_Limit=20, Res_Inner_Limit=1.d-10     ! 双时间步内迭代控制
+!  Num_Mesh=1, Pre_Step_Mesh=0,0,0                 ! 多重网格
+!  NUM_THREADS=1, IF_Debug=0, Pdebug=1,1,1,1       ! 并行/调试
+!  Periodic_dX=0.d0, Periodic_dY=0.d0, Periodic_dZ=0.d0  ! 周期平移量
+!  IF_Innerflow=0        ! 内流模式(叶栅/叶轮)    (默认: 0)
+!  Iflag_savefile=0      ! 0: 覆盖写 flow3d.dat  1: 写 flow3d-<步数>.dat
+!  Iflag_vtk_onefile=0   ! 0: 逐块 flow3d_block_*.vtk  1: 合并 flow3d.vtk
+!  Iflag_vtk_SI=0        ! 1: VTK 中可压块换算为 SI 单位
+!  Iflag_bc_check=1      ! 0 旧行为 1 自动生成/校验 bc3d.inp 2 严格
+!---- 重启与流场输出（2026-09-23 新增）-------------------------------------
+!  Iflag_restart=0       ! 0=存在 field_restart.dat 即自动续算(默认)  1=强制续算(无文件报错)
+!                        ! -1=完全关闭重启功能（既不读也不写）
+!  Kstep_restart=0       ! 重启文件写出间隔(<=0 时同 Kstep_save)
+!  Iflag_flow_node=0     ! 1=额外写节点值+SI+无格式流场 flow3d_node.dat（配 Mesh3d.x 显示）
+$end
+
+$lowspeed_ec
+!---- ③ 低速（不可压）块；仅当存在 BLOCK_LOWSPEED(=2) 块时才需要 -------------
+  LS_rho=1.2d0           ! 密度 [kg/m3]                 (默认: 1.2)
+  LS_mu=1.8d-5           ! 动力粘性 [Pa·s]              (默认: 1.8e-5)
+  LS_k=0.025d0           ! 导热系数 [W/(m·K)]           (默认: 0.025)
+  LS_Cp=1005.d0          ! 比热 [J/(kg·K)]              (默认: 1005.)
+  LS_T_ref=288.15d0      ! 参考/入口温度 [K]            (默认: 288.15)
+  LS_alpha_p=0.3d0       ! 压力欠松弛                   (默认: 0.3)
+  LS_alpha_u=0.7d0       ! 速度欠松弛                   (默认: 0.7)
+  LS_alpha_T=0.7d0       ! 温度欠松弛                   (默认: 0.7)
+  LS_Max_Iter=5000       ! 每次调用的内迭代数           (默认: 5000)
+  LS_Tol=1.d-8           ! 压力修正残差收敛限           (默认: 1e-8)
+  LS_Scheme=1            ! 1 一阶迎风 2 二阶迎风 3 MUSCL (默认: 1)
+  LS_Algorithm=1         ! 1 SIMPLE 2 SIMPLEC 3 AC-FV    (默认: 1)
+!  LS_Inlet_Type=1       ! 1 速度 2 质量流 3 压力入口    (默认: 1)
+!  LS_U_in=1.d0, LS_V_in=0.d0, LS_W_in=0.d0   ! 入口速度 [m/s] (默认: 1,0,0)
+!  LS_Mdot_in=0.d0       ! 入口质量流 [kg/s](type 2)    (默认: 0.)
+!  LS_P_in=101325.d0     ! 入口总压 [Pa](type 3)        (默认: 101325.)
+!  LS_P_out=101325.d0    ! 出口静压 [Pa]                (默认: 101325.)
+!  LS_T_wall=-1.d0       ! 壁温 [K](<0 绝热)            (默认: -1.)
+!  LS_U_lid=0.d0         ! 顶盖驱动方腔切向速度 [m/s]    (默认: 0.)
+$end
+
+$ac_ec
+!---- ④ 人工压缩(AC)求解器；低速(LS_Algorithm=3)与多孔块共用 -----------------
+  AC_Max_Iter=40000      ! 每次调用的伪时间迭代数        (默认: 40000)
+  AC_Print=500           ! 残差打印间隔                 (默认: 500)
+  AC_Tol=1.d-7           ! 收敛限(无量纲残差)            (默认: 1e-7)
+  AC_beta=10.d0          ! beta = AC_beta*U_ref^2       (默认: 10.)
+  AC_CFL=2.d0            ! 无粘 CFL                     (默认: 2.)
+  AC_CFLv=0.5d0          ! 粘性 CFL                     (默认: 0.5)
+  AC_w=1.d0              ! LU-SGS 松弛                  (默认: 1.)
+  AC_Flux=1              ! 1 Rusanov(LLF) 2 Steger-Warming (默认: 1)
+  AC_Recon=1             ! 1 二阶 MUSCL 2 WENO5 3 WENO3  (默认: 1)
+  AC_Limiter=1           ! 1 van Leer 2 minmod          (默认: 1)
+  AC_WallRecon=1         ! 壁/对称面单侧二阶重构         (默认: 1)
+  AC_WallP=1             ! 壁/对称面二阶壁压             (默认: 1)
+!  AC_WenoBlend=0.d0     ! WENO 混入一阶 Rusanov 比例    (默认: 0.)
+!  AC_MomDiss=0          ! 动量耗散: 0 集中 1 分裂/混合 2 纯|un| (默认: 0)
+!  AC_MomFrac=0.2d0      ! AC_MomDiss=1 时保留 c 的比例   (默认: 0.2)
+$end
+
+$solid_ec
+!---- ⑤ 固体导热块(BLOCK_SOLID=1)；原为代码内硬编码，默认值与原值完全一致 ----
+  Solid_GS_Omega=1.7d0   ! SOR 超松弛因子               (默认: 1.7)
+  Solid_Max_Iter=20000   ! 每次调用最大 GS 扫掠数        (默认: 20000)
+  Solid_Min_Iter=5       ! 允许提前退出前的最少扫掠数     (默认: 5)
+  Solid_Tol=1.d-9        ! max|dTs| 收敛限              (默认: 1e-9)
+!  材料 (rho,Cp,k) 见 material.in；热边界 Tw/Qw/htc 见 solid_bc.inp
+$end
+
+$porous_ec
+!---- ⑥ 多孔介质块(BLOCK_POROUS=3) ------------------------------------------
+  Porous_T_ref=288.15d0  ! 初场/参考骨架温度 [K]         (默认: 288.15)
+  Porous_alpha_Ts=0.7d0  ! 骨架温度欠松弛               (默认: 0.7)
+  Porous_Max_Iter=5000   ! 每次调用内迭代数              (默认: 5000)
+  Porous_Tol=1.d-8       ! 收敛限                       (默认: 1e-8)
+  Porous_T_in=0.d0       ! 冷却剂入口温度 [K](<=0 用 LS_T_ref)  (默认: 0.)
+!  Porous_U_in=0.d0, Porous_V_in=0.d0, Porous_W_in=0.d0
+!                        ! 冷却剂入口速度 [m/s](全 0 时用 LS_U/V/W_in)
+!  eps/dp/hv 见 porous.inp
+$end
+
+$couple_ec
+!---- ⑦ 跨区域（分段交错）耦合调度；仅多区域算例需要 -------------------------
+  Iflag_Couple_Scheme=0  ! 0 同步耦合 1 分段交错耦合     (默认: 0)
+  Kstep_Couple_Comp=1000 ! 每轮气体段步数               (默认: 1000)
+  Niter_Couple_Outer=60  ! 最多外层层数                 (默认: 60)
+  Niter_Couple_Warm=0    ! 前几轮用满步长(之后每轮减半)   (默认: 0)
+  Kstep_Couple_Min=1     ! 气体段步数下限               (默认: 1)
+  Twall_Couple_Init=300.d0 ! 首轮界面壁温 [K]          (默认: 300.)
+  Tol_Couple_Tw=2.d-2    ! 外层判据 max|dT_w| [K]       (默认: 2e-2)
+  Iflag_Couple_WallFlux=0! 0 耦合式 1 等温Tw/qw 壁通量式  (默认: 0)
+!  Tol_Couple_p=1.d1     ! 12(流-流)外层 max|dp_w| [Pa]  (默认: 10.)
+!  Tol_Couple_u=1.d-2    ! 12(流-流)外层 max|du_w| [m/s] (默认: 1e-2)
+!  Porous_Chunk_Iter=10  ! 每轮多孔段求解器调用次数      (默认: 10)
+$end

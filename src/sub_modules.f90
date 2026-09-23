@@ -278,6 +278,32 @@
    real(PRE_EC),save:: Porous_T_ref, Porous_alpha_Ts, Porous_Tol    ! porous: initial/frame T ref, Ts relaxation, SIMPLE tolerance
    real(PRE_EC),save:: Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in  ! porous coolant inlet velocity [m/s] + T [K]
    integer,save:: Porous_Max_Iter                                   ! porous SIMPLE inner iterations per solver call
+ !---- solid (conduction) GS controls, read from control.ec "$solid_ec" ---------
+ ! These four used to be hard-coded inside solid_solver_one_block; the defaults
+ ! below are exactly those former constants, so exposing them through control.ec
+ ! leaves every existing case bit-for-bit unchanged.
+   real(PRE_EC),save:: Solid_GS_Omega=1.7d0   ! SOR over-relaxation factor
+   integer,save:: Solid_Max_Iter=20000        ! max GS sweeps per solver call
+   integer,save:: Solid_Min_Iter=5            ! min sweeps before the tolerance check
+   real(PRE_EC),save:: Solid_Tol=1.d-9        ! GS convergence tolerance (max|dTs|)
+ !---- restart / flow-field-output controls, read from control.ec "$flow_ec" ----
+ ! Iflag_restart:  0 = auto  : read field_restart.dat when it is present (default)
+ !                 1 = force : read it, abort when missing
+ !                -1 = off   : never read (start from the uniform/initial state)
+ ! Kstep_restart:  restart-file write interval; <=0 -> use Kstep_save
+ ! Iflag_flow_node: 1 = also write the node-centred SI flow-field file
+ !                  (unformatted, one record per block: d,u,v,w,T) so it can be
+ !                  displayed together with Mesh3d.x;  0 = off (default)
+   integer,save:: Iflag_restart=0
+   integer,save:: Kstep_restart=0
+   integer,save:: Iflag_flow_node=0
+ ! restart bookkeeping: filled by read_restart, consumed by the staggered drivers
+ ! (which would otherwise reset Kstep/tt to zero at their entry)
+   integer,save:: restart_found=0
+   integer,save:: restart_Kstep_saved=0
+   real(PRE_EC),save:: restart_tt_saved=0.d0
+   character(len=*),parameter:: RESTART_FILE='field_restart.dat'
+   character(len=*),parameter:: FLOWNODE_FILE='flow3d_node.dat'
  !---- interface-19 staggered (segmented) coupling controls --------------------
  ! Iflag_Couple_Scheme = 0 : per-step simultaneous coupling (default)
  !                       1 : staggered segmented coupling for FLUID<->POROUS (19):

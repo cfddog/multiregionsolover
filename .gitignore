@@ -35,3 +35,7 @@ cases/2D_T_tube/run_rus.log
 cases/square_duct_1977/run.log
 cases/**/run_sync.log
 
+# 重启文件与节点流场输出（二进制、体量大；需要时可 git add -f）
+cases/**/field_restart.dat
+cases/**/flow3d_node.dat
+
