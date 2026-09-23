@@ -1,6 +1,6 @@
 # Progress — 已完成 / 待办
 
-> 更新：2026-09-23。基线 `adaa43b`，改动仍未提交。
+> 更新：2026-09-24。**基线提交 `29fc24f`**（本次改动已全部提交；仅 `.vscode/settings.json` 未提交）。
 > 更早的开发历史见 `docs/工作日志.md`、`docs/程序能力与算例考核总结.md`、`memory-bank/worklog.md`。
 
 ## ✅ 已完成（2026-09-23 会话）：control.ec 拆分为 7 组 namelist

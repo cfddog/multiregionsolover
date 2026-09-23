@@ -161,5 +161,26 @@ case1 121/112/75、case2 128/114/75、case3 129/113/69、channel_ac 93/91/65、l
 
 ---
 
+## 2026-09-24 — 提交（commit 29fc24f）
+
+**提交**：`29fc24f` on `main`（44 files, +3772/-441），消息
+`feat(io): 重启文件 field_restart.dat + 节点/SI 流场输出; refactor(control.ec): 7 组 namelist`。
+
+**内容**：control.ec 7 组拆分（旧组双读兼容）+ `src/sub_restart.f90`（含 LAP=4 缓冲的重启读写、
+自动续算）+ `output_flow_node`（节点/SI/unformatted）+ 交错驱动续算 + 三算例 `control.ec` 迁移
+（备份 `.legacy`）+ `util/readflow3d-ver2.4a/2.5` 双读与声明补齐 + 文档/记忆库；
+并含 2026-09-18 会话遗留的未提交改动（码 11/12/19 的 `gas i+ ↔ 对侧 j-` 拓扑等）。
+
+**提交前验证**：`make clean && make` **EXIT=0**（新/改文件零告警；29 条告警全来自未触碰的
+`sub_Finite_Difference1/2.f90`）；旧↔新二进制 `output_para.out` 除新增回显行外**逐字节一致**；
+`solid_1d` 续算往返 Kstep 11→20；`-np 2` 双块写出并续算；交错 case1/2/3 重启往返 **NaN=0**；
+`flow3d_node.dat` 点数与 `Mesh3d.x` 完全一致。
+
+**未提交/遗留**：`.vscode/settings.json`（主题，有意保留）；各算例运行产物（`flow3d.dat`、
+`*.vtk`、日志）与 `sample_code/`、`workplan.md`、`src/*.log` 等仍为 untracked；
+`origin/main` 落后 1 个提交（未 push）。
+
+---
+
 <!-- 新条目请追加在下面（格式：## YYYY-MM-DD — 标题 / 目标 / 改动 / 验证 / 遗留） -->
 
