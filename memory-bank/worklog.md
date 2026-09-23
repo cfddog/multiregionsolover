@@ -178,7 +178,7 @@ case1 121/112/75、case2 128/114/75、case3 129/113/69、channel_ac 93/91/65、l
 
 **未提交/遗留**：`.vscode/settings.json`（主题，有意保留）；各算例运行产物（`flow3d.dat`、
 `*.vtk`、日志）与 `sample_code/`、`workplan.md`、`src/*.log` 等仍为 untracked；
-`origin/main` 落后 1 个提交（未 push）。
+已 `git push origin main`（`adaa43b..6e15bcd`，远端与本地同步）。
 
 ---
 

@@ -1,7 +1,7 @@
 # Active Context — 当前任务 / 最近决策 / 下一步
 
-> 更新时间：2026-09-24。**基线提交 `29fc24f`**（`main` 分支，已领先 `origin/main`，尚未 push）；
-> 本次全部改动（control.ec 7 组拆分 + 重启/节点输出 + 三算例迁移 + 文档/记忆库）**已提交**；
+> 更新时间：2026-09-24。**基线提交 `29fc24f`**（已 push 到 `origin/main`，当前远端 = 本地 = `6e15bcd`）；
+> 本次全部改动（control.ec 7 组拆分 + 重启/节点输出 + 三算例迁移 + 文档/记忆库）**已提交并推送**；
 > 仅 `.vscode/settings.json`（主题设置）有意未提交。
 > 上一版（2026-09-18，fluid_solid 三算例）已归档为 `memory-bank/archive_activeContext_2026-09-18.md`。
 
