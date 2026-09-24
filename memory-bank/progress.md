@@ -63,6 +63,21 @@
 - [x] `flow3d_node.dat` 结构校验：2 记录、点数 13534/40602 与 `Mesh3d.x` 一致；
       固体块 T∈[300,799.9] K；可压块 SI 合理（Ma=3 峰温 2106 K ≈ 滞止温 2240 K）。
 
+## ✅ 已完成（2026-09-24 补）：节点文件补上固体/骨架温度 `Ts`（5→6 变量）
+- [x] 起因：`flow_node_one_block` 只往一个温度槽位填值（固体填 `Ts`、多孔填 `Tf`），
+      **多孔块的骨架温度 `B%Ts` 根本没写进 `flow3d_node.dat`**（LTNE 温差不可见）。
+- [x] 修复：`flow3d_node.dat` 每条记录由 `d,u,v,w,T` 扩为 **`d,u,v,w,T,Ts`**：
+      `T`=流体温度（固体块为固体温度，沿用 `flow3d.vtk` 约定）、
+      `Ts`=固体/骨架温度（固体与多孔为真实值；流体/低速块无固相 → `Ts` 镜像 `T`）。
+      改动：`src/sub_IO.f90::flow_node_one_block`（新增 `Tsc`，4 个分支分别赋值）与
+      `output_flow_node`（`Num_data/allocate/write` 用 6）。
+- [x] 新增校验工具 `util/check_flow3d_node.py <算例目录>`（比对 `Mesh3d.x` 块数/维数、
+      记录长度 `6·ni·nj·nk`，打印各块 `d/|u|/T/Ts` 范围与 `max|T-Ts|`）。
+- [x] 验证：`case1`（固体+可压）固体块 `T=Ts=300–800 K`、可压块 `T=Ts` 镜像；
+      **`porous_ltne_1d`（`q=2e6 W/m²`, `hv=2e6 W/(m³K)`）→ `Tf=300.7–1039 K`、
+      `Ts=407.7–1174 K`、`max|T−Ts|=157.7 K`**（修复前该温差在文件里不存在）；
+      `case3`（多孔+可压）多孔块 `T`/`Ts` 分列；三例均 `STRUCTURE OK`、`NaN=0`。
+
 ## ⏳ 待办（本次未做，按优先级）
 - [ ] **（上一任务）重启文件 `field_restart.dat`**：写流场 `U`(含 LAP ghost 缓冲) + `Ts/Tsn` + `p`
       + `Kstep/tt`；`Kstep_save` 节奏定期保存；启动时存在即自动续算（`Iflag_restart`）。

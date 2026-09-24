@@ -101,4 +101,8 @@
 - 交错模式：三个驱动入口的 `tt/Kstep` 归零已改为“有重启则恢复”；**改写这些驱动时注意
   `call restart_step_output(nMesh)` 必须在 `contains` 之前、且由所有 rank 调用**。
 - 输出文件较大：case1 重启 ≈17.5 MB/次、节点文件 ≈2.2 MB/次 ⇒ 集群上注意 `Kstep_save/Kstep_restart`。
+- `flow3d_node.dat` 每条记录 = **6 个节点场 `d,u,v,w,T,Ts`**（逐块同长、块序同 `Mesh3d.x`）：
+  `T` = 流体温度（固体块 = 固体温度，兼容 `flow3d.vtk` 约定）；
+  `Ts` = **固体/骨架温度**（固体/多孔为真实值，LTNE 温差可见；流体/低速块无固相 → 镜像 `T`）。
+  **新增/修改块类型分支时必须同时填这两个温度槽位**；校验工具 `util/check_flow3d_node.py`。
 - 详细说明与验证记录见 `docs/重启与节点流场输出说明.md`。

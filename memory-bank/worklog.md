@@ -182,5 +182,27 @@ case1 121/112/75、case2 128/114/75、case3 129/113/69、channel_ac 93/91/65、l
 
 ---
 
+## 2026-09-24（补）— flow3d_node.dat 补上固体/骨架温度 Ts（5→6 变量）
+
+**问题（用户指出）**：`src/sub_IO.f90::flow_node_one_block` 只填一个温度槽位 ——
+固体块填 `B%Ts`、多孔块填 `U(5)`（流体温度）⇒ **多孔块骨架温度 `B%Ts` 没进节点文件**
+（固体块虽"有"温度但占用的是 `T` 槽位，也没有独立的 `Ts`）。LTNE 温差因此不可见。
+
+**改动**：每条记录 `d,u,v,w,T` → **`d,u,v,w,T,Ts`**（6 变量，逐块同长，块序仍同 `Mesh3d.x`）：
+- `BLOCK_SOLID`：`T = Ts = B%Ts`（`T` 槽位保持 `flow3d.vtk` 约定不变）
+- `BLOCK_POROUS`：`T = U(5)`（流体温度 Tf）、`Ts = B%Ts`（骨架）← 新增信息
+- `BLOCK_LOWSPEED` / `BLOCK_FLOW`：`T = Tf`、`Ts = T`（无固相，镜像以统一布局）
+同步 `output_flow_node` 的 `Num_data/allocate/write`；新增 `util/check_flow3d_node.py`。
+
+**验证**：`make` EXIT=0；`run_case1_solid` 固体块 `T=Ts=300–800 K`、可压块 `T=Ts`；
+**`porous_ltne_1d`（q=2e6 W/m²、hv=2e6 W/(m³K)）→ Tf=300.7–1039 K、Ts=407.7–1174 K、
+max|T−Ts|=157.7 K**（修复前该值不在文件内）；`run_case3_porous` 多孔块两温度分列；
+三例 `STRUCTURE OK`、NaN=0。
+
+**兼容性**：`flow3d_node.dat` 是本次新增文件，尚无外部读者；读取方需按 6 变量解析
+（`util/check_flow3d_node.py` 已按 6 实现）。
+
+---
+
 <!-- 新条目请追加在下面（格式：## YYYY-MM-DD — 标题 / 目标 / 改动 / 验证 / 遗留） -->
 

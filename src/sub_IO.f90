@@ -570,15 +570,19 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 ! Node-centred SI flow field for display together with Mesh3d.x
 !   file: flow3d_node.dat (unformatted; name in Global_Var FLOWNODE_FILE)
 !   - one record per block, GLOBAL block order (= the Mesh3d.x / flow3d.dat
-!     block order), each record holds d,u,v,w,T at the nx*ny*nz GRID NODES
+!     block order), each record holds d,u,v,w,T,Ts at the nx*ny*nz GRID NODES
+!       T  = fluid temperature [K]  (solid block: the solid Ts, as in flow3d.vtk)
+!       Ts = solid/skeleton temperature [K] (solid & porous; for fluid/low-speed
+!            blocks, which have no solid phase, Ts mirrors T so that every block
+!            has the same 6 variables)
 !   - the cell-centred state is averaged to the nodes with the standard
 !     8-cell average (the same formula as util/readflow3d-ver2.x
 !     comput_value_in_mesh), so the file pairs directly with Mesh3d.x
 !   - units are SI: compressible blocks are rescaled with the free-stream
 !     reference state (U_ref=Ma*a_ref, rho_ref=Re*mu_SI(T_inf)/(Ma*a_ref*Lscale),
 !     T_ref=T_inf); low-speed/porous blocks already store SI values
-!   - solid blocks follow the flow3d.vtk convention: d=u=v=w=0, T=Ts [K],
-!     so the block count always matches Mesh3d.x
+!   - solid blocks follow the flow3d.vtk convention for T (d=u=v=w=0, T=Ts [K])
+!     and additionally expose Ts, so the block count always matches Mesh3d.x
 !----------------------------------------------------------------------
   subroutine output_flow_node
    use Global_Var
@@ -610,8 +614,8 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    if(my_id .eq. 0) then
      do m=1,Total_block
        nx=bNi(m); ny=bNj(m); nz=bNk(m)
-       Num_data=5*nx*ny*nz
-       allocate(U(5,nx,ny,nz))
+       Num_data=6*nx*ny*nz
+       allocate(U(6,nx,ny,nz))
        if(B_proc(m) .eq. 0) then
          mt=B_n(m); B=>MP%Block(mt)
          call flow_node_one_block(B, nx, ny, nz, U, sc_rho, sc_u, sc_T)
@@ -620,7 +624,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
          call MPI_Recv(U,Num_data,OCFD_DATA_TYPE,Recv_from_ID,tag, &
                        MPI_COMM_WORLD,status,ierr)
        endif
-       write(99) ((((U(m1,i,j,k),i=1,nx),j=1,ny),k=1,nz),m1=1,5)
+       write(99) ((((U(m1,i,j,k),i=1,nx),j=1,ny),k=1,nz),m1=1,6)
        deallocate(U)
      enddo
      close(99)
@@ -631,8 +635,8 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
      do m=1,MP%Num_Block
        B=>MP%Block(m)
        nx=B%nx; ny=B%ny; nz=B%nz
-       Num_data=5*nx*ny*nz
-       allocate(U(5,nx,ny,nz))
+       Num_data=6*nx*ny*nz
+       allocate(U(6,nx,ny,nz))
        call flow_node_one_block(B, nx, ny, nz, U, sc_rho, sc_u, sc_T)
        call MPI_Send(U,Num_data,OCFD_DATA_TYPE,0,m+300,MPI_COMM_WORLD,ierr)
        deallocate(U)
@@ -645,8 +649,12 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
 !----------------------------------------------------------------------
 ! Cell-centred state -> grid-node values (8-cell average), in SI units,
-! for one block.  U(5,nx,ny,nz) receives (d,u,v,w,T) at the nodes
-! (i=1..nx, j=1..ny, k=1..nz).  Solid blocks carry Ts in the T slot.
+! for one block.  U(6,nx,ny,nz) receives (d,u,v,w,T,Ts) at the nodes
+! (i=1..nx, j=1..ny, k=1..nz).
+!   T  = FLUID temperature   [K]  (solid block: the solid-frame Ts, as in flow3d.vtk)
+!   Ts = SOLID/frame temperature [K] (solid & porous: the real skeleton temperature;
+!        fluid/low-speed blocks have no solid phase -> Ts mirrors T for a uniform
+!        6-variable layout)
 !----------------------------------------------------------------------
   subroutine flow_node_one_block(B, nx, ny, nz, U, sc_rho, sc_u, sc_T)
    use Global_Var
@@ -658,31 +666,45 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    Type (Block_TYPE),intent(in):: B
    integer,intent(in):: nx,ny,nz
    real(PRE_EC),intent(in):: sc_rho,sc_u,sc_T
-   real(PRE_EC),intent(out):: U(5,nx,ny,nz)
-   real(PRE_EC),allocatable:: dc(:,:,:),uc(:,:,:),vc(:,:,:),wc(:,:,:),Tc(:,:,:)
+   real(PRE_EC),intent(out):: U(6,nx,ny,nz)
+   real(PRE_EC),allocatable:: dc(:,:,:),uc(:,:,:),vc(:,:,:),wc(:,:,:),Tc(:,:,:),Tsc(:,:,:)
    integer:: i,j,k
    real(PRE_EC):: r1,u1,v1,w1,p1,T1
 
    allocate(dc(0:nx,0:ny,0:nz),uc(0:nx,0:ny,0:nz),vc(0:nx,0:ny,0:nz), &
-            wc(0:nx,0:ny,0:nz),Tc(0:nx,0:ny,0:nz))
+            wc(0:nx,0:ny,0:nz),Tc(0:nx,0:ny,0:nz),Tsc(0:nx,0:ny,0:nz))
 
    if(B%Block_type == BLOCK_SOLID) then
-!    solid block: no flow, temperature = solid-frame Ts (already in K)
+!    solid block: no flow; temperature = solid-frame Ts (already in K).
+!    T carries Ts (flow3d.vtk convention) and Ts is the same field explicitly.
      do k=0,nz; do j=0,ny; do i=0,nx
        dc(i,j,k)=0.d0; uc(i,j,k)=0.d0; vc(i,j,k)=0.d0; wc(i,j,k)=0.d0
        Tc(i,j,k)=B%Ts(i,j,k)
+       Tsc(i,j,k)=B%Ts(i,j,k)
      enddo; enddo; enddo
-   else if(B%Block_type == BLOCK_LOWSPEED .or. B%Block_type == BLOCK_POROUS) then
-!    low-speed / porous blocks store SI (rho [kg/m3], u [m/s], T [K])
+   else if(B%Block_type == BLOCK_POROUS) then
+!    porous block: U(1..5) = (rho, u, v, w, Tf[K])  -> T  = fluid temperature
+!                  B%Ts     = skeleton (solid-frame) temperature -> Ts
      do k=0,nz; do j=0,ny; do i=0,nx
        dc(i,j,k)=B%U(1,i,j,k)
        uc(i,j,k)=B%U(2,i,j,k)
        vc(i,j,k)=B%U(3,i,j,k)
        wc(i,j,k)=B%U(4,i,j,k)
        Tc(i,j,k)=B%U(5,i,j,k)
+       Tsc(i,j,k)=B%Ts(i,j,k)
+     enddo; enddo; enddo
+   else if(B%Block_type == BLOCK_LOWSPEED) then
+!    low-speed block stores SI (rho [kg/m3], u [m/s], T [K]); no solid phase
+     do k=0,nz; do j=0,ny; do i=0,nx
+       dc(i,j,k)=B%U(1,i,j,k)
+       uc(i,j,k)=B%U(2,i,j,k)
+       vc(i,j,k)=B%U(3,i,j,k)
+       wc(i,j,k)=B%U(4,i,j,k)
+       Tc(i,j,k)=B%U(5,i,j,k)
+       Tsc(i,j,k)=B%U(5,i,j,k)
      enddo; enddo; enddo
    else
-!    compressible block: non-dimensional state -> SI
+!    compressible block: non-dimensional state -> SI; no solid phase
      do k=0,nz; do j=0,ny; do i=0,nx
        r1=max(B%U(1,i,j,k),1.d-20)
        u1=B%U(2,i,j,k)/r1; v1=B%U(3,i,j,k)/r1; w1=B%U(4,i,j,k)/r1
@@ -691,6 +713,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
        dc(i,j,k)=r1*sc_rho
        uc(i,j,k)=u1*sc_u; vc(i,j,k)=v1*sc_u; wc(i,j,k)=w1*sc_u
        Tc(i,j,k)=T1*sc_T
+       Tsc(i,j,k)=T1*sc_T
      enddo; enddo; enddo
    endif
 
@@ -706,9 +729,11 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
                          +wc(i-1,j-1,k  )+wc(i,j-1,k  )+wc(i-1,j,k  )+wc(i,j,k  ) )
      U(5,i,j,k)=0.125d0*( Tc(i-1,j-1,k-1)+Tc(i,j-1,k-1)+Tc(i-1,j,k-1)+Tc(i,j,k-1) &
                          +Tc(i-1,j-1,k  )+Tc(i,j-1,k  )+Tc(i-1,j,k  )+Tc(i,j,k  ) )
+     U(6,i,j,k)=0.125d0*( Tsc(i-1,j-1,k-1)+Tsc(i,j-1,k-1)+Tsc(i-1,j,k-1)+Tsc(i,j,k-1) &
+                         +Tsc(i-1,j-1,k  )+Tsc(i,j-1,k  )+Tsc(i-1,j,k  )+Tsc(i,j,k  ) )
    enddo; enddo; enddo
 
-   deallocate(dc,uc,vc,wc,Tc)
+   deallocate(dc,uc,vc,wc,Tc,Tsc)
   end subroutine flow_node_one_block
 
 
