@@ -28,7 +28,7 @@
 | `$ac_ec` | 15 | 人工压缩(AC)求解器（低速与多孔共用） | `AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, AC_WallRecon, AC_WallP, AC_MomDiss, AC_MomFrac` |
 | `$solid_ec` | 4 | 固体导热块（**新增**：原为代码内硬编码） | `Solid_GS_Omega=1.7, Solid_Max_Iter=20000, Solid_Min_Iter=5, Solid_Tol=1e-9` |
 | `$porous_ec` | 8 | 多孔介质块 | `Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in` |
-| `$couple_ec` | 11 | 跨区域（分段交错）耦合调度 | `Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, Niter_Couple_Warm, Kstep_Couple_Min, Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux, Porous_Chunk_Iter` |
+| `$couple_ec` | 12 | 跨区域（分段交错）耦合调度 | `Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, Niter_Couple_Warm, Kstep_Couple_Min, Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux, Porous_Chunk_Iter, Iflag_Couple_Restart` |
 | 旧组 `$control_ec` | 128(+4) | 历史单组，**完全保留** | 全部变量，`Solid_*` 追加在末尾 |
 
 合计：现有 128 个变量全部覆盖，另加 4 个固体控制量。
@@ -99,3 +99,29 @@ $end
 - **模板整体**：7 组同时存在 ⇒ 全部解析成功；`Solid_Max_Iter=30` 生效
   （日志 `GS iterations: 31` = 30+1）；算例跑完并正常输出。
 - **后处理工具**：新旧两种 `control.ec` 都能正确取到 `Ma/Re/T_inf` 并跑完（EXIT=0）。
+
+## 8. 重启后的耦合状态处理（2026-09-25 新增，`Iflag_Couple_Restart`）
+
+**背景**：交错耦合（`Iflag_Couple_Scheme=1`）跑完 `Niter_Couple_Outer` 轮就正常退出（`t_end` 在该模式下无效）。
+续算时若把整段调度（暖机 + 每轮步数减半）从头再播，并且界面量从 `control.ec` 初值重播，
+就是"白跑几轮 + 界面跳变"。现在把**耦合状态**写进重启文件，由 `Iflag_Couple_Restart` 决定怎么续。
+
+- `field_restart.dat` 版本 `iver` 1 → **2**：所有块之后追加一条 trailer
+  （`mode/conv/pair/iter/nf,nk` + `max|dT_w|/tol` + 界面量 `T_w, q_w, u, p_w`）。
+  **旧文件（iver=1）仍可读**，耦合状态视为"未知" ⇒ 保持旧行为。
+- `Iflag_Couple_Restart`（`$couple_ec`，默认 **0**）：
+
+  | 取值 | 含义 |
+  |---|---|
+  | `0` | **自动**：上次结束时已满足 `Tol_Couple_Tw` ⇒ 不再播交错，直接切到**逐步强耦合**（`Iflag_Couple_Scheme` 内部置 0、`t_end` 重新生效）一直跑到 `t_end`；否则继续交错，但**界面量从重启恢复**（跨重启零跳变） |
+  | `1` | 重启后强制逐步强耦合 |
+  | `2` | 重启后强制走交错驱动（旧行为） |
+  | `-1` | 完全忽略重启里的耦合状态（不判定、不恢复）＝ 2026-09-25 之前的行为（回归测试用） |
+
+- 切到逐步强耦合时会**自动限制固体每步 GS 预算**：`Solid_Max_Iter=min(现值,20)`、
+  `Solid_Tol=max(现值,1e-6)`（实测默认 20000/1e-9 时**每步**固体求解约 15–20 s，无法长跑）；
+  松弛因子与物理不变，实际取值会打印并回显到 `output_para.out`。
+- 该路径退出前会**补写一次重启文件**（否则 `t_end` 落在两次 `Kstep_save` 之间就没有文件可续）。
+- case1 这类"`max|dT_w|` 平台 ~0.1 K > `Tol_Couple_Tw=1e-2`"的算例永远不会自动判定为已收敛：
+  要么放宽 `Tol_Couple_Tw`，要么直接 `Iflag_Couple_Restart=1`。
+

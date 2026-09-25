@@ -128,6 +128,8 @@
    implicit none
    integer:: ierr,mBlock,kt_in,m
    real(PRE_EC):: Sfac,Sfac1,max_res
+   logical:: use_staggered
+   logical:: tight_continuation
    call Init_mpi
   
    if(my_id .eq. 0) then
@@ -167,10 +169,61 @@
 ! LOWSPEED<->SOLID CHT, 19 FLUID<->POROUS thermal).  Otherwise the
 ! standard per-step simultaneous multi-block time loop runs.
    if(Iflag_Couple_Scheme == 1) then
-     if(my_id .eq. 0) print*, ' Staggered segmented coupling mode (Iflag_Couple_Scheme=1) ...'
-     call run_staggered_multiregion(1)
-     call mpi_finalize(ierr)
-     stop
+     use_staggered = .true.
+     tight_continuation = .false.
+!    Restart-time coupling-state decision (2026-09-25, control.ec $couple_ec
+!    Iflag_Couple_Restart):
+!      0 = auto (default): if the previous run's staggered coupling had already
+!          satisfied Tol_Couple_Tw, do NOT replay the staggered schedule --
+!          continue with the per-step (tight) coupling in the normal time loop
+!          (t_end then applies again).
+!      1 = force the tight (per-step) coupling after a restart
+!      2 = force the staggered driver after a restart (pre-2026-09-25 behaviour)
+!     -1 = ignore the coupling state stored in the restart file completely
+     if(Iflag_Couple_Restart >= 0 .and. restart_found == 1) then
+       if(Iflag_Couple_Restart == 1) then
+         use_staggered = .false.
+       else if(Iflag_Couple_Restart == 0 .and. Couple_State_Mode >= 0 .and. &
+               Couple_State_Conv == 1) then
+         use_staggered = .false.
+       endif
+     endif
+     if(.not. use_staggered) then
+!      ---- continue with the tight (per-step) coupling -----------------------
+!      The interface T_w/q_w are recomputed from the restored U/Ts on every
+!      step, so changing modes introduces no jump.  The solid GS budget is
+!      capped: with the $solid_ec defaults (20000 sweeps / tol 1e-9) a single
+!      per-step solid solve was measured at ~15-20 s for cases/fluid_solid,
+!      which makes a long continuation impractical.  Only the sweep limit and
+!      the tolerance are touched (relaxation factor and physics unchanged) and
+!      the effective values are printed / echoed in output_para.out.
+       Iflag_Couple_Scheme = 0
+       if(Solid_Max_Iter > 20) Solid_Max_Iter = 20
+       if(Solid_Tol < 1.d-6)   Solid_Tol     = 1.d-6
+!      report what was read from the restart file BEFORE set_couple_tight_state
+!      below overwrites the globals
+       if(my_id .eq. 0) then
+         if(Couple_State_Mode == 0) then
+           print*, ' restart: previous run already used the per-step (tight)', &
+                   ' coupling -> keep marching to t_end=', t_end, &
+                   ' (Solid_Max_Iter=', Solid_Max_Iter, ' Solid_Tol=', Solid_Tol, ')'
+         else
+           print*, ' restart: staggered coupling already satisfied (last metric=', &
+                   Couple_State_Twmax, ' <= tol=', Couple_State_Tol, ', pair=', &
+                   Couple_State_Pair, ' after', Couple_State_Iter, ' outer iters)'
+           print*, '   -> switch to per-step (tight) coupling:', &
+                   ' Iflag_Couple_Scheme=0, Solid_Max_Iter=', Solid_Max_Iter, &
+                   ' Solid_Tol=', Solid_Tol, ' ; marching to t_end=', t_end
+         endif
+       endif
+       call set_couple_tight_state()   ! keep this state in later restart files
+       tight_continuation = .true.
+     else
+       if(my_id .eq. 0) print*, ' Staggered segmented coupling mode (Iflag_Couple_Scheme=1) ...'
+       call run_staggered_multiregion(1)
+       call mpi_finalize(ierr)
+       stop
+     endif
    endif
 
 !------------------------------------------------------------------------
@@ -295,6 +348,10 @@
     endif 
    
    enddo
+
+!  交错→逐步强耦合的续算路径：退出前补写一次重启文件（否则只有 Kstep 命中
+!  Kstep_restart/Kstep_save 时才写，t_end 落在两次写出之间就没有文件可续）
+   if(tight_continuation .and. Iflag_restart >= 0) call write_restart
 
    call mpi_finalize(ierr)   ! 结束 MPI，避免 mpirun 报异常退出
   end

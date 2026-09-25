@@ -2100,6 +2100,16 @@
   fp_Tw = Twall_Couple_Init
   fp_qw = 0.d0
   fp_pw = 0.d0
+!  重启：trailer 里若带着本界面（pair 19）的量，直接恢复（零跳变）；
+!  Iflag_Couple_Restart=-1 时忽略（=旧行为）。
+  if(Iflag_Couple_Restart >= 0 .and. Couple_State_Found == 1 .and. &
+     Couple_State_Pair == 19 .and. Couple_State_nf == size(fp_Tw,1) .and. &
+     Couple_State_nk == size(fp_Tw,2) .and. allocated(Couple_Tw_save)) then
+    fp_Tw = Couple_Tw_save; fp_qw = Couple_qw_save; fp_pw = Couple_pw_save
+    fp_Tw_old = fp_Tw
+    if(my_id == 0) print*, ' restart: porous-interface T_w/q_w/p_w restored', &
+           ' from the restart file (no re-seeding; last metric=', Couple_State_Twmax, ')'
+  endif
 
 !  ---- physical references (same convention as couple_highlow) --------------
   a_ref   = sqrt(gamma*R_AIR*T_inf)
@@ -2300,6 +2310,9 @@
       enddo; enddo
       close(203)
     endif
+!    登记本轮耦合状态（pair 19；mode=1 交错）
+    call set_couple_state(1, merge(1,0,twmax < Tol_Couple_Tw), 19, it, &
+                          twmax, Tol_Couple_Tw)
     if(it >= 2 .and. twmax < Tol_Couple_Tw) then
       converged = .true.
       if(my_id == 0) print*, ' Staggered coupling converged at outer iter', it, &
@@ -2539,6 +2552,18 @@
    fp_Tw = Twall_Couple_Init
    fp_Tw_old = fp_Tw; fp_qw = 0.d0; fp_pw = 0.d0; fp_u = 0.d0
    fp_pw_old = 0.d0; fp_u_old = 0.d0
+!  重启：若 restart 文件的 trailer 里正好带着本界面的量（同 pair、同尺寸），
+!  直接恢复，不再用 control.ec 初值重播（跨重启零跳变）。Iflag_Couple_Restart=-1
+!  表示忽略重启里的耦合状态（=旧行为）。
+   if(Iflag_Couple_Restart >= 0 .and. Couple_State_Found == 1 .and. &
+      Couple_State_Pair == paircode .and. Couple_State_nf == nf .and. &
+      Couple_State_nk == nk .and. allocated(Couple_Tw_save)) then
+     fp_Tw = Couple_Tw_save;  fp_qw = Couple_qw_save
+     fp_u  = Couple_u_save;   fp_pw = Couple_pw_save
+     fp_Tw_old = fp_Tw; fp_pw_old = fp_pw; fp_u_old = fp_u
+     if(my_id == 0) print*, ' restart: interface T_w/q_w restored from the', &
+            ' restart file (no re-seeding; last metric=', Couple_State_Twmax, ')'
+   endif
 
    !  restart file: keep the saved counters instead of resetting
    if(restart_found == 1) then
@@ -2670,6 +2695,9 @@
        enddo; enddo
        close(203)
      endif
+!    把本轮耦合状态登记进重启文件的 trailer（mode=1 交错；conv=1 表示已满足判据）
+     call set_couple_state(1, merge(1,0,twmax < Tol_Couple_Tw), paircode, it, &
+                           twmax, Tol_Couple_Tw)
      if(it >= 2 .and. twmax < Tol_Couple_Tw) then
        converged = .true.
        if(my_id == 0) print*, ' Staggered CHT coupling converged at outer iter', it, &
@@ -2895,6 +2923,17 @@
    endif
    fp_Tw = 0.d0; fp_pw = 0.d0; fp_u = 0.d0; fp_Tw_old = 0.d0
    fp_pw_old = 0.d0; fp_u_old = 0.d0; fp_qw = 0.d0
+!  重启：trailer 里若带着本界面（pair 12）的量，直接恢复（零跳变）；
+!  Iflag_Couple_Restart=-1 时忽略（=旧行为）。
+   if(Iflag_Couple_Restart >= 0 .and. Couple_State_Found == 1 .and. &
+      Couple_State_Pair == 12 .and. Couple_State_nf == nf .and. &
+      Couple_State_nk == nk .and. allocated(Couple_Tw_save)) then
+     fp_Tw = Couple_Tw_save; fp_pw = Couple_pw_save; fp_u = Couple_u_save
+     fp_qw = Couple_qw_save
+     fp_Tw_old = fp_Tw; fp_pw_old = fp_pw; fp_u_old = fp_u
+     if(my_id == 0) print*, ' restart: highlow-interface T_w/p_w/u restored', &
+            ' from the restart file (no re-seeding; last metric=', Couple_State_Twmax, ')'
+   endif
 
    !  restart file: keep the saved counters instead of resetting
    if(restart_found == 1) then
@@ -3008,6 +3047,10 @@
        enddo; enddo
        close(204)
      endif
+!    登记本轮耦合状态（pair 12；三个判据同时满足才算“已满足”）
+     call set_couple_state(1, &
+        merge(1,0, dtw < Tol_Couple_Tw .and. dpw < Tol_Couple_p .and. &
+                   duw < Tol_Couple_u), 12, it, dtw, Tol_Couple_Tw)
      if(it >= 2 .and. dtw < Tol_Couple_Tw .and. dpw < Tol_Couple_p .and. &
         duw < Tol_Couple_u) then
        converged = .true.

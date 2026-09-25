@@ -178,6 +178,9 @@
     Tol_Couple_Tw=2.d-2     ! outer convergence: max|dT_w| [K]
     Tol_Couple_p=1.d1       ! 12 (fluid-fluid): outer convergence max|dp_w| [Pa]
     Tol_Couple_u=1.d-2      ! 12 (fluid-fluid): outer convergence max|du_w| [m/s]
+    Iflag_Couple_Restart=0  ! restart-time coupling state:
+                            !   0=auto (已满足 Tol_Couple_Tw -> 改用逐步强耦合续算)
+                            !   1=强耦合  2=继续交错  -1=忽略重启里的耦合状态(旧行为)
     Iflag_Couple_WallFlux=0 ! 11/13 CHT split: 0=couple-based, 1=isothermal-Tw/qw wall-flux
 end
 
@@ -255,7 +258,7 @@ end
       Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
       Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
       Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, &
-      Iflag_Couple_WallFlux
+      Iflag_Couple_WallFlux, Iflag_Couple_Restart
 
 !---- legacy single group (variable list unchanged; Solid_* appended at the end)
   namelist /control_ec/ Ma, Re, AoA, AoS, p_outlet, t_end, &
@@ -286,6 +289,7 @@ end
 		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
 		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
 		Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux, &
+		Iflag_Couple_Restart, &
 		Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol, &
 		Iflag_restart, Kstep_restart, Iflag_flow_node
 
@@ -295,7 +299,12 @@ end
 !  below; initialise them so the output_para.out echo never prints garbage
 !  (pre-existing latent bug: uninitialised values varied from run to run).
     R0=0.d0; a0=0.d0; d0=0.d0; mu0=0.d0; mu1=0.d0
-    call scan_control_ec_groups(has_legacy, has_freestream, has_flow, &
+!   Pass the ALREADY-OPEN unit 99 (control.ec is connected to it just above):
+!   control.ec must not be connected to two units at the same time -- older
+!   libgfortran aborts with "File already opened in another unit" (this was the
+!   cluster run1 failure).  The scan rewinds unit 99 and leaves it open; each
+!   namelist read below rewinds it again.
+    call scan_control_ec_groups(99, has_legacy, has_freestream, has_flow, &
          has_lowspeed, has_ac, has_solid, has_porous, has_couple)
     print*, ' control.ec namelist groups found: legacy=', has_legacy, &
             ' freestream=', has_freestream, ' flow=', has_flow, &
@@ -416,6 +425,9 @@ end
 	write(99,*) " restart: Iflag_restart=", Iflag_restart, " Kstep_restart=", &
 	            Kstep_restart, " Iflag_flow_node=", Iflag_flow_node, &
 	            " (file='", trim(RESTART_FILE), "')"
+	write(99,*) " couple restart state: Iflag_Couple_Restart=", Iflag_Couple_Restart, &
+	            "  Tol_Couple_Tw=", Tol_Couple_Tw
+
     write(99,*) "--------------------------------------------"
 
     close(99)
@@ -567,6 +579,7 @@ end
     Ipara(55)=Iflag_restart
     Ipara(56)=Kstep_restart
     Ipara(57)=Iflag_flow_node
+    Ipara(58)=Iflag_Couple_Restart
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -700,6 +713,7 @@ end
     Iflag_restart=Ipara(55)
     Kstep_restart=Ipara(56)
     Iflag_flow_node=Ipara(57)
+    Iflag_Couple_Restart=Ipara(58)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -962,10 +976,19 @@ end
 ! groups are present in the file.  Text after '!' is ignored so that a
 ! commented-out group does not count; the scan is case-insensitive and accepts
 ! both '$' and '&' as the namelist delimiter.
+!
+! 可移植性要求（2026-09-25 修复）：本子程序**不自己打开文件**，而是复用调用者
+! 已打开 control.ec 的 unit（unit 参数）。原先这里用 `open(98,...)`，而 control.ec
+! 已经连在 unit 99 上 —— 同一文件同时连到两个 unit 违反 Fortran 标准
+! （F2018 12.5.6，一个文件同时只能有一个连接）；新版 libgfortran（本地 gfortran 13）
+! 放宽了该检查所以本地无恙，旧版 libgfortran 会**致命报错**
+! `File already opened in another unit`（集群 run1 即此原因；且因该 open 未带
+! iostat，报错直接终止，无法捕获）。
 !==============================================================================
-  subroutine scan_control_ec_groups(has_legacy, has_freestream, has_flow, &
+  subroutine scan_control_ec_groups(unit, has_legacy, has_freestream, has_flow, &
        has_lowspeed, has_ac, has_solid, has_porous, has_couple)
    implicit none
+   integer,intent(in):: unit
    logical,intent(out):: has_legacy, has_freestream, has_flow, has_lowspeed, &
        has_ac, has_solid, has_porous, has_couple
    character(len=512):: line
@@ -973,9 +996,10 @@ end
    has_legacy=.false.; has_freestream=.false.; has_flow=.false.
    has_lowspeed=.false.; has_ac=.false.; has_solid=.false.
    has_porous=.false.; has_couple=.false.
-   open(98,file="control.ec",status='old')
+!  unit 上挂的就是 control.ec（调用者打开）；从头读一遍即可，不要再次 open。
+   rewind(unit)
    do
-     read(98,'(A)',iostat=ios) line
+     read(unit,'(A)',iostat=ios) line
      if(ios /= 0) exit
      k=index(line,'!')
      if(k > 0) line(k:)=' '
@@ -1002,7 +1026,7 @@ end
      if(index(line,'porous_ec') > 0)     has_porous=.true.
      if(index(line,'couple_ec') > 0)     has_couple=.true.
    enddo
-   close(98)
+!  不要在这里 close(unit)：调用者还要用同一 unit 读 7 组 namelist（每次读前 rewind）。
   end subroutine scan_control_ec_groups
 
 !==============================================================================

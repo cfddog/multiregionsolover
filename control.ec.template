@@ -161,6 +161,9 @@ $couple_ec
   Twall_Couple_Init=300.d0 ! 首轮界面壁温 [K]          (默认: 300.)
   Tol_Couple_Tw=2.d-2    ! 外层判据 max|dT_w| [K]       (默认: 2e-2)
   Iflag_Couple_WallFlux=0! 0 耦合式 1 等温Tw/qw 壁通量式  (默认: 0)
+  Iflag_Couple_Restart=0 ! 重启后耦合状态处理（2026-09-25）:
+                         !   0 自动(上次已满足 Tol_Couple_Tw -> 改用逐步强耦合续算)
+                         !   1 强制强耦合  2 强制继续交错  -1 忽略重启里的耦合状态
 !  Tol_Couple_p=1.d1     ! 12(流-流)外层 max|dp_w| [Pa]  (默认: 10.)
 !  Tol_Couple_u=1.d-2    ! 12(流-流)外层 max|du_w| [m/s] (默认: 1e-2)
 !  Porous_Chunk_Iter=10  ! 每轮多孔段求解器调用次数      (默认: 10)

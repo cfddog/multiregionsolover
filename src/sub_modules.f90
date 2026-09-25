@@ -321,6 +321,35 @@
    real(PRE_EC),save:: Tol_Couple_p=1.d1         ! 12 (fluid-fluid) outer conv.: max|dp_w| [Pa]
    real(PRE_EC),save:: Tol_Couple_u=1.d-2        ! 12 (fluid-fluid) outer conv.: max|du_w| [m/s]
    integer,save:: Iflag_Couple_WallFlux=0  ! CHT split: 0=couple-based, 1=isothermal-Tw/qw wall-flux
+ !---- restart-time coupling-state handling (2026-09-25) -----------------------
+ ! Iflag_Couple_Restart (namelist $couple_ec):
+ !   0 = auto (default): after a restart, if the previous run's staggered
+ !       coupling had already satisfied Tol_Couple_Tw, do NOT replay the
+ !       staggered schedule -- continue with the per-step (tight) coupling
+ !       straight into the normal time loop (t_end then applies).  Otherwise
+ !       keep running the staggered driver, but with the interface T_w/q_w
+ !       restored from the restart file, so there is no re-seeding jump.
+ !   1 = force tight (per-step) coupling after a restart
+ !   2 = force the staggered driver after a restart (pre-2026-09-25 behaviour)
+ !  -1 = ignore the coupling state in the restart file completely (neither the
+ !       decision nor the interface restore) -> exactly the old behaviour,
+ !       kept as a regression-test switch.
+   integer,save:: Iflag_Couple_Restart=0
+ ! Coupling state persisted in field_restart.dat: filled by set_couple_state
+ ! (called by the staggered drivers / the tight-coupling switch) and read back
+ ! by read_restart.  Mode: -1 = unknown/none, 0 = tight (per-step), 1 = staggered.
+ ! Conv: 1 = the saved state already satisfied Tol_Couple_Tw.
+   integer,save:: Couple_State_Found=0
+   integer,save:: Couple_State_Mode=-1
+   integer,save:: Couple_State_Conv=0
+   integer,save:: Couple_State_Pair=0
+   integer,save:: Couple_State_Iter=0
+   integer,save:: Couple_State_nf=0
+   integer,save:: Couple_State_nk=0
+   real(PRE_EC),save:: Couple_State_Twmax=0.d0
+   real(PRE_EC),save:: Couple_State_Tol=0.d0
+   real(PRE_EC),save,allocatable,dimension(:,:):: &
+        Couple_Tw_save, Couple_qw_save, Couple_u_save, Couple_pw_save
  ! per-interface-face arrays used by the staggered coupling (face-cell indexed)
    real(PRE_EC),save,allocatable,dimension(:,:):: fp_Tw, fp_Tw_old, fp_qw, fp_pw
    real(PRE_EC),save,allocatable,dimension(:,:):: fp_u

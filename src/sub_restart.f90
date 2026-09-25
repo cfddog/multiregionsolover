@@ -12,6 +12,19 @@
 !      record : Tsn (1-LAP:.., ..)      previous time step (= Ts if unused)
 !      record : p   (1-LAP:.., ..)      low-speed / porous pressure
 !
+!    iver = 2 additionally appends ONE trailer record describing the
+!    cross-region coupling state (see set_couple_state):
+!      record : Couple_State_Mode, Conv, Pair, Iter, nf, nk
+!      record : Couple_State_Twmax, Couple_State_Tol
+!      record : Couple_Tw_save, Couple_qw_save, Couple_u_save, Couple_pw_save
+!               (only when nf,nk > 0; interface face-cell arrays)
+!    The trailer lets a restarted run decide whether the staggered coupling
+!    is already satisfied (-> continue with the per-step tight coupling) and
+!    lets a continued staggered run restore the interface T_w/q_w instead of
+!    re-seeding them from control.ec (zero jump across the restart).
+!    Files written before this change (iver = 1) are still read fine; the
+!    coupling state is then simply unknown (old behaviour).
+!
 !  The WHOLE LAP-deep buffer (ghost-cell) box is stored, so the buffer
 !  information of the previous run is recovered exactly; inter-block buffers are
 !  additionally re-exchanged once after reading.
@@ -40,7 +53,7 @@
 
    if(my_id .eq. 0) then
      open(99,file=RESTART_FILE,form="unformatted",status="replace")
-     write(99) 1, Total_block, Num_Mesh, NVAR1, Mesh(1)%Kstep, LAP
+     write(99) 2, Total_block, Num_Mesh, NVAR1, Mesh(1)%Kstep, LAP
      write(99) Mesh(1)%tt, Ma, Re, gamma, T_inf, Lscale, dt_global
    endif
 
@@ -87,6 +100,22 @@
        endif
      endif
    enddo
+
+!  coupling-state trailer (iver = 2): mode/conv/pair/iter/nf/nk + scalars + the
+!  interface T_w/q_w/u/p_w arrays.  Written only when a staggered driver (or the
+!  tight-coupling switch) registered a state; rank 0 still owns unit 99 here.
+   if(my_id .eq. 0 .and. Couple_State_Mode .ge. 0 .and. &
+      Couple_State_nf .gt. 0 .and. Couple_State_nk .gt. 0 .and. &
+      allocated(Couple_Tw_save)) then
+     write(99) Couple_State_Mode, Couple_State_Conv, Couple_State_Pair, &
+               Couple_State_Iter, Couple_State_nf, Couple_State_nk
+     write(99) Couple_State_Twmax, Couple_State_Tol
+     write(99) Couple_Tw_save, Couple_qw_save, Couple_u_save, Couple_pw_save
+   else if(my_id .eq. 0 .and. Couple_State_Mode .ge. 0) then
+     write(99) Couple_State_Mode, Couple_State_Conv, Couple_State_Pair, &
+               Couple_State_Iter, 0, 0
+     write(99) Couple_State_Twmax, Couple_State_Tol
+   endif
 
 !  send phase for the ranks that do not own the file
    if(my_id .ne. 0) then
@@ -145,7 +174,7 @@
        if(ios .ne. 0) then
          print*, " read_restart: cannot read the file header (iostat=",ios,")"
          if(Iflag_restart .eq. 1) iok=-1
-       else if(iver .ne. 1) then
+       else if(iver .ne. 1 .and. iver .ne. 2) then
          print*, " read_restart: file version", iver, " is not supported"
          if(Iflag_restart .eq. 1) iok=-1
        else if(nb_file .ne. Total_block .or. nvar_file .ne. MP%NVAR .or. &
@@ -233,6 +262,39 @@
          deallocate(Ubuf,Tsbuf,Tnbuf,Pbuf)
        endif
      enddo
+!    coupling-state trailer (iver = 2 only).  A missing/short trailer (e.g. a
+!    file written by a killed run) simply leaves the state unknown -> the old
+!    behaviour is kept.
+     if(iver .ge. 2) then
+       read(99,iostat=ios) Couple_State_Mode, Couple_State_Conv, &
+                           Couple_State_Pair, Couple_State_Iter, &
+                           Couple_State_nf, Couple_State_nk
+       if(ios .eq. 0) then
+         read(99,iostat=ios) Couple_State_Twmax, Couple_State_Tol
+         if(ios .eq. 0 .and. Couple_State_nf .gt. 0 .and. &
+            Couple_State_nk .gt. 0) then
+           allocate(Couple_Tw_save(Couple_State_nf,Couple_State_nk))
+           allocate(Couple_qw_save(Couple_State_nf,Couple_State_nk))
+           allocate(Couple_u_save(Couple_State_nf,Couple_State_nk))
+           allocate(Couple_pw_save(Couple_State_nf,Couple_State_nk))
+           read(99,iostat=ios) Couple_Tw_save, Couple_qw_save, &
+                               Couple_u_save, Couple_pw_save
+           if(ios .ne. 0) then
+             deallocate(Couple_Tw_save,Couple_qw_save,Couple_u_save,Couple_pw_save)
+             Couple_State_nf=0; Couple_State_nk=0
+           endif
+         endif
+         Couple_State_Found=1
+         print*, " read_restart: coupling state  mode=", Couple_State_Mode, &
+                 " (0=tight,1=staggered)  satisfied=", Couple_State_Conv, &
+                 "  pair=", Couple_State_Pair, "  last max|dT_w|=", Couple_State_Twmax, &
+                 "  interface cells=", Couple_State_nf, "x", Couple_State_nk
+       else
+         Couple_State_Found=0; Couple_State_Mode=-1
+         if(Iflag_restart .eq. 1) iok=-1
+         print*, " read_restart: no coupling-state trailer in the file"
+       endif
+     endif
      close(99)
    else
      do m=1,MP%Num_Block
@@ -246,6 +308,39 @@
        call MPI_Recv(B%Tsn,NT,OCFD_DATA_TYPE,0,tag+2,MPI_COMM_WORLD,status,ierr)
        call MPI_Recv(B%p,  NT,OCFD_DATA_TYPE,0,tag+3,MPI_COMM_WORLD,status,ierr)
      enddo
+   endif
+
+!---- coupling state: rank 0 read it from the trailer, share it with all ranks -
+   if(my_id .eq. 0 .and. Couple_State_Found .ne. 1) then
+     Couple_State_Mode=-1; Couple_State_Conv=0; Couple_State_Pair=0
+     Couple_State_Iter=0; Couple_State_nf=0; Couple_State_nk=0
+     Couple_State_Twmax=0.d0; Couple_State_Tol=0.d0
+   endif
+   call MPI_Bcast(Couple_State_Found,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+   call MPI_Bcast(Couple_State_Mode, 1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+   call MPI_Bcast(Couple_State_Conv, 1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+   call MPI_Bcast(Couple_State_Pair, 1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+   call MPI_Bcast(Couple_State_Iter, 1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+   call MPI_Bcast(Couple_State_nf,   1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+   call MPI_Bcast(Couple_State_nk,   1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+   call MPI_Bcast(Couple_State_Twmax,1,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+   call MPI_Bcast(Couple_State_Tol,  1,OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+   if(Couple_State_Found .eq. 1 .and. Couple_State_nf .gt. 0 .and. &
+      Couple_State_nk .gt. 0) then
+     if(my_id .ne. 0) then
+       allocate(Couple_Tw_save(Couple_State_nf,Couple_State_nk))
+       allocate(Couple_qw_save(Couple_State_nf,Couple_State_nk))
+       allocate(Couple_u_save(Couple_State_nf,Couple_State_nk))
+       allocate(Couple_pw_save(Couple_State_nf,Couple_State_nk))
+     endif
+     call MPI_Bcast(Couple_Tw_save,Couple_State_nf*Couple_State_nk, &
+                    OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+     call MPI_Bcast(Couple_qw_save,Couple_State_nf*Couple_State_nk, &
+                    OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+     call MPI_Bcast(Couple_u_save, Couple_State_nf*Couple_State_nk, &
+                    OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
+     call MPI_Bcast(Couple_pw_save,Couple_State_nf*Couple_State_nk, &
+                    OCFD_DATA_TYPE,0,MPI_COMM_WORLD,ierr)
    endif
 
 !---- step/time bookkeeping + refresh the inter-block buffers -----------------
@@ -290,4 +385,91 @@
      if(mod(kst,Kstep_save) .eq. 0) call output_flow_node
    endif
   end subroutine restart_step_output
+
+!------------------------------------------------------------------------------
+! Register the coupling state that write_restart puts into the iver=2 trailer.
+!   mode     : 0 = tight (per-step) coupling, 1 = staggered
+!   conv     : 1 = the coupling already satisfied "tol" (Tol_Couple_Tw)
+!   paircode : 11/12/13/19 (informational; validated when restoring)
+!   iter     : outer iteration reached
+!   twmax    : last convergence metric (max|dT_w| for 11/13; dp/du-type for 12;
+!              max|dT_w| for 19)
+!   tol      : tolerance "conv" was measured against
+! The interface arrays are taken from the GLOBAL fp_Tw/fp_qw/fp_u/fp_pw (that is
+! where the staggered drivers keep them); only arrays whose shape matches
+! fp_Tw are copied, the rest stay zero, so the trailer layout is fixed.
+! Call it at the end of every outer staggered iteration, right after the
+! convergence metric is known, so that any periodic restart write carries a
+! current state.
+!------------------------------------------------------------------------------
+  subroutine set_couple_state(mode, conv, paircode, iter, twmax, tol)
+   use Global_var
+   implicit none
+   integer,intent(in):: mode, conv, paircode, iter
+   real(PRE_EC),intent(in):: twmax, tol
+   integer:: nf, nk
+
+   Couple_State_Mode  = mode
+   Couple_State_Conv  = conv
+   Couple_State_Pair  = paircode
+   Couple_State_Iter  = iter
+   Couple_State_Twmax = twmax
+   Couple_State_Tol   = tol
+   Couple_State_Found = 1
+
+   nf = 0; nk = 0
+   if(allocated(fp_Tw)) then
+     nf = size(fp_Tw,1); nk = size(fp_Tw,2)
+   endif
+   if(nf <= 0 .or. nk <= 0) then        ! no interface arrays in this driver (yet)
+     Couple_State_nf = 0; Couple_State_nk = 0
+     if(allocated(Couple_Tw_save)) deallocate(Couple_Tw_save,Couple_qw_save, &
+                                              Couple_u_save,Couple_pw_save)
+     return
+   endif
+   if(allocated(Couple_Tw_save)) then
+     if(size(Couple_Tw_save,1) /= nf .or. size(Couple_Tw_save,2) /= nk) then
+       deallocate(Couple_Tw_save,Couple_qw_save,Couple_u_save,Couple_pw_save)
+     endif
+   endif
+   if(.not. allocated(Couple_Tw_save)) then
+     allocate(Couple_Tw_save(nf,nk)); allocate(Couple_qw_save(nf,nk))
+     allocate(Couple_u_save(nf,nk));  allocate(Couple_pw_save(nf,nk))
+   endif
+   Couple_Tw_save = 0.d0; Couple_qw_save = 0.d0
+   Couple_u_save  = 0.d0; Couple_pw_save = 0.d0
+   if(allocated(fp_Tw) .and. size(fp_Tw,1) == nf .and. size(fp_Tw,2) == nk) &
+       Couple_Tw_save = fp_Tw
+   if(allocated(fp_qw) .and. size(fp_qw,1) == nf .and. size(fp_qw,2) == nk) &
+       Couple_qw_save = fp_qw
+   if(allocated(fp_u)  .and. size(fp_u,1)  == nf .and. size(fp_u,2)  == nk) &
+       Couple_u_save = fp_u
+   if(allocated(fp_pw) .and. size(fp_pw,1) == nf .and. size(fp_pw,2) == nk) &
+       Couple_pw_save = fp_pw
+   Couple_State_nf = nf
+   Couple_State_nk = nk
+  end subroutine set_couple_state
+
+!------------------------------------------------------------------------------
+! Register "the staggered coupling is settled, we continue with the per-step
+! (tight) coupling from now on".  Written into the trailer so that every later
+! restart also stays tight.  No interface arrays are needed: in tight mode the
+! interface quantities are recomputed from the restored U/Ts on every step, so
+! the continued run has no jump by construction.
+!------------------------------------------------------------------------------
+  subroutine set_couple_tight_state()
+   use Global_var
+   implicit none
+   Couple_State_Mode  = 0
+   Couple_State_Conv  = 1
+   Couple_State_Pair  = 0
+   Couple_State_Iter  = 0
+   Couple_State_Twmax = 0.d0
+   Couple_State_Tol   = Tol_Couple_Tw
+   Couple_State_Found = 1
+   Couple_State_nf    = 0
+   Couple_State_nk    = 0
+   if(allocated(Couple_Tw_save)) deallocate(Couple_Tw_save,Couple_qw_save, &
+                                            Couple_u_save,Couple_pw_save)
+  end subroutine set_couple_tight_state
 
