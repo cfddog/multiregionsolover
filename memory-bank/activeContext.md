@@ -31,7 +31,7 @@
 **维护规则（已写入 `.clinerules` 与 `constraints.md §0`）**：新功能必须
 ① 更新对应章节 ② 同步附录 A（新参数） ③ 在附录 C 追加记录 ④ 重跑 `./build.sh` 确认无错误。
 
-**遗留**：本次改动**尚未提交**。
+**状态**：**已提交并 push 到 `origin/main`**（两个提交：代码/功能 + 手册；详见 `worklog.md` 同日「收尾」条目）。
 
 ## 0a. 最新（2026-09-25 第二轮）：重启后按耦合状态决定「继续交错 / 切逐步强耦合」✅
 
@@ -106,7 +106,7 @@ backtrace：`scan_control_ec_groups_ ← read_parameter_ec_ ← read_parameter_ 
 `util/readflow3d-ver2.4a.f90` 99@681 + 96@765），用户选择本轮不修 ⇒ 下次动它们时按同法修
 （传 unit，不自己 open）；② **集群侧必须同步**修好的 `src/sub_read_parameter.f90` 到
 `/work/home/lijunyang/sundong/PorousTest/code/` 并重新 `make`，否则 run1 仍报同样错误；
-③ 本次改动尚未提交。
+③ **已提交并 push**（与手册同一批；详见 `worklog.md` 同日「收尾」条目）。
 
 **FAQ（同日实测）：case1 为什么只算到 Kstep≈2995？** —— 这是**设计终点**，不是卡死/发散：
 `Iflag_Couple_Scheme=1` 时主程序调 `run_staggered_multiregion` 后**直接 `stop`，不进 `do while(tt<t_end)`**

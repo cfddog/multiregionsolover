@@ -364,4 +364,30 @@ case1/2/3 逐项参数与预期日志、时间预算、续算实测 2995→5990�
 **遗留**：本次改动**尚未提交**。
 
 
+---
+
+## 2026-09-25（收尾）— 提交并推送：代码/功能 + LaTeX 程序说明
+
+**动作**：把工作树里的改动整理为**两个提交**并 `push origin main`（本地与远端一致）：
+
+1. `fix(io)+feat(couple)`：`control.ec` 单连接修复（`scan_control_ec_groups` 不再二次 open）
+   $+$ 重启耦合状态（`iver=2` trailer、`Iflag_Couple_Restart`、交错续算界面量零跳变、
+   自动切逐步强耦合并 cap 固体预算、退出补写重启）$+$ `control.ec.template` 与两份 docs 同步
+   （8 files, +420/−13）。
+2. `docs(manual)+chore`：`docs/程序说明/`（LaTeX 手册 17 个源文件 $+$ 交付 PDF 40 页）
+   $+$ `.clinerules`/`constraints.md §0` 的“新功能必须更新手册”规则 $+$ `.gitignore`
+   （忽略 LaTeX 中间文件与 `main.pdf`）$+$ `memory-bank/` 记录（25 files, +2212/−6）。
+
+**收尾清理**：删除早前 `build.sh` 路径写错时落在**仓库根目录**的重复 PDF（未跟踪文件）。
+
+**未提交（有意保留）**：`.vscode/settings.json`（主题设置）；`cases/**` 下的运行产物（本就 untracked）。
+
+**提交前复核**：`make` EXIT=0 零告警；case1 12 轮等价（`output_para.out` 与改前逐字节一致）；
+`ct1/ct2/ct3a-d` 全部 EXIT=0 / NaN=0；续算 Kstep 2995$\to$5990；
+`docs/程序说明 && ./build.sh` 0 error / 0 undefined reference。
+
+**记住（下次接手）**：提交号不进记忆库（避免陈旧）；新功能按 `.clinerules` 更新手册
+（章节 $+$ 附录 A $+$ 附录 C $+$ 重新 `build.sh`）。
+
+
 

@@ -124,7 +124,8 @@
 - [ ] 同类隐患（2026-09-25 按用户要求**未修**）：`util/readflow3d-ver2.5.f90`（99@707 + 96@791）、
       `util/readflow3d-ver2.4a.f90`（99@681 + 96@765）——同一 `control.ec` 连两个 unit，
       旧编译器下同样崩；修法与 `scan_control_ec_groups` 相同（传 unit、不自己 open）。
-- [ ] 提交本次修复（建议消息：`fix(io): 不再二次打开 control.ec（旧 libgfortran 报 File already opened in another unit）`）。
+- [x] ~~提交本次修复（建议消息：`fix(io): 不再二次打开 control.ec`）~~ → **已提交并 push**
+      （与 LaTeX 手册同批，两个提交；见 `worklog.md` 2026-09-25「收尾」条目）。
 - [ ] **（上一任务）重启文件 `field_restart.dat`**：写流场 `U`(含 LAP ghost 缓冲) + `Ts/Tsn` + `p`
       + `Kstep/tt`；`Kstep_save` 节奏定期保存；启动时存在即自动续算（`Iflag_restart`）。
       新开关放入 `$flow_ec`。交错驱动入口的 `tt/Kstep=0` 需改为“续算时恢复”。
