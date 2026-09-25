@@ -206,3 +206,162 @@ max|T−Ts|=157.7 K**（修复前该值不在文件内）；`run_case3_porous` �
 
 <!-- 新条目请追加在下面（格式：## YYYY-MM-DD — 标题 / 目标 / 改动 / 验证 / 遗留） -->
 
+---
+
+## 2026-09-25 — 修复集群 run1 启动崩溃：control.ec 同一文件连两个 unit
+
+**现象**（集群 `/work/home/lijunyang/sundong/PorousTest/code/`，`run_case1_solid/./OPENCFDEC`）：
+`At line 976 of file sub_read_parameter.f90 (unit = 98)` →
+`Fortran runtime error: File already opened in another unit`；
+backtrace：`scan_control_ec_groups_ ← read_parameter_ec_ ← read_parameter_ ← MAIN__`。
+
+**根因**：`read_parameter_ec` 第 293 行已把 `control.ec` 连到 **unit 99**（为读 7 组 namelist），
+而 `scan_control_ec_groups` 第 976 行又 `open(98,file="control.ec",status='old')` 打开同一文件
+⇒ **同一文件同时连到两个 unit**，违反 Fortran 标准（F2018 §12.5.6）。本地 gfortran 13.3.0
+用最小程序实测同一文件开两个 unit 返回 `iostat=0`（新版 libgfortran 放宽了检查）⇒
+2026-09-23/24 的本地验证全部通过；集群的旧 libgfortran 按标准致命报错，且该 open **未带 iostat**
+⇒ 运行时直接 `Error termination`（不是可捕获的 ios）。**与算例/参数/并行无关，纯代码可移植性缺陷。**
+
+**改动**（仅 `src/sub_read_parameter.f90`，1 file / +20 / −5）：
+- `scan_control_ec_groups(unit, has_legacy, ...)`：新增 `integer,intent(in):: unit`，
+  内部 `rewind(unit)` + `read(unit,'(A)',iostat=ios)`；**删除 `open(98,...)` 与 `close(98)`**
+  （不 close：调用者随后还要用同一 unit 逐组 `rewind(99); read(99,nml=...)`）。
+- 调用点 → `call scan_control_ec_groups(99, ...)`。
+- 注释（中英）写明“为什么不能自己 open”：这是可移植性约束，不是风格问题。
+
+**验证**：
+- `cd src && make` **EXIT=0**（只重编 `sub_read_parameter.o` 并链接；make 输出**零 warning/error**）。
+- 静态审计：`grep` 全 `src/*.f90` ⇒ `control.ec` 只剩 **1 处 open**（第 293 行 unit 99）；unit 98 不再使用。
+- 功能等价：把 `cases/fluid_solid/run_case1_solid` 输入 + 新二进制放到 `/tmp/val_case1`，
+  `mpirun -np 1` **整段跑完 12 轮**（`max|dT_w|` 499.9 → 0.0995 K，与历史一致），写出
+  `field_restart.dat`(Kstep=2995) 与 `flow3d_node.dat`(6 变量)，**NaN=0**；
+  `output_para.out` 与改动前二进制产物**逐字节一致**（组回显仍为
+  `legacy=F freestream=T flow=T lowspeed=T ac=T solid=F porous=T couple=T`）。
+- 全仓库 open 审计：`sub_convert_inp.f90`(88/96/99/87 成对 close)、`sub_IO.f90`、`porous.inp@97`、
+  `solid_bc.inp`（`newunit=`）等均无“同文件双 unit”；`open(99,file="output_para.out")` 属
+  “同一 unit 换文件”，标准允许。
+
+**遗留**：① 两个 util 工具有同样缺陷（`readflow3d-ver2.5.f90`：99@707 + 96@791；
+`readflow3d-ver2.4a.f90`：99@681 + 96@765），按用户要求**本轮不修**，下次按同法修；
+② 集群侧需同步 `src/sub_read_parameter.f90` 并重新 `make` 才生效；
+③ 本次改动**尚未提交**。
+
+
+---
+
+## 2026-09-25（补）— FAQ：case1 为何只算到 2995 步 / 如何继续（续算实测）
+
+**问**：`fluid_solid/run_case1` 只算到 Kstep≈2950–2995 就结束，不能往下算？
+
+**答（设计行为，非卡死/发散）**：
+- case1 `$couple_ec` 里 `Iflag_Couple_Scheme=1` ⇒ 主程序在 `opencfd_ec3d_v1.16a.f90:169-174`
+  调 `run_staggered_multiregion(1)` 后 **`mpi_finalize; stop`**，**不进入** `do while(tt<t_end)`
+  ⇒ `t_end=1e6` 在交错模式下**无效**。
+- 气体步数 = 调度表（`sub_multi_region.f90:2567-2574`）：前 `Niter_Couple_Warm` 轮满
+  `Kstep_Couple_Comp`，之后每次减半（下限 `Kstep_Couple_Min`）。case1 取
+  `Warm=2, Outer=12`，`Comp/Min` 用默认 **1000/1** ⇒ 1000,1000,500,250,125,62,31,15,7,3,1,1
+  = **2995 步**（日志 `outer iter 12 : flow chunk steps = 1`、`flow chunk done, Kstep= 2995`）。
+- 终止判定 `sub_multi_region.f90:2673-2684`：`it>=2 且 max|dT_w|<Tol_Couple_Tw(=1e-2)` 才提前收敛；
+  case1 `max|dT_w|` 平台 ≈0.0995 K（固体未达稳态）⇒ 永不满足，跑满 12 轮打印
+  `reached Niter_Couple_Outer= 12 (not fully converged)`，随后写 `flow3d.dat/vtk/field_restart.dat`
+  → **EXIT=0**。
+
+**继续往下算的两条路**：
+1. **续算（推荐，不改参数）**：再跑一次同一命令；`Iflag_restart=0` ⇒ 检测到 `field_restart.dat`
+   自动恢复并累加 Kstep。**实测（`/tmp/val_case1`，新二进制）**：
+   `restart from 'field_restart.dat': Kstep= 2995` → `continue staggered run at Kstep= 2995`
+   → 3995 → 4995 → 5495 → … → **5990**（+2995 步/次），NaN=0，结束又写 Kstep=5990 重启文件。
+2. **改调度**：`$couple_ec` 里加 `Kstep_Couple_Comp/Niter_Couple_Warm/Kstep_Couple_Min`
+   并调大 `Niter_Couple_Outer`（默认 60）；建议 `Kstep_Couple_Min` 别用 1（末段几十轮都是 1 步，
+   几乎不推进物理时间）。收敛判据在此算例达不到 ⇒ **外层轮数是唯一的时间推进控制**（见 constraints §5）。
+
+**“不能继续”的三种典型原因**（排查顺序）：① 集群仍是**修复前二进制** ⇒ 又报
+`File already opened in another unit`（需同步 `src/sub_read_parameter.f90` + `make`）；
+② run1 未写到重启文件就被作业时限/调度 kill，或脚本清理目录 ⇒ `read_restart: not found`，从头开始；
+③ 只跑 12 轮 —— 即上述设计行为。
+
+
+---
+
+## 2026-09-25（第二轮）— 重启后按耦合状态续算：继续交错 / 自动切逐步强耦合
+
+**需求（用户）**：重启后不要重新播一遍交错调度（暖机 + 每步减半），而应基于上次状态判断；
+**若已满足强耦合，就应改用强耦合（逐步同时耦合）继续算**。
+
+**实现（5 源文件 + 3 文档；`make` EXIT=0、零告警）**：
+- `sub_modules.f90`：`Iflag_Couple_Restart`（默认 0）+ 耦合状态全局量
+  （`Couple_State_Mode/Conv/Pair/Iter/nf/nk/Twmax/Tol/Found`、`Couple_Tw/qw/u/pw_save`）。
+- `sub_restart.f90`：`iver` 1→2，块数据后追加 coupling-state trailer
+  （`mode/conv/pair/iter/nf,nk` + `max|dT_w|/tol` + 界面量 `T_w,q_w,u,p_w`）；
+  读侧 `iostat` 容错（缺 trailer ⇒ 状态未知 ⇒ 旧行为）、0 号进程广播；
+  新增 `set_couple_state(mode,conv,pair,iter,twmax,tol)`（从全局 `fp_*` 取数组、按形状匹配）
+  与 `set_couple_tight_state()`。
+- `sub_multi_region.f90`：三个交错驱动（11/13、12、19）入口处若 trailer 带同 pair/同形状的界面量
+  ⇒ 直接恢复 `fp_Tw/fp_qw/fp_u/fp_pw`（**跨重启零跳变**，替代 `Twall_Couple_Init` 重播）；
+  每轮算出判据后 `set_couple_state(1, merge(...), pair, it, metric, Tol)` 登记。
+- `opencfd_ec3d_v1.16a.f90`：分派处按状态决定——`0` 自动 / `1` 强制强耦合 / `2` 强制交错 / `-1` 忽略；
+  切强耦合时 `Iflag_Couple_Scheme=0`、`Solid_Max_Iter=min(现值,20)`、`Solid_Tol=max(现值,1e-6)`
+  （**只动扫掠上限与容差**，松弛因子/物理不变），打印实际值；主循环退出前补写一次重启文件。
+- `sub_read_parameter.f90`：6 步流程（默认值 / `$couple_ec` / 旧组 `$control_ec` / `bcast_para`
+  `Ipara(58)` / `output_para.out` 回显）。
+- 文档：本文件、`control.ec.template`、`docs/control.ec-说明.md §8`、`docs/重启与节点流场输出说明.md §8`。
+
+**验证（`mpirun -np 1`，全部 EXIT=0、NaN=0）**：
+- ct1 run1（case1 原设置）：12 轮，`max|dT_w|` 0.099545→0.0995036（与改动前逐轮一致），写重启 Kstep=2995。
+- ct1 run2：`coupling state mode=1 satisfied=0 pair=11 66x1` → **界面 T_w/q_w 已恢复（零跳变）**
+  → 继续交错 12 轮、EXIT=0。
+- ct2 run1（`Comp=100/Warm=1/Outer=4/Min=10/Tol=1000`）：it=2 判为满足（0.0986 K）、写重启 Kstep=150。
+- ct2 run2（`t_end=170`）：`satisfied=1` → **切逐步强耦合**（`Solid_Max_Iter=20/Tol=1e-6`）→
+  150→155→…→170 逐步推进 → 退出前补写重启（Kstep=170）。
+- ct3a（状态=强耦合，`t_end=190`）：识别 `mode=0` → 保持强耦合续跑 170→190；再跑一次 190→210 ✔。
+- ct3b/ct3c（`Iflag_Couple_Restart=2 / -1`）：均走交错驱动（旧行为）；
+  ct3d（`=1`）：强制切强耦合 ✔。
+- 等价性：`output_para.out` 与改动前相比**仅多 1 行**（`couple restart state: Iflag_Couple_Restart= …`）。
+
+**重要发现（写进文档）**：逐步强耦合下 `solid_solver_one_block` 每步都要把固体解到
+`Solid_Tol=1e-9`（实测 1400 次扫掠）⇒ case1 ≈**15–20 s/步**；故切强耦合时自动 cap 预算
+（20 次 / 1e-6）。另外 case1 `max|dT_w|` 平台 0.0995 K > `Tol_Couple_Tw=1e-2`，自动判定永不触发，
+需放宽 `Tol_Couple_Tw` 或显式 `Iflag_Couple_Restart=1`。
+
+**遗留**：本次改动**尚未提交**；集群需同步 `src/` 并重新 `make`。
+
+
+---
+
+## 2026-09-25（第三轮）— 建立 LaTeX 程序说明手册 v1.0（docs/程序说明/）
+
+**需求（用户）**：用 LaTeX（子系统已装 texlive）编写程序说明文档，详细介绍固体、高速、低速、
+多孔介质及其它新增功能，以及**如何控制与选用控制参数**；并以 fluid_solid 三个耦合算例
+为例介绍算例设置；**后续新功能要持续更新该文档**。
+
+**交付**：`docs/程序说明/`（`main.tex` + `chap01..11` + `91/92/93` 三个附录 + `build.sh` + `README.md`），
+编译产物 PDF `docs/OpenCFD-EC-1.16a-程序说明.pdf`（**40 页**）。
+工程要点：`\documentclass[fontset=fandol]{ctexart}` + **xelatex 两遍**；日志 `build.log`；
+`build.sh [clean]`；`.gitignore` 已忽略 `*.aux/.log/.toc/.out`。
+
+**章节**：1 概述（块类型/接口码/物理码/面编号/单位与无量纲化/目录/上手）；
+2 输入文件与算例结构（`control.ec` 7 组规则 + 网格/bc3d/bc3d\_interface/material/porous/solid\_bc 格式与示例）；
+3 可压高速（时间推进/空间格式/湍流/来流参考/输出节奏 + 选参建议）；
+4 低速（变量约定/SIMPLE·SIMPLEC·AC-FV/`LS_*`·`AC_*` 参数表/**AC 标定经验表**/质量入口限制与等效速度换算）；
+5 多孔（DBF+Ergun+LTNE 方程、`porous.inp`、预算 `AC_Max_Iter×Porous_Chunk_Iter`、参数选取、已知缺口）；
+6 固体（FVM 非正交修正、SOR 参数、`Tw/Qw` 边界、**CHT 界面温度公式**、两种 CHT 模式、成本）；
+7 跨区域耦合（同步 vs 交错、调度表公式与判据、性能对比、L 表机制、发汗壁、FAQ）；
+8 输出与重启（文件总览、`field_restart.dat` 布局 `iver=2`、**重启耦合状态 `Iflag_Couple_Restart`**、
+`flow3d_node.dat`、MPI 约定）；9 **三个 fluid_solid 算例详解**（拓扑/L 描述符、共同设置、
+case1/2/3 逐项参数与预期日志、时间预算、续算实测 2995→5990、调参清单）；
+10 构建/运行/并行与集群注意事项；11 验证/回归/已知问题；
+附录 A **参数总表**、附录 B 编号与格式速查、附录 C **更新记录**。
+
+**验证**：`./build.sh` 两次 xelatex 均 EXIT=0（无 error、无 undefined reference）；
+`pdfinfo` 40 页 A4；`pdftotext` 抽查中文与目录正常。
+编译期修掉的问题：`\code{}` 内裸 `_`(6 处)、`^`(2 处)、数学命令(text mode)1 处；
+一次 `insert_line` 把 A.1 表的剩余行截断导致 longtable 不闭合（"input stack size exceeded"）——
+现已修复（附录表结构完整）。
+
+**维护约定（已写入 `.clinerules` 与 `constraints.md §0`）**：新功能必须 ① 更新对应章节
+② 同步附录 A（新参数）③ 在附录 C 追加记录 ④ 重跑 `./build.sh` 确认无错误。
+
+**遗留**：本次改动**尚未提交**。
+
+
+

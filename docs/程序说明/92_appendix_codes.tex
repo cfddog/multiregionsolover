@@ -1,0 +1,116 @@
+\section{编号、文件与单位速查}
+\label{app:codes}
+
+\subsection{面编号（全局统一）}
+\begin{center}
+\begin{tabular}{cccccc}
+\toprule
+1 & 2 & 3 & 4 & 5 & 6 \\
+$i-$ & $j-$ & $k-$ & $i+$ & $j+$ & $k+$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{接口码}
+\begin{center}\small
+\begin{tabular}{clc}
+\toprule
+码 & 含义 & 状态 \\
+\midrule
+11 & 可压 $\leftrightarrow$ 固体（CHT） & ✅ \\
+12 & 可压 $\leftrightarrow$ 低速 & ✅（无跨进程）\\
+13 & 低速 $\leftrightarrow$ 固体 & ✅ \\
+14 & 固固 & ✅（缓冲）\\
+15 & 流流（同类） & ✅（缓冲）\\
+16 & 低速 $\leftrightarrow$ 多孔 & ✅（已定量验证）\\
+17 & 固 $\leftrightarrow$ 多孔 & ❌ 未实现 \\
+18 & 多孔 $\leftrightarrow$ 多孔 & ❌ 未实现 \\
+19 & 可压 $\leftrightarrow$ 多孔 & ✅（无跨进程）\\
+\bottomrule
+\end{tabular}
+\end{center}
+判定规则：\code{is\_interface\_bc(bc) = (bc < 0) .or. (11 <= bc <= 19)}。
+方向不由接口码决定，而由几何配对与 \code{L1..L3} 决定。
+
+\subsection{物理边界码}
+\begin{center}\small
+\begin{tabular}{cll}
+\toprule
+码 & 名称 & 说明 \\
+\midrule
+2 & \code{BC\_Wall} & 壁（可压 $T_{wall}<0$ 绝热；低速可用 \code{LS\_U\_lid}）\\
+3 & \code{BC\_Symmetry} & 对称 \\
+4 & \code{BC\_Farfield} & 远场（低速按出口处理）\\
+5 & \code{BC\_Inflow} & 入口（低速按 \code{LS\_Inlet\_Type}）\\
+6 & \code{BC\_Outflow} & 出口 \\
+21 & \code{BC\_LS\_Inlet} & 低速入口（同 5）\\
+22 & \code{BC\_LS\_Outlet} & 低速出口（同 6）\\
+201 & \code{BC\_Wall\_Turbo} & 旋转壁 \\
+401 & \code{BC\_Extrapolate} & 外插 \\
+501 & \code{BC\_Periodic} & 周期（配 \code{Periodic\_d*}) \\
+$-1$ & \code{BC\_Inner} & 块间内部界面 \\
+$-2/-3$ & \code{BC\_PeriodicL/R} & 周期界面 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{输入文件格式速查}
+\begin{center}\small
+\begin{tabular}{p{3.9cm}p{10.2cm}}
+\toprule
+文件 & 关键字段 \\
+\midrule
+\code{control.ec} & 7 组 namelist（旧组 \code{\$control\_ec} 兼容）；见附录 A \\
+\code{bc3d.inp} & \code{nblock} / \code{ni nj nk} / 块名 / \code{nface} / \code{i1 i2 j1 j2 k1 k2 bc} \\
+\code{bc3d\_interface.inp} & 同上 $+$ \code{nb1, face1, L1 L2 L3}（\code{bc=-1}；跨行续写用 $-1$ 占位）\\
+\code{material.in} & \code{nblock} / 块类型行 / 每块 \code{rho Cp k} \\
+\code{porous.inp} & \code{nblock} / \code{m eps dp[m] hv[W/(m$^3$K)]} \\
+\code{solid\_bc.inp} & \code{nblocks} / 块号 / 面数 / \code{face Tw[K] Qw[W/m$^2$]} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{单位与量纲速查}
+\begin{center}\small
+\begin{tabular}{lll}
+\toprule
+量 & 可压块 & 低速/多孔/固体块 \\
+\midrule
+长度（网格） & 网格单位（$x\cdot\code{Lscale}\to$ m） & 同左 \\
+密度 & $\rho/\rho_\infty$ & kg/m$^3$（\code{LS\_rho}）\\
+速度 & $u/U_\infty$ & m/s \\
+温度 & $T/T_\infty$ & K \\
+压力 & $p/(\rho_\infty U_\infty^2)$ & Pa（\code{B\%p}）\\
+导热系数 & $\mu_{ref}c_{p,ref}/Pr_L$ 归一化 & W/(m$\cdot$K) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{界面量公式（CHT，码 11/13）}
+\begin{equation}
+T_i=\frac{k_fT_f/dx_f+k_sT_s/dx_s}{k_f/dx_f+k_s/dx_s},\qquad
+q_w=\frac{k_s\,(T_i-T_{s,i})}{dx_s}\ \ [\text{W/m}^2],
+\qquad T_{ghost}=2T_i-T_{interior}.
+\end{equation}
+界面文件输出列：\code{iface\_couple.dat}（$x_w$[m], $T_w$[K], $q_w$[W/m$^2$], $p_w$[Pa]）、
+\code{iface\_highlow.dat}（$x_w$, $T_w$, $p_w$, $|u|_w$）。
+
+\subsection{日志关键字速查}
+\begin{center}\small
+\begin{tabular}{lp{9.4cm}}
+\toprule
+关键字 & 含义 \\
+\midrule
+\code{namelist groups found ...} & 各组来源（\code{T}=文件，\code{F}=默认）\\
+\code{outer iter k : flow chunk steps = n} & 交错第 $k$ 轮气体步数 \\
+\code{solid chunk done, outer iter ... max|dT\_w|=} & 界面温度变化（收敛判据量）\\
+\code{... reached Niter\_Couple\_Outer= ... (not fully converged)} & 跑满轮数正常结束 \\
+\code{restart from ... Kstep=} / \code{continue staggered run at Kstep=} & 续算起点 \\
+\code{coupling state mode= ... satisfied= ...} & 重启文件里的耦合状态 \\
+\code{switch to per-step (tight) coupling} & 自动/强制切强耦合 \\
+\code{Solid solver Block ... GS iterations:} & 固体 GS 扫掠数（$=\code{Max\_Iter}+1$ 表示未收敛）\\
+\code{write field\_restart.dat OK} & 重启文件写出 \\
+\bottomrule
+\end{tabular}
+\end{center}
+%===EOF===

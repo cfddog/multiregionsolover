@@ -1,0 +1,162 @@
+\section{输入文件与算例结构}
+
+\subsection{算例目录文件清单}
+\begin{table}[htbp]\centering\small
+\caption{算例目录中的文件}\label{tab:casefiles}
+\begin{tabular}{p{4.2cm}p{1.3cm}p{9.5cm}}
+\toprule
+文件 & 必需 & 说明 \\
+\midrule
+\code{control.ec} & 必需 & 全部求解器控制参数（7 组 namelist，见第 \ref{sec:params} 节与附录 A）\\
+\code{Mesh3d.x} / \code{Mesh3d.dat} & 必需 & 网格；由 \code{\$flow\_ec: Mesh\_File\_Format} 选择格式（\code{2}/\code{0}）\\
+\code{bc3d.inp} & 必需 & 逐块逐面物理边界（可含接口码 11--19）\\
+\code{bc3d\_interface.inp} & 多块必需 & 块间对接关系（配对 + 连接描述符）\\
+\code{material.in} & 多区域必需 & 块类型表；固体/多孔块另给 $(\rho, C_p, k)$ \\
+\code{solid\_bc.inp} & 有固体/多孔时 & 逐面热边界：等温 $T_w$ 或热流 $Q_w$ \\
+\code{porous.inp} & 有多孔块时 & 多孔块 $\varepsilon,\ d_p,\ h_v$ \\
+\code{partation.dat} & 可选 & 进程分区；交错耦合模式\textbf{不要}放此文件 \\
+\code{field\_restart.dat} & 自动生成 & 重启文件；存在即自动续算（\code{Iflag\_restart=0}）\\
+\code{bc3d.inc} / \code{bc3d\_interface.inc} & 自动生成 & 由 \code{.inp} 转换而来（含 \code{L1..L3}）\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{\code{control.ec}：7 组 namelist}
+\label{sec:params}
+历史版本把所有参数放在\textbf{一个} \code{\$control\_ec}（128 个变量）里。现拆成 7 组，
+\textbf{每组、每个变量都可省略}（全部有代码默认值），算例只需写与默认值不同的项。
+
+\begin{table}[htbp]\centering\small
+\caption{\code{control.ec} 的 7 个组}\label{tab:groups}
+\begin{tabular}{lp{5.2cm}cp{5.2cm}}
+\toprule
+组名 & 用途 & 变量数 & 关键变量（详见附录 A） \\
+\midrule
+\code{\$freestream\_ec} & 来流/参考态/气体物性 & 24 & \code{Ma, Re, AoA, AoS, T\_inf, Twall, p\_outlet, gamma, PrL, Lscale} \\
+\code{\$flow\_ec}       & 时间步/格式/模型/网格/输出/重启 & 52 & \code{t\_end, CFL, dt\_global, Time\_Method, Iflag\_Scheme, Iflag\_Flux, If\_viscous, Mesh\_File\_Format, Kstep\_save, Iflag\_restart} \\
+\code{\$lowspeed\_ec}   & 低速（不可压）块 & 21 & \code{LS\_rho, LS\_mu, LS\_k, LS\_Cp, LS\_Inlet\_Type, LS\_U\_in, LS\_P\_out, LS\_Max\_Iter, LS\_Algorithm} \\
+\code{\$ac\_ec}         & 人工压缩(AC)求解器（低速与多孔共用） & 15 & \code{AC\_Max\_Iter, AC\_beta, AC\_CFL, AC\_CFLv, AC\_Tol, AC\_Flux, AC\_Recon, AC\_Limiter} \\
+\code{\$solid\_ec}      & 固体导热 GS 控制 & 4 & \code{Solid\_GS\_Omega, Solid\_Max\_Iter, Solid\_Min\_Iter, Solid\_Tol} \\
+\code{\$porous\_ec}     & 多孔块 & 8 & \code{Porous\_T\_ref, Porous\_alpha\_Ts, Porous\_Max\_Iter, Porous\_Tol, Porous\_U/V/W\_in, Porous\_T\_in} \\
+\code{\$couple\_ec}     & 跨区域耦合调度 & 12 & \code{Iflag\_Couple\_Scheme, Kstep\_Couple\_Comp, Niter\_Couple\_Outer, Tol\_Couple\_Tw, Iflag\_Couple\_Restart} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{兼容与读取规则}
+\begin{enumerate}
+  \item 旧组 \code{\$control\_ec}（128 变量 $+$ \code{Solid\_*}）\textbf{完全保留}，老算例零改动即可运行；
+  \item 启动时先\textbf{扫描}文件判定存在哪些组（只有“首个非空字符为 \code{\$}/\code{\&}”的行算组头；
+        \code{!} 之后为注释；大小写不敏感），再按 旧组 $\to$ \code{freestream} $\to$ \code{flow} $\to$
+        \code{lowspeed} $\to$ \code{ac} $\to$ \code{solid} $\to$ \code{porous} $\to$ \code{couple} 顺序读取；
+        \textbf{分组值覆盖旧组值}（支持逐组渐进迁移）；
+  \item 某组存在但解析失败（变量名拼错、缺 \code{\$end}）$\Rightarrow$ \textbf{报错并 \code{stop 1}}，
+        不会静默回落默认值；
+  \item 启动日志与 \code{output\_para.out} 末尾会回显各组来源（\code{T}=来自文件，\code{F}=默认）
+        与固体 GS 四参数，便于回归比对。
+\end{enumerate}
+
+\paragraph{最小示例（3 组即可跑一个流固耦合算例）}
+\begin{lstlisting}
+$freestream_ec
+  Ma=3.0d0, Re=5000.d0, T_inf=800.d0, Lscale=0.001d0
+$end
+$flow_ec
+  t_end=1.0d6, Kstep_save=500, Kstep_show=50,
+  dt_global=1.0d0, Mesh_File_Format=2, Iflag_vtk_onefile=1, Iflag_vtk_SI=1,
+  Iflag_restart=0, Kstep_restart=0, Iflag_flow_node=1
+$end
+$couple_ec
+  Iflag_Couple_Scheme=1, Niter_Couple_Warm=2, Niter_Couple_Outer=12, Tol_Couple_Tw=1.0d-2
+$end
+\end{lstlisting}
+模板见仓库根目录 \code{control.ec.template}（含全部变量、默认值与中文注释）。
+
+
+
+\subsection{网格文件}
+\begin{itemize}
+  \item \code{Mesh\_File\_Format=0}：\code{Mesh3d.dat}（unformatted）；
+  \item \code{Mesh\_File\_Format=1}：\code{Mesh3d.dat}（formatted），可用文本工具查看；
+  \item \code{Mesh\_File\_Format=2}：\code{Mesh3d.x}（PLOT3D 风格，\textbf{x、y、z 三个变量逐块一条记录}）。
+\end{itemize}
+多块网格在同一文件中按块依次存放；块序即输出块序（VTK、\code{flow3d\_node.dat}、重启文件同序）。
+网格坐标用\textbf{网格单位}（本仓库算例为 mm，配合 \code{Lscale=0.001}）。
+
+\subsection{\code{bc3d.inp}：物理边界}
+格式（块循环）：
+\begin{lstlisting}
+nblock
+  ni nj nk           (第 1 块维数)
+  blk-1              (块名)
+  nface              (该块面数)
+    i1 i2 j1 j2 k1 k2 bc      (重复 nface 次)
+  ni nj nk           (第 2 块维数) ... 依此类推
+\end{lstlisting}
+\code{i1..k2} 为\textbf{节点}编号范围；\code{bc} 见表 \ref{tab:physbc} 与 \ref{tab:ifccode}。
+例如 case1 固体块（Block 1，$67\times101\times2$）的 $j-$ 面写成接口码 11：
+\begin{lstlisting}
+       1       67        1        1        1        2        11
+\end{lstlisting}
+而可压块（Block 2）的 $i+$ 面（$j=68..134$ 段）也写 11——两块互相配对。
+
+\subsection{\code{bc3d\_interface.inp}：块间对接}
+结构与 \code{bc3d.inp} 相同，但用\textbf{链接描述符}表达“哪个面连到哪个块”：
+\begin{lstlisting}
+i1 i2 j1 j2 k1 k2   bc (= -1 内部界面, -2/-3 周期)
+nb1   : 邻块号（跨行续写时前一行可写 -1，下一行给出）
+face1 : 邻块上的对应面号
+L1 L2 L3 : 连接描述符（本块第 k 维 <-> 邻块第 |Lk| 维，符号=正/反向）
+\end{lstlisting}
+示例（case1 固体块 $j-$ 面连到块 2 的 $i+$ 面、切向反向）：
+\begin{lstlisting}
+        1       67        1        1       -1       -2       -1
+        2        4     -2    1        3
+\end{lstlisting}
+转换后 \code{bc3d\_interface.inc} 给出每个面的 \code{L1,L2,L3}；耦合例程\textbf{完全依赖 L 表}
+做指标映射，因此新拓扑一般无需改物理公式，只需支持新的 $(face,\,face1)$ 组合（见第 \ref{sec:coupling} 章）。
+
+\subsection{\code{material.in}：块类型与物性}
+\begin{lstlisting}
+nblock
+  blk1_type  blk2_type  ...        (一行给出全部块类型码 0/1/2/3)
+  rho1 Cp1 k1                      (块 1 物性; 固体/多孔块用 SI)
+  rho2 Cp2 k2 ...                  (逐块一行; 流体/低速块可写 0 0 0)
+\end{lstlisting}
+case1 实例（块 1 = 不锈钢固体、块 2 = 空气）：
+\begin{lstlisting}
+2
+1 0
+7900.0 500.0 16.3
+0.0 0.0 0.0
+\end{lstlisting}
+多孔块的“骨架”物性同样写在此文件（类型码 3），孔尺度/换热系数写 \code{porous.inp}。
+
+\subsection{\code{porous.inp}：多孔块参数}
+\begin{lstlisting}
+nblock
+  m  eps  dp[m]  hv[W/(m^3 K)]      (块号, 孔隙率, 颗粒/孔径尺度, 体积换热系数)
+\end{lstlisting}
+case3 实例：块 1、$\varepsilon=0.30$、$d_p=1$ mm、$h_v=2\times10^{6}$ W/(m$^{3}$K)。
+渗透率按 Ergun 关系由 $d_p,\varepsilon$ 计算（第 \ref{sec:porous} 章）；\code{hv}=0 退化为
+局部热平衡（$T_s\equiv T_f$）。
+
+\subsection{\code{solid\_bc.inp}：固体/多孔骨架热边界}
+\begin{lstlisting}
+nSolidBlocks
+  m                 (块号)
+  nf                (该块给热边界的面数)
+  face  Tw[K]  Qw[W/m^2]            (重复 nf 次; 可选再跟 htc/Tinf 列)
+\end{lstlisting}
+约定：\textbf{$T_w>0$ 表示等温壁（K）；$T_w<0$ 表示给定热流 $Q_w$（W/m$^{2}$）}。
+case1 实例（固体块 1 的 $j+$ 面等温 300 K）：
+\begin{lstlisting}
+1
+1
+1
+5 300.0 0.0
+\end{lstlisting}
+
+\noindent\textbf{依据文件}：\code{src/sub\_read\_parameter.f90}、\code{src/sub\_convert\_inp.f90}、
+\code{src/sub\_IO.f90}、\code{cases/fluid\_solid/*}、\code{control.ec.template}。
+%===EOF===

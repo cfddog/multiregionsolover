@@ -1,0 +1,225 @@
+\section{算例：\code{cases/fluid\_solid} 三个耦合算例}
+\label{sec:cases}
+
+三个算例共用同一套两分块网格，只改 \code{material.in}、\code{solid\_bc.inp} /
+\code{porous.inp} 与 \code{control.ec}，分别在界面上演示\textbf{可压--固体（码 11）}、
+\textbf{可压--低速（码 12）}、\textbf{可压--多孔（码 19）}。
+
+\subsection{共同几何与拓扑}
+\begin{itemize}
+  \item \textbf{Block1}：$67\times101\times2$ 薄板（每块 $k$ 方向 2 层，即准二维）；
+        $j=1$ 为对接面、$j=\max$ 为冷却端；$i\pm$ 为侧壁、$k$ 双向对称。
+  \item \textbf{Block2}：$101\times201\times2$ 通道；$i=101$ 为对接面（分 3 段：壁 / 界面 / 壁），
+        $i=1$ 为天花板壁，$j=1$ 为入口（码 5），$j=201$ 为出口（码 6），$k$ 双向对称。
+  \item 界面共形：Block1 的 $j=1$ 面（67 个节点）与 Block2 的 $i=101$ 面 $j=68..134$ 段完全一致。
+  \item 网格单位为 \textbf{mm}，故 \code{Lscale=0.001}。
+  \item 运行时连接描述符（\code{IF\_Debug=1} 可打印，\code{docs/进度\_fluid\_solid三算例.md} 记录）：
+\begin{lstlisting}
+blk1 type1 bc=11 face=2 (j-)  nb1=2 face1=4 (i+)  L=(-2, 1, 3)
+blk2 type0 bc=11 face=4 (i+)  nb1=1 face1=2 (j-)  L=( 2,-1, 3)
+\end{lstlisting}
+        即两侧物理法向都沿 $y$，但切向反向（$L_2=-1$）——
+        “气体 $i+$” 对 “固体 $j-$” 的非同向拓扑，是 2026-09-18 专门扩展支持的组合。
+  \item 因为法向都是 $y$，耦合公式里 \code{U(2)}=$x$ 切向、\code{U(3)}=$y$ 法向可与旧路径共用。
+\end{itemize}
+
+\subsection{共同的气体侧设置（\code{\$freestream\_ec} / \code{\$flow\_ec}）}
+三个算例完全相同的部分：
+\begin{lstlisting}
+$freestream_ec
+  Ma=3.0d0, Re=5000.d0, T_inf=800.d0, Lscale=0.001d0
+$end
+$flow_ec
+  t_end=1.0d6, Kstep_save=500, Kstep_show=50,     ! t_end 在交错模式不使用
+  dt_global=1.0d0, dtmax=1000.d0,
+  Mesh_File_Format=2, IFLAG_LIMIT_FLOW=0, Bound_Scheme=-1,
+  Iflag_vtk_onefile=1, Iflag_vtk_SI=1,
+  Iflag_restart=0, Kstep_restart=0, Iflag_flow_node=1
+$end
+\end{lstlisting}
+说明：\code{Twall=-1}（气体侧物理壁绝热，界面热流由耦合给出）、\code{If\_viscous=1}（默认，
+热流必需）、\code{dt\_global=1.0} 使 \code{tt} 与 \code{Kstep} 同步计数（便于观察）。
+
+\subsection{case1：可压--固体共轭传热（码 11）}
+\paragraph{物理设置}
+Block1 为不锈钢固体（\code{material.in}: \code{1 0} / \code{7900 500 16.3}），
+\code{solid\_bc.inp} 指定其 $j+$ 面（面号 5）等温 300 K；Block2 为 $Ma=3$、$T_\infty=800$ K 空气。
+热流从高温气体经界面导入固体、再由 $j+$ 面 300 K 冷端导出。
+
+\paragraph{耦合设置}
+\begin{lstlisting}
+$couple_ec
+  Iflag_Couple_Scheme=1, Niter_Couple_Warm=2, Niter_Couple_Outer=12,
+  Tol_Couple_Tw=1.0d-2
+$end
+\end{lstlisting}
+$\Rightarrow$ 气体段步数序列 $1000,1000,500,250,125,62,31,15,7,3,1,1$，
+\textbf{一段共 2995 步}。外层判据 \code{Tol\_Couple\_Tw=1e-2} K。
+固体 GS 用 \code{\$solid\_ec} 默认（$1.7/20000/5/10^{-9}$）。
+
+\paragraph{预期日志}
+\begin{lstlisting}
+run_staggered_fluid_solid(paircode= 11): solid block 1  fluid block 2 ...
+outer iter  1 : flow chunk steps = 1000
+flow chunk done, Kstep= 1000  tt= 1000.0
+solid chunk done, outer iter 1  max|dT_w|= 499.9 K  T_w range [799.90, 799.90]  max|q_w|= ...
+...
+Staggered CHT coupling reached Niter_Couple_Outer= 12 (not fully converged)
+write field_restart.dat OK  (Kstep= 2995 , tt= 2995.0)
+\end{lstlisting}
+\textbf{注意}：本算例 \code{max|dT\_w|} 很快进入约 $0.0995$ K 的平台（固体尚未达稳态），
+而判据是 $10^{-2}$ K，因此会打印 \code{(not fully converged)} 并跑满 12 轮结束——
+这是\textbf{设定问题而非程序故障}（要早停需把判据放宽到 $\sim0.2$ K）。
+
+\subsection{case2：可压--低速混接（码 12）}
+\paragraph{物理设置}
+Block1 改为\textbf{低速不可压空气}（\code{material.in}: \code{2 0}；低速物性由 \code{LS\_*} 给出），
+$j=\max$ 面为冷却剂入口：目标质量通量 $G=2$ kg/(m$^2$s)、300 K。
+Block2 仍为 $Ma=3$、$T_\infty=800$ K 空气。界面码 12。
+
+\paragraph{关键换算（质量入口 $\to$ 等效速度入口）}
+低速求解器为常密度（\code{LS\_rho=1.177} kg/m$^3$），且当前实现中 \code{LS\_Inlet\_Type=2}
+按 $i$ 面处理，故本算例用\textbf{等效法向速度入口}：
+\begin{equation}
+\code{LS\_V\_in}=\frac{G}{\code{LS\_rho}}=\frac{2}{1.177}=1.699\ \text{m/s}\quad(+y).
+\end{equation}
+
+\paragraph{低速与 AC 设置（本算例的\textbf{强制}标定）}
+\begin{lstlisting}
+$lowspeed_ec
+  LS_rho=1.177d0, LS_mu=1.846d-5, LS_k=0.0262d0, LS_T_ref=300.d0,
+  LS_U_in=0.d0, LS_V_in=1.699d0, LS_P_in=0.d0, LS_P_out=0.d0,
+  LS_alpha_p=0.2d0, LS_alpha_u=0.5d0,
+  LS_Max_Iter=150, LS_Tol=1.d-7, LS_Algorithm=3
+$end
+$ac_ec
+  AC_Max_Iter=5000
+$end
+$couple_ec
+  Iflag_Couple_Scheme=1, Niter_Couple_Warm=2, Niter_Couple_Outer=12,
+  Tol_Couple_Tw=2.0d0, Tol_Couple_p=1.0d2, Tol_Couple_u=1.0d-1
+$end
+\end{lstlisting}
+\textbf{经验教训（务必保留）}：
+\begin{itemize}
+  \item \code{LS\_Algorithm=1}（SIMPLE）在本算例\textbf{第 1 步即发散}（\code{res\_p}$\sim10^{31}$），
+        必须用 AC-FV（\code{=3}）；
+  \item \code{AC\_CFL} 用默认附近的 \textbf{2}（\code{AC\_beta=10} 默认）；
+        实测 \code{AC\_CFL=20, AC\_beta=100} 虽然 $res_q$ 更低，但\textbf{第 3 轮 NaN}；
+  \item 码 12 的外层判据（$T_w$/$p_w$/$u_w$）比码 11 难满足，本算例整体放宽到
+        $2.0$ K / $10^2$ Pa / $0.1$ m/s。
+\end{itemize}
+
+\paragraph{预期日志}
+\begin{lstlisting}
+run_staggered_highlow(12): gas block 2  LS block 1  Kstep_Couple_Comp= 1000 ...
+outer iter 1 : gas chunk steps = 1000
+highlow interface metrics, outer iter 1 : max|dT|= 321.0 K max|dp|= ... max|du|= ...
+...
+Staggered highlow coupling reached Niter_Couple_Outer= 12 (not fully converged)
+\end{lstlisting}
+界面量曲线见 \code{iface\_highlow.dat}。
+
+\subsection{case3：可压--多孔（码 19，发汗冷却）}
+\paragraph{物理设置}
+Block1 改为\textbf{不锈钢多孔壁}（\code{material.in}: \code{3 0} + 骨架 \code{7900 500 16.3}），
+\code{porous.inp} 给出块 1 的 $\varepsilon=0.30$、$d_p=10^{-3}$ m、$h_v=2\times10^{6}$ W/(m$^3$K)；
+$j=\max$ 面同样是冷却剂入口 $G=2$ kg/(m$^2$s)、300 K（用 \code{Porous\_V\_in=1.699} m/s）。
+界面码 19，采用\textbf{分段交错}：气体段按等温壁 $T_w$ 推进 $\to$ 提取 $q_w$ $\to$ 多孔段
+（界面热流 $q_w$ + 底部注入）$\to$ 返回新的 $T_w$。
+
+\paragraph{多孔与耦合设置}
+\begin{lstlisting}
+$porous_ec
+  Porous_T_ref=300.d0, Porous_alpha_Ts=1.0d0, Porous_Max_Iter=30000,
+  Porous_V_in=1.699d0, Porous_T_in=300.d0
+$end
+$ac_ec                       ! 多孔块用 AC 求解器
+  AC_Max_Iter=5000, AC_Print=1000, AC_beta=100.d0, AC_CFL=20.d0, AC_Tol=1.d-6
+$end
+$couple_ec
+  Iflag_Couple_Scheme=1, Niter_Couple_Warm=2, Niter_Couple_Outer=12,
+  Porous_Chunk_Iter=3
+$end
+\end{lstlisting}
+\textbf{预算压缩（实测）}：多孔段迭代量 $=\code{AC\_Max\_Iter}\times\code{Porous\_Chunk\_Iter}$
+$=5000\times3\approx170$ s/轮；原先 $20000\times10$ 需 $\approx65$ min/轮且无必要。
+
+\paragraph{预期日志}
+\begin{lstlisting}
+run_staggered_multiregion: block types F/L/S/P = T F F T
+run_staggered_multiregion: pairs 11/12/13/19 = F F F T
+gas block 2  porous block 1  pair42(gas i+/porous j-)= T
+porous chunk done, outer iter 1  max|dT_w|= ... K  coolant exit |v|_max= ... m/s  T_w range [...]
+\end{lstlisting}
+界面量写 \code{iface\_couple.dat}；多孔块骨架温度另见 \code{Ts\_block\_1.dat} 与
+\code{flow3d\_node.dat} 的 \code{Ts} 槽位（可看 LTNE 温差）。
+
+\subsection{运行方式与时间预算（单进程实测）}
+\begin{lstlisting}
+cd cases/fluid_solid/run_case1_solid      # 或 run_case2_lowspeed / run_case3_porous
+mpirun -np 1 ./opencfd-ec1.16a.out        # 交错耦合必须单进程
+\end{lstlisting}
+\begin{table}[htbp]\centering\small
+\caption{三个算例的成本参考（本机单进程，含输出）}\label{tab:casecost}
+\begin{tabular}{llp{8.2cm}}
+\toprule
+算例 & 单轮耗时 & 说明 \\
+\midrule
+case1 & $\approx100$ s & 气体段 1000 步 $\approx40$ s；固体每轮一次 GS（$\approx1400$ 扫掠）；全 12 轮 $\approx100$ s \\
+case2 & $\approx105$ s & 由低速 AC 主导（\code{LS\_Max\_Iter=150} 每次调用）\\
+case3 & $\approx170$ s & 由多孔 AC 主导（$5000\times3$）；$20000\times10$ 时约 65 min/轮 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\textbf{输出体积}：\code{Iflag\_vtk\_onefile=1} 时每次 \code{Kstep\_save} 写合并 VTK $\approx$11 MB
+（另加 \code{flow3d.dat} 3.3 MB、\code{field\_restart.dat} $\approx$17.5 MB/次）⇒
+集群上建议放大 \code{Kstep\_save} 或关闭单文件 VTK。
+
+\subsection{续算实测（重启耦合状态）}
+以 case1 为例（2026-09-25 验证，\code{mpirun -np 1}）：
+\begin{lstlisting}
+# run1：跑满 12 轮，写 restart（Kstep=2995）
+Staggered CHT coupling reached Niter_Couple_Outer= 12 (not fully converged)
+write field_restart.dat OK  (Kstep= 2995 , tt= 2995.0)
+# run2：自动续算（界面量零跳变，继续交错）
+read_restart: coupling state  mode= 1 (0=tight,1=staggered)  satisfied= 0
+              pair= 11  last max|dT_w|= 9.95e-2  interface cells= 66 x 1
+restart: interface T_w/q_w restored from the restart file (no re-seeding; ...)
+restart: continue staggered run at Kstep= 2995  tt= 2995.0
+...
+write field_restart.dat OK  (Kstep= 5990 ...)     # 每续一次再加 2995 步
+\end{lstlisting}
+若要\textbf{切换到逐时间步强耦合}继续算（\code{t\_end} 重新生效），二选一：
+\begin{itemize}
+  \item 在 \code{\$couple\_ec} 中写 \code{Iflag\_Couple\_Restart=1}（强制），并给 \code{t\_end} 一个合适值；
+  \item 或把 \code{Tol\_Couple\_Tw} 放宽到平台之上（如 0.2 K），让上一段运行记录"已满足"，
+        之后\textbf{自动}切换（日志会打印 \code{-> switch to per-step (tight) coupling}）。
+\end{itemize}
+切换后每次运行结束都会补写重启文件，可反复续跑（实测 \code{Kstep}: 150$\to$170$\to$190$\to$210）。
+
+\subsection{调参清单（按现象查）}
+\begin{table}[htbp]\centering\small
+\caption{常见现象与处置}\label{tab:casefaq}
+\begin{tabular}{p{5.2cm}p{8.4cm}}
+\toprule
+现象 & 处置 \\
+\midrule
+只跑 12 轮（$\approx2995$ 步）就退出 & 交错模式的\textbf{设计终点}：增大 \code{Niter\_Couple\_Outer}、
+    \code{Kstep\_Couple\_Min}（如 100）、\code{Niter\_Couple\_Warm}，或直接续跑 \\
+外层判据一直 \code{(not fully converged)} & 判据高于物理平台；放宽 \code{Tol\_Couple\_Tw} 或接受跑满轮数 \\
+第 1 步就 NaN（case2/3） & 低速块误用 SIMPLE：必须 \code{LS\_Algorithm=3} 且 \code{AC\_CFL=2} \\
+第 3 轮 NaN（case2） & \code{AC\_CFL/AC\_beta} 过大：回到 \code{AC\_CFL=2, AC\_beta=10} \\
+case3 一轮太慢 & 压缩 \code{AC\_Max\_Iter}$\times$\code{Porous\_Chunk\_Iter}（如 $5000\times3$）\\
+\texttt{-np 2} 挂死 & 交错模式（12/19）必须单进程；删掉目录里的 \code{partation.dat} \\
+启动即 \code{File already opened in another unit} & 用 2026-09-25 之后修复的 \code{sub\_read\_parameter.f90}（见 \S\ref{sec:coupling} FAQ）\\
+节点文件与网格不匹配 & 用 \code{util/check\_flow3d\_node.py} 检查；块序须与 \code{Mesh3d.x} 一致 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{依据文件}：\code{cases/fluid\_solid/*/control.ec}（各目录另有 \code{control.ec.legacy} 旧写法备份）、
+\code{docs/进度\_fluid\_solid三算例.md}、\code{docs/重启与节点流场输出说明.md}。
+%===EOF===
+
+

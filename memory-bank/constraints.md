@@ -1,6 +1,13 @@
 # Constraints — 关键约束（工作流 + 代码约定 + 环境）
 
 ## 0. 工作流约束（来自 `.clinerules`，必须遵守）
+- **程序说明手册（LaTeX）必须随功能同步更新**（细则见 `.clinerules` 与 `docs/程序说明/README.md`）：
+  ① 更新对应章节；② 新增参数同步**附录 A** 与 `control.ec.template`；③ **附录 C 追加更新记录**；
+  ④ `cd docs/程序说明 && ./build.sh` 重编译（xelatex 两遍；须 0 error、0 undefined reference）。
+  手册源为 ASCII 文件名（`main.tex` + `chap01..11` + `91/92/93`），中文目录名 `docs/程序说明/`；
+  PDF 交付物 `docs/OpenCFD-EC-1.16a-程序说明.pdf`。
+  LaTeX 注意：`\code{...}` 内必须转义下划线（写 `\_`），数学符号要放进 `$...$`；新增章节记得在
+  `main.tex` 里 `\input`。
 - 每次新任务开始，**先按序读取**：`memory-bank/projectbrief.md` → `activeContext.md` →
   `progress.md` → `worklog.md`（最近 5 条）→ `constraints.md`；
   然后**先用不超过 10 行**总结（目标 / 已完成 / 当前任务 / 关键约束 / 建议下一步），
@@ -43,6 +50,16 @@
   产物 `src/opencfd-ec1.16a.out`。改 `src/*.f90` 后必须重新 `make` 再验证。
 - **交错耦合（`Iflag_Couple_Scheme=1`）必须单进程**（`mpirun -np 1`，目录里不要放 `partation.dat`）：
   跨进程耦合目前只对码 11 实现（`cht_mpi_fluid_solid_face`），**12/19 未实现跨进程**。
+- **一个文件同时只能有一个连接（2026-09-25 教训，务必遵守）**：不得对**已打开的文件**用另一个
+  unit 再 `open`（违反 F2018 §12.5.6）。本地 gfortran 13 放宽了该检查（同一文件开两个 unit
+  `iostat=0`，**本地测不出来**），集群旧 libgfortran 会**致命报错**
+  `File already opened in another unit`；若该 `open` 未带 `iostat` 则直接 `Error termination`，
+  连捕获都做不到。⇒ 复用调用者已打开的 unit（`rewind` 后读），或先 `close` 再开。
+  `control.ec` 只允许 1 处 open（现为 `sub_read_parameter.f90:293` unit 99）。
+  **已知未修的同类点**：`util/readflow3d-ver2.5.f90`（99@707 + 96@791）、
+  `util/readflow3d-ver2.4a.f90`（99@681 + 96@765）。
+- **本地验证通过 ≠ 集群能用**：集群是另一份源码副本（`/work/home/lijunyang/sundong/PorousTest/code/`），
+  改完须**同步文件 + 重新 `make`**；工具链版本差（libgfortran）会暴露本地测不到的标准违规。
 - 交错模式由 `run_staggered_multiregion` 按块类型对自动分派（11/12/13/19，单配对）；
   `Kstep_Couple_Comp` 为每轮气体段步数，前 `Niter_Couple_Warm` 轮满步、之后**每轮减半**至
   `Kstep_Couple_Min`；`Niter_Couple_Outer` 为外层层数。
@@ -92,7 +109,8 @@
 ## 7. 重启 / 节点输出的约定（2026-09-23 起）
 - 开关都在 `$flow_ec`：`Iflag_restart`(0=存在即自动续算/1=强制/-1=关)、`Kstep_restart`(<=0→`Kstep_save`)、
   `Iflag_flow_node`(1=写 `flow3d_node.dat`)。**加了开关必须同时进 `bcast_para`**：
-  否则各 rank 取值不一致 → 在 I/O 处 MPI 死锁。当前占 `Ipara(55/56/57)`。
+  否则各 rank 取值不一致 → 在 I/O 处 MPI 死锁。当前占 `Ipara(55/56/57/58)`
+  （58 = `Iflag_Couple_Restart`，2026-09-25 加）。
 - `field_restart.dat`：**必须含完整 LAP=4 鬼点缓冲**（`1-LAP:nx+LAP-1`），否则高精度格式续算不稳；
   头记录校验 `nblock/NVAR/LAP/块1维数`，不一致即回退原初始化（`Iflag_restart=1` 时 `stop 1`）。
 - 重启/节点输出的 MPI 模式必须与 `output_flow`/`read_flow_data` 一致：
@@ -105,4 +123,19 @@
   `T` = 流体温度（固体块 = 固体温度，兼容 `flow3d.vtk` 约定）；
   `Ts` = **固体/骨架温度**（固体/多孔为真实值，LTNE 温差可见；流体/低速块无固相 → 镜像 `T`）。
   **新增/修改块类型分支时必须同时填这两个温度槽位**；校验工具 `util/check_flow3d_node.py`。
+- **`field_restart.dat` 版本**：`iver=1`（2026-09-23 起）无耦合信息；`iver=2`（2026-09-25 起）
+  在块数据后追加 **coupling-state trailer**（`mode/conv/pair/iter/nf,nk` + `max|dT_w|/tol`
+  + 界面量 `T_w,q_w,u,p_w`）。**读侧必须保持对 `iver=1` 与残缺 trailer 的容错**
+  （状态视为"未知" ⇒ 旧行为），新增块类型/驱动时同步在 `set_couple_state` 里登记。
+- **重启后的耦合模式由 `Iflag_Couple_Restart`（`$couple_ec`）决定**：0 自动（上次已满足
+  `Tol_Couple_Tw` ⇒ 切逐步强耦合）/ 1 强制强耦合 / 2 强制交错 / -1 忽略（=旧行为，回归用）。
+  交错续算**必须**从 trailer 恢复界面量（`fp_Tw/fp_qw/fp_u/fp_pw`）而不是用 `Twall_Couple_Init`
+  重播，否则每次重启都有界面跳变。
+- **切到逐步强耦合（`Iflag_Couple_Scheme=0`）必须同时降固体预算**：实测默认
+  `Solid_Max_Iter=20000/Solid_Tol=1e-9` 时**每步**固体 GS ≈1400 次扫掠、≈15–20 s/步（case1）；
+  现策略为 `Solid_Max_Iter=min(现值,20)`、`Solid_Tol=max(现值,1e-6)`（**只动扫掠上限与容差**，
+  `Solid_GS_Omega` 与物理不变），并在日志/`output_para.out` 回显实际值。
+  改这段前请先按"每步是否可承受"评估。
+- 逐步强耦合续算路径退出前会**补写一次重启文件**（`tight_continuation` 分支），
+  否则 `t_end` 落在两次 `Kstep_save` 之间就没有文件可续。
 - 详细说明与验证记录见 `docs/重启与节点流场输出说明.md`。

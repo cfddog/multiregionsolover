@@ -1,0 +1,70 @@
+\section{固体导热求解器（\code{BLOCK\_SOLID}）}
+\label{sec:solid}
+
+\subsection{模型与离散}
+块类型 1，\textbf{稳态导热}（\code{src/sub\_multi\_region.f90: solid\_solver\_one\_block}）。
+有限体积法，逐格心热平衡
+\begin{equation}
+k\sum_{faces}\frac{A_{f}}{d_{f}}\,(T_{nb}-T_{i}) = 0 ,
+\end{equation}
+其中 $d_f$ 取\textbf{相邻格心连线的欧氏距离在面法向的投影}（含非正交修正，$\cos\phi$ 截断到 $\ge 0.1$），
+因此支持非均匀网格与非直角曲线网格（O 网格等）。固体温度存于 \code{B\%Ts}（K，SI），
+初值为 \code{T\_inf}（可压参考温度）。
+
+\subsection{GS/SOR 迭代参数（组 \code{\$solid\_ec}）}
+\begin{table}[htbp]\centering\small
+\caption{固体求解控制}\label{tab:solidparams}
+\begin{tabular}{llp{8.4cm}}
+\toprule
+参数 & 默认值 & 说明/建议 \\
+\midrule
+\code{Solid\_GS\_Omega} & 1.7 & SOR 过松弛因子（$1<\omega<2$；网格病态时降到 1.0--1.3）\\
+\code{Solid\_Max\_Iter} & 20000 & 单次调用最大扫掠数 \\
+\code{Solid\_Min\_Iter} & 5 & 允许判据生效前的最少扫掠数（此后每 100 次检查一次残差）\\
+\code{Solid\_Tol} & 1e-9 & 收敛判据：$\max\lvert\Delta T_s\rvert$（K）\\
+\bottomrule
+\end{tabular}
+\end{table}
+日志形如 \code{Solid solver Block 1 GS iterations: 1400 final res: 8.8e-10}：
+打印的扫掠数达到 \code{Solid\_Max\_Iter}$+1$ 说明\textbf{未达容差}（需增大上限、调 $\omega$ 或检查边界）。
+
+\subsection{热边界（\code{solid\_bc.inp}）}
+逐面给定：\textbf{$T_w>0$ 等温壁（K）；$T_w<0$ 给定热流 $Q_w$ [W/m$^2$]}；可选追加
+\code{htc}/\code{Tinf} 列（对流边界）。未列出的面默认绝热（零梯度）。
+
+\subsection{与流体/低速的共轭耦合（码 11 / 13）}
+耦合例程在每个交界面按\textbf{热流平衡}计算界面温度（\code{compute\_interface\_T}）：
+\begin{equation}
+T_i=\frac{k_f\,T_f/dx_f + k_s\,T_s/dx_s}{k_f/dx_f + k_s/dx_s},
+\qquad
+\text{鬼点：}\ T_{ghost}=2T_i-T_{interior},
+\end{equation}
+其中 $dx$ 为格心到界面的距离，$k_f$ 已换算到流体无量纲体系
+（$k_{ref}=\mu_{ref}c_{p,ref}/Pr_L$，$\mu_{ref}=\rho_{ref}Ma\,a_{ref}\texttt{Lscale}/Re$），
+$k_s$ 为固体 SI 值（\code{material.in} 第 3 列）。方向/指标映射由连接描述符 \code{L1..L3} 完成，
+支持任意 $(face,face1)$ 组合（$6\times6$）。
+
+\paragraph{两种 CHT 模式（\code{Iflag\_Couple\_WallFlux}）}
+\begin{itemize}
+  \item \code{0}（默认，耦合式）：界面 $T_w$ 与 $q_w$ 由两侧场即时热流平衡得到；
+  \item \code{1}（等温 $T_w$ / 热流 $q_w$ 壁通量式，\code{wfmode}）：气体侧把界面当\textbf{等温壁} $T_w$，
+        固体侧施加热流 $q_w$，适合分段交错里"先算气体 $q_w$、再算固体"的流程（\code{cases/fluid\_solid}）。
+\end{itemize}
+
+\subsection{成本与使用建议}
+\begin{itemize}
+  \item \textbf{单次调用成本}：默认 $20000/10^{-9}$ 时，case1 规模（$67\times101\times2$）实测约
+        \textbf{1400 次扫掠/次}；在\textbf{每时间步}都求解固体的强耦合模式下约 15--20 s/步
+        （因此切强耦合时会自动把预算降到 \code{Solid\_Max\_Iter}$\le20$、\code{Solid\_Tol}$\ge10^{-6}$，
+        见 \S\ref{sec:restart}）。
+  \item \textbf{分段交错模式}下固体每外层轮只解一次，成本可接受，是长时程 CHT 的推荐用法。
+  \item \textbf{稳定性}：界面热流很小时可适当放宽 \code{Solid\_Tol}（如 $10^{-7}$）以省时间；
+        固体内部温差大/网格畸变严重时降低 $\omega$。
+  \item \textbf{验证算例}：\code{solid\_1d}（一维线性解析，误差 $\sim10^{-6}$ K）、
+        \code{solid\_annulus}（环形径向导热对数解，径向误差 $\sim1.9\times10^{-3}$ K）、
+        \code{bl\_cht}（低速--固体共轭，码 13）。
+\end{itemize}
+
+\noindent\textbf{依据文件}：\code{src/sub\_multi\_region.f90}（\code{solid\_solver\_one\_block} /
+\code{compute\_interface\_T} / \code{set\_solid\_ghost\_Bc}）、\code{src/sub\_read\_parameter.f90}（\code{read\_solid\_bc}）。
+%===EOF===

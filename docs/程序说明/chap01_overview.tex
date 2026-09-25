@@ -1,0 +1,135 @@
+\section{概述}
+
+\subsection{程序谱系与目标}
+本程序以李新亮（中科院力学所 LHD）的可压缩密度基求解器 \textbf{OpenCFD-EC 1.16a}
+为基线，在其上扩展\textbf{多块、多区域混合求解}能力，用于流固共轭传热（CHT）、
+高低温/高低速混接、发汗冷却（多孔介质）、流多孔耦合等工程问题：
+
+\begin{itemize}
+  \item \textbf{保留基线全部能力}：可压 N-S（MUSCL/WENO、Roe/HLLC/Van Leer、SA/SST 等）、
+        多块、多网格、MPI/OpenMP、涡轮机内流、混合 FV/FD（SEC）。
+  \item \textbf{新增三类块求解器}：固体导热、不可压低速（SIMPLE/SIMPLEC/人工压缩 AC）、
+        多孔介质（Darcy--Brinkman--Forchheimer + LTNE 双温度）。
+  \item \textbf{新增跨区域耦合框架}：显式接口码（11--19）+ 逐时间步同时耦合 + 分段交错耦合，
+        并支持耦合状态随重启文件保存/恢复。
+\end{itemize}
+
+\subsection{块类型}
+主程序逐块分派求解器（\code{src/sub\_multi\_region.f90: solver\_one\_block}）。
+块类型由 \code{material.in} 的首列给出：
+
+\begin{table}[htbp]\centering\small
+\caption{块类型码（\code{src/sub\_modules.f90}）}\label{tab:blocktype}
+\begin{tabular}{clll}
+\toprule
+码 & 名称 & 求解器 & 状态 \\
+\midrule
+0 & \code{BLOCK\_FLUID}    & 可压密度基 N-S（RANS 框架） & 基线继承，完整 \\
+1 & \code{BLOCK\_SOLID}    & 固体导热 FVM（$T_w$/$Q_w$ 热边界） & 本仓库新增 \\
+2 & \code{BLOCK\_LOWSPEED} & 不可压低速（SIMPLE/SIMPLEC/AC + Rhie--Chow） & 本仓库新增 \\
+3 & \code{BLOCK\_POROUS}   & 多孔介质（DBF + LTNE 双温度） & 本仓库新增 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{跨区域接口码}
+接口码写在 \code{bc3d.inp} 中（标识“块的类型对”，\textbf{不含方向}；方向由几何配对的
+连接描述符 \code{L1..L3} 决定）：
+
+\begin{table}[htbp]\centering\small
+\caption{接口码与实现状态}\label{tab:ifccode}
+\begin{tabular}{cll}
+\toprule
+码 & 含义 & 实现状态 \\
+\midrule
+11 & 可压流体 $\leftrightarrow$ 固体（CHT） & 已实现（\code{cases/fluid\_solid}）\\
+12 & 可压流体 $\leftrightarrow$ 低速       & 已实现（\code{cases/high\_low\_fluid}）\\
+13 & 低速 $\leftrightarrow$ 固体（CHT）    & 已实现（\code{cases/bl\_cht}）\\
+14 & 固固 & 已实现（缓冲交换）\\
+15 & 流流（同类可压） & 已实现（缓冲交换）\\
+16 & 低速 $\leftrightarrow$ 多孔           & 已实现 + 定量验证（\code{cases/beavers\_joseph}）\\
+17 & 固 $\leftrightarrow$ 多孔             & \textbf{未实现} \\
+18 & 多孔 $\leftrightarrow$ 多孔           & \textbf{未实现} \\
+19 & 可压 $\leftrightarrow$ 多孔（发汗/热耦合） & 已实现（\code{cases/porous\_fluid\_phaseB} 等）\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+除显式接口码外，也支持\textbf{链接式写法}（物理壁面码 + 相邻块号 \code{nb1}/面号 \code{face1}）：
+读入后会自动“提升”为规范接口码（\code{src/sub\_IO.f90} 内 \code{is\_interface\_bc} 判定，
+\code{bc<0} 或 $11\le bc\le 19$ 视为界面）。
+
+\subsection{物理边界码}
+\begin{table}[htbp]\centering\small
+\caption{物理边界码（\code{src/sub\_modules.f90}）}\label{tab:physbc}
+\begin{tabular}{cll}
+\toprule
+码 & 名称 & 说明 \\
+\midrule
+2 & \code{BC\_Wall}        & 无滑移壁（可压侧 $T_{wall}<0$ 表示绝热）；低速侧 $j+$ 面可由 \code{LS\_U\_lid} 驱动 \\
+3 & \code{BC\_Symmetry}    & 对称面（法向速度镜像、切向与标量零梯度）\\
+4 & \code{BC\_Farfield}    & 远场/无反射（低速侧按出口处理）\\
+5 & \code{BC\_Inflow}      & 入口（可压按来流；低速按 \code{LS\_Inlet\_Type}）\\
+6 & \code{BC\_Outflow}     & 出口（可压 $p_{outlet}$ 或外插；低速按给定静压 $+$ 零梯度）\\
+21 & \code{BC\_LS\_Inlet}  & 低速专用入口（与码 5 等价处理）\\
+22 & \code{BC\_LS\_Outlet} & 低速专用出口（与码 6 等价处理）\\
+201 & \code{BC\_Wall\_Turbo} & 涡轮机壁面（旋转壁）\\
+401 & \code{BC\_Extrapolate} & 外插 \\
+501 & \code{BC\_Periodic}    & 周期性（配合 \code{Periodic\_dX/dY/dZ}）\\
+$-1$ & \code{BC\_Inner}      & 块间内部界面（由 \code{bc3d\_interface.inp} 给出配对）\\
+$-2/-3$ & \code{BC\_PeriodicL/R} & 周期界面左/右 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{面编号约定（全局统一，务必牢记）}
+\begin{center}
+\code{1=i-, 2=j-, 3=k-, 4=i+, 5=j+, 6=k+}
+\end{center}
+\code{bc3d.inp} 每行给出 $i_1,i_2,j_1,j_2,k_1,k_2$（节点编号范围）与面码；
+\code{bc3d\_interface.inp} 同时给出连接描述符 \code{L1,L2,L3}：本块第 $k$ 维与邻块第 $|L_k|$ 维相连，
+符号表示正/反向连接（\code{src/sub\_convert\_inp.f90: Convert\_bc}）。
+
+\subsection{单位与无量纲化（最易出错）}
+\begin{table}[htbp]\centering\small
+\caption{各块的变量与单位约定}\label{tab:units}
+\begin{tabular}{p{2.6cm}p{5.4cm}p{6.6cm}}
+\toprule
+块类型 & 存什么（\code{U}） & 单位/无量纲化 \\
+\midrule
+可压流体 & \code{U=(rho, rho*u, rho*v, rho*w, E)}；$T^*=T/T_\infty$ & 无量纲：$\rho_\infty$、$U_\infty=Ma\,a_\infty$、$p^*=p/(\rho_\infty U_\infty^2)$；网格坐标乘 \code{Lscale} 得 SI \\
+固体     & 温度在 \code{B\%Ts}（K） & \textbf{SI}（K；$k$ 用 W/(m$\cdot$K)，$\rho$、$C_p$ 用 SI）\\
+低速     & \code{U(1)=rho=LS\_rho}（常密度）、\code{U(2..4)=速度 [m/s]}、\code{U(5)=T [K]}；压力在 \code{B\%p} & \textbf{SI}（注意：低速块存\textbf{速度}而非动量）\\
+多孔     & 同低速（流体温度 $T_f$ 在 \code{U(5)}），骨架温度在 \code{B\%Ts} & \textbf{SI}；\code{LS\_rho} 为流体密度参考 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+可压参考量（\code{src/sub\_read\_parameter.f90: set\_const\_para}）：
+$a_{ref}=\sqrt{\gamma R T_\infty}$，$U_{ref}=Ma\,a_{ref}$，
+$\rho_{ref}=\dfrac{Re\,\mu_\infty(T_\infty)}{Ma\,a_{ref}\,\texttt{Lscale}}$，
+$p_{ref}=\rho_{ref}U_{ref}^2$。
+注意 \textbf{$Re$ 以 \code{Lscale} 为参考长度}：\code{Lscale}=0.001（毫米网格）时 $Re=5000$
+对应板长雷诺数约 $8.3\times10^{5}$。
+
+\subsection{目录结构}
+\begin{lstlisting}
+src/                 主程序 + 各子模块（含 makefile），产物 opencfd-ec1.16a.out
+cases/               算例（网格/边界/物性/control.ec）
+docs/                文档；程序说明源码在 docs/程序说明/，PDF 在 docs/
+util/                后处理/网格工具（readflow3d、check_flow3d_node.py 等）
+memory-bank/         开发记忆库（projectbrief/activeContext/progress/worklog/constraints）
+\end{lstlisting}
+
+\subsection{最小上手流程}
+\begin{enumerate}
+  \item \code{cd src \&\& make}（默认 \code{mpif90}，产物 \code{opencfd-ec1.16a.out}）；
+  \item 复制 \code{control.ec.template} 到算例目录，按需保留/修改各 namelist 组；
+  \item 准备 \code{Mesh3d.x}、\code{bc3d.inp}、\code{bc3d\_interface.inp}、\code{material.in}
+        （多孔/固体再加 \code{porous.inp}、\code{solid\_bc.inp}）；
+  \item \code{cd cases/<case> \&\& mpirun -np 1 ./opencfd-ec1.16a.out}
+        （交错耦合模式必须单进程，详见第 \ref{sec:build} 章）。
+\end{enumerate}
+
+\noindent\textbf{依据文件}：\code{src/sub\_modules.f90}、\code{src/sub\_multi\_region.f90}、
+\code{src/sub\_convert\_inp.f90}、\code{src/sub\_IO.f90}、\code{docs/control.ec-说明.md}。

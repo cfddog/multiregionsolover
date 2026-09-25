@@ -1,0 +1,86 @@
+\section{多孔介质求解器（\code{BLOCK\_POROUS}）}
+\label{sec:porous}
+
+\subsection{物理模型}
+块类型 3。不可压 + \textbf{Darcy--Brinkman--Forchheimer (DBF)} 动量方程与
+\textbf{LTNE 双温度（局部非热平衡）}能量方程（\code{src/sub\_porous.f90}）：
+
+\begin{align}
+\nabla\!\cdot\!\mathbf{u} &= 0,\\
+\nabla\!\cdot\!(\mathbf{u}\mathbf{u}) &= -\frac{\varepsilon^2}{\rho}\nabla p
+  + \nu_{eff}\nabla^2\mathbf{u}
+  - \frac{\varepsilon^2\mu}{K\rho}\mathbf{u}
+  - \frac{\varepsilon^3 F}{\sqrt{K}}\,\lvert\mathbf{u}\rvert\,\mathbf{u},\\
+\rho C_{p}\nabla\!\cdot\!(\mathbf{u}T_f) &= \varepsilon k_f\nabla^2 T_f + h_v\,(T_s-T_f),\\
+0 &= (1-\varepsilon)k_s\nabla^2 T_s + h_v\,(T_f-T_s),
+\end{align}
+其中渗透率与 Forchheimer 系数按 \textbf{Ergun} 关系由颗粒尺度 $d_p$ 与孔隙率 $\varepsilon$ 计算：
+\begin{equation}
+K=\frac{d_p^{2}\varepsilon^{3}}{150(1-\varepsilon)^{2}},\qquad
+F=\frac{1.75}{\sqrt{150}}\,\varepsilon^{1.5}.
+\end{equation}
+$h_v$ 为体积换热系数 [W/(m$^3$K)]；$h_v=0$ 时退化为局部热平衡（LTE，$T_s\equiv T_f$）。
+变量约定与低速块一致：\code{U(1)=$\rho$}、\code{U(2..4)=速度}、\code{U(5)=T\_f}、压力在 \code{B\%p}，
+骨架温度在 \code{B\%Ts}（初值 \code{Porous\_T\_ref}）。全部为 \textbf{SI}。
+
+\subsection{多孔参数表}
+\begin{table}[htbp]\centering\small
+\caption{组 \code{\$porous\_ec} 与相关文件}\label{tab:porousparams}
+\begin{tabular}{llp{8.0cm}}
+\toprule
+参数 & 默认值 & 说明/建议 \\
+\midrule
+\code{Porous\_T\_ref} & 288.15 & 骨架温度初值 [K]（也是 SIMPLE 路径的参考温度）\\
+\code{Porous\_alpha\_Ts} & 0.7 & 骨架温度方程的欠松弛 \\
+\code{Porous\_Max\_Iter} & 5000 & 每次调用多孔求解器的 SIMPLE/AC 迭代上限 \\
+\code{Porous\_Tol} & 1e-8 & 压力修正残差判据 \\
+\code{Porous\_U\_in/V\_in/W\_in} & 0,0,0 & 专用冷却剂入口速度 [m/s]；三者全 0 时\textbf{回落到 \code{LS\_U\_in/LS\_V\_in/LS\_W\_in}} \\
+\code{Porous\_T\_in} & 0 & 冷却剂入口温度 [K]；$\le 0$ 时回落 \code{LS\_T\_ref} \\
+\code{porous.inp} & --- & 逐块 $\varepsilon$、$d_p$[m]、$h_v$[W/(m$^3$K)]（见 \S 2.7）\\
+\code{material.in} & --- & 类型码 3 + 骨架 $\rho,C_p,k_s$（SI）\\
+\code{solid\_bc.inp} & --- & 骨架壁面热边界（等温 $T_w$ / 热流 $Q_w$）\\
+\code{LS\_rho,mu,k,Cp} & 见表 \ref{tab:lsparams} & 流体物性直接复用低速参数 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{入口的优先级}
+多孔块入口：若 \code{Porous\_U/V/W\_in} 至少一个非零 $\Rightarrow$ 用它作为入口速度；
+否则用 \code{LS\_U\_in/LS\_V\_in/LS\_W\_in}。入口面仍需在 \code{bc3d.inp} 里标
+码 5 / 21（入口），出口标 6 / 22。
+
+\subsection{求解算法与预算}
+\begin{itemize}
+  \item \code{LS\_Algorithm=1/2}（SIMPLE/SIMPLEC）：\code{src/sub\_porous.f90}，含 DBF 源项；
+        骨架温度与流体温度交替求解，\code{Porous\_alpha\_Ts} 控松弛。
+  \item \code{LS\_Algorithm=3}（AC-FV，推荐用于耦合算例）：\code{src/sub\_porous\_ac.f90}
+        与低速 AC 共用引擎，动量方程加入
+        $c_{drag}=\bigl[\varepsilon^2\mu/K+\varepsilon^3F\rho\lvert\mathbf{u}\rvert/\sqrt{K}\bigr]/\rho$
+        （残差项 $-\,c_{drag}V u_m$，LU-SGS 对角 $+\,c_{drag}V$）；流动收敛后再解 LTNE 温度对。
+  \item \textbf{耦合预算}：交错耦合时 "多孔段" 的迭代量
+        $= \code{AC\_Max\_Iter}\times\code{Porous\_Chunk\_Iter}$
+        （SIMPLE 路径则为 $\code{Porous\_Max\_Iter}\times\code{Porous\_Chunk\_Iter}$）。
+        实测参考：$5000\times3\approx170$ s/轮，$20000\times10\approx65$ min/轮
+        $\Rightarrow$ \textbf{改这两个参数前先估时间}。
+\end{itemize}
+
+\subsection{参数选取建议}
+\begin{itemize}
+  \item \textbf{$\varepsilon$}：颗粒床 0.36--0.45；金属泡沫/丝网 0.8--0.95；
+        本仓库 case3 取 0.30（致密多孔壁）。
+  \item \textbf{$d_p$}：用实际颗粒/孔径 [m]；$K\propto d_p^2$，$d_p$ 偏大会低估阻力。
+  \item \textbf{$h_v$}：由换热面积密度估算 $h_v\approx a_s h_{conv}$（$a_s$ 比表面积 [m$^2$/m$^3$]）；
+        金属泡沫典型 $10^{5}$--$10^{7}$ W/(m$^3$K)。$h_v$ 越大 LTNE 温差越小。
+  \item \textbf{收敛}：压力修正残差与骨架温度残差都要看；$\varepsilon$ 小、$d_p$ 小（阻力大）
+        时需减小伪时间步（\code{AC\_CFL}）或增大 \code{Porous\_alpha\_Ts} 的欠松弛。
+  \item \textbf{验证算例}：\code{porous\_plug}（Darcy/Darcy--Brinkman 解析）、
+        \code{porous\_ltne\_1d}（LTNE 一维，含 $h_v$ 标定）、
+        \code{beavers\_joseph}（码 16 界面滑移解析解）、
+        \code{porous\_fluid\_phaseB}（码 19 发汗壁 + 分段交错）。
+  \item \textbf{已知缺口}：多孔速度入口存在约 28\% 通量缺口（流量锁定问题）；
+        压力求解器为迭代型，后续建议换 BiCGStab/ILU（见第 \ref{sec:validation} 章）。
+\end{itemize}
+
+\noindent\textbf{依据文件}：\code{src/sub\_porous.f90}、\code{src/sub\_porous\_ac.f90}、
+\code{cases/porous\_plug/*}、\code{cases/beavers\_joseph/*}、\code{docs/程序能力与算例考核总结.md}。
+%===EOF===

@@ -39,3 +39,12 @@ cases/**/run_sync.log
 cases/**/field_restart.dat
 cases/**/flow3d_node.dat
 
+# LaTeX 程序说明（docs/程序说明/）的中间文件；保留 .tex/.pdf/build.sh/README.md
+docs/程序说明/*.aux
+docs/程序说明/*.log
+docs/程序说明/*.toc
+docs/程序说明/*.out
+docs/程序说明/*.synctex.gz
+docs/程序说明/build.log
+docs/程序说明/main.pdf
+

@@ -1,0 +1,88 @@
+%==============================================================================
+%  OpenCFD-EC 1.16a 程序说明（多块/多区域扩展版）
+%  编译：  xelatex main.tex   （连续两次以生成目录与交叉引用）
+%  或：    ./build.sh
+%  注意：  中文用 ctex + Fandol 字体（xeCJK），务必用 xelatex/lualatex，勿用 pdflatex
+%  维护：  程序新增功能后，请更新对应章节并在 92_changelog.tex 追加一条记录
+%==============================================================================
+\documentclass[11pt,a4paper,fontset=fandol]{ctexart}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{fancyhdr}
+\usepackage[hidelinks,bookmarksnumbered]{hyperref}
+
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small OpenCFD-EC 1.16a 程序说明}
+\fancyhead[R]{\small 第\,\thepage\,页}
+\renewcommand{\headrulewidth}{0.4pt}
+\setlist{nosep,leftmargin=1.7em}
+\captionsetup{font=small}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  columns=flexible,
+  keepspaces=true,
+  showstringspaces=false,
+  frame=single,
+  framerule=0.3pt,
+  rulecolor=\color{gray!60},
+  backgroundcolor=\color{gray!5},
+  xleftmargin=0.8em,
+  framexleftmargin=0.8em,
+  captionpos=b
+}
+
+\title{\bfseries OpenCFD-EC 1.16a 程序说明\\[0.4em]
+ \large 多块/多区域扩展版\\[0.2em]
+ \normalsize 固体导热 · 可压高速 · 不可压低速 · 多孔介质 · 跨区域耦合}
+\author{基于 Li Xinliang（中科院力学所 LHD）OpenCFD-EC 1.16a 的可压缩密度基基线扩展}
+\date{版本 1.0 \quad 2026-09-25}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+本手册面向 OpenCFD-EC 1.16a 的\textbf{多块/多区域扩展版}，系统说明：
+\begin{enumerate}
+  \item 程序的块类型体系（可压流体 / 固体 / 低速不可压 / 多孔介质）与跨区域接口码；
+  \item 各求解器的物理模型、离散方法、\textbf{控制参数含义、默认值、选取建议与典型标定经验}；
+  \item \code{control.ec}（7 组 namelist）及 \code{bc3d.inp} / \code{bc3d\_interface.inp} /
+        \code{material.in} / \code{porous.inp} / \code{solid\_bc.inp} 的写法；
+  \item 输出与重启（\code{flow3d.dat} / VTK / \code{flow3d\_node.dat} / \code{field\_restart.dat}）；
+  \item 以 \code{cases/fluid\_solid} 的\textbf{三个耦合算例}（码 11 / 12 / 19）为例，
+        逐一给出算例设置、逐参数解释、运行命令、时间预算与常见问题。
+\end{enumerate}
+\textbf{维护约定}：程序新增或修改功能后，必须同步更新本手册对应章节，并在
+\hyperref[app:changelog]{附录 C“更新记录”}追加一条。各章的“依据文件”给出了可核对的源码位置。
+\end{abstract}
+
+\tableofcontents
+\clearpage
+
+\input{chap01_overview}
+\input{chap02_inputs}
+\input{chap03_compressible}
+\input{chap04_lowspeed}
+\input{chap05_porous}
+\input{chap06_solid}
+\input{chap07_coupling}
+\input{chap08_output_restart}
+\input{chap09_case_fluid_solid}
+\input{chap10_build_run}
+\input{chap11_validation}
+\appendix
+\input{91_appendix_params}
+\input{92_appendix_codes}
+\input{93_changelog}
+
+\end{document}

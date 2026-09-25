@@ -1,7 +1,46 @@
 # Progress — 已完成 / 待办
 
-> 更新：2026-09-24。**基线提交 `29fc24f`**（本次改动已全部提交；仅 `.vscode/settings.json` 未提交）。
+> 更新：2026-09-25（新增“修复集群启动崩溃”）。**HEAD = `fe7f86b`**（09-25 修复改动**尚未提交**）。
 > 更早的开发历史见 `docs/工作日志.md`、`docs/程序能力与算例考核总结.md`、`memory-bank/worklog.md`。
+
+## ✅ 已完成（2026-09-25 第三轮）：LaTeX 程序说明手册 v1.0
+- [x] 新建 `docs/程序说明/`（`main.tex` + 12 章节 + `build.sh` + `README.md`），
+      xelatex（ctex/Fandol 字体）两遍编译通过，**0 undefined**，PDF 40 页：
+      `docs/OpenCFD-EC-1.16a-程序说明.pdf`。
+- [x] 覆盖：块类型/接口码/物理边界码/面编号/单位与无量纲化；`control.ec` 7 组规则；
+      网格/bc3d/bc3d_interface/material/porous/solid_bc 文件格式；
+      可压高速、低速（SIMPLE/SIMPLEC/AC-FV，含 AC 标定经验表）、多孔（DBF+LTNE+Ergun）、
+      固体导热（含 CHT 界面公式）四类求解器与**参数选取建议**；
+      跨区域耦合（同步 vs 交错、调度表、判据、成本对比、FAQ）；输出与重启（`iver=2` + 耦合状态）；
+      **三个 fluid_solid 算例详解**；构建运行与集群注意事项；验证/回归方法与已知问题。
+- [x] 附录 A `control.ec` 全部参数与默认值总表；附录 B 编号/格式/单位/日志速查；
+      **附录 C 更新记录（后续新功能追加于此）**。
+- [x] `.clinerules`、`constraints.md §0`、`projectbrief.md`、`README.md` 写入
+      **“新功能必须同步更新手册 + 附录 A/C + 重编译”** 的维护规则；
+      `.gitignore` 忽略 LaTeX 中间文件。
+
+## ✅ 已完成（2026-09-25 第二轮）：重启后按耦合状态续算（继续交错 / 切逐步强耦合）
+- [x] `field_restart.dat` `iver` 1→2：追加 coupling-state trailer（mode/conv/pair/iter/nf,nk +
+      `max|dT_w|/tol` + 界面量 `T_w,q_w,u,p_w`）；旧 `iver=1` 文件仍可读；
+      读侧 iostat 容错 + 0 号进程广播；新增 `set_couple_state` / `set_couple_tight_state`。
+- [x] 三个交错驱动：界面量可从 restart 恢复（**跨重启零跳变**）；每轮登记状态。
+- [x] 新开关 `Iflag_Couple_Restart`（`$couple_ec`，默认 0 自动 / 1 强制强耦合 / 2 强制交错 / -1 忽略）；
+      6 步流程齐全（`Ipara(58)`）。
+- [x] 主程序分派：自动判定已满足 ⇒ 内部 `Iflag_Couple_Scheme=0` 走**逐步强耦合**（`t_end` 生效），
+      并自动 cap 固体每步预算（`Solid_Max_Iter≤20`、`Solid_Tol≥1e-6`）、退出前补写重启文件。
+- [x] 验证（`mpirun -np 1`）：ct1（12 轮等价 + 续算零跳变）、ct2（收敛→自动切强耦合→逐步推进）、
+      ct3a–d（四种开关取值）全部 **EXIT=0 / NaN=0**；`output_para.out` 仅多 1 行新回显。
+- [x] 文档：`control.ec.template`、`docs/control.ec-说明.md §8`、`docs/重启与节点流场输出说明.md §8`。
+
+## ✅ 已完成（2026-09-25）：修复集群 run1 启动崩溃（`control.ec` 同一文件双 unit）
+- [x] 定位：`src/sub_read_parameter.f90:976` `open(98,file="control.ec",status='old')` 与第 293 行
+      `open(99,file="control.ec")` 冲突 —— 同一文件同时连两个 unit，违反 F2018 §12.5.6。
+- [x] 解释“本地通过 / 集群崩”的差异：本地 gfortran 13.3.0 实测同一文件开两个 unit `iostat=0`
+      （放宽了检查）；旧 libgfortran 按标准**致命报错**，且该 open 无 `iostat` ⇒ 直接终止。
+- [x] 修复：`scan_control_ec_groups(unit, ...)` 传 unit 99，删 `open(98)/close(98)`
+      （**1 文件 / +20 / −5**，逻辑等价；`control.ec` 全仓库只剩 1 处 open）。
+- [x] 验证：`make` EXIT=0、改动文件零告警；`/tmp/val_case1`（case1 输入副本）**12 轮跑完、NaN=0**、
+      写出 `field_restart.dat`/`flow3d_node.dat`；`output_para.out` 与旧二进制参考**逐字节一致**。
 
 ## ✅ 已完成（2026-09-23 会话）：control.ec 拆分为 7 组 namelist
 - [x] 盘点：`$control_ec` 共 **128 个变量**、**全部有代码默认值**；实测算例中 70~75% 的赋值行与
@@ -79,6 +118,13 @@
       `case3`（多孔+可压）多孔块 `T`/`Ts` 分列；三例均 `STRUCTURE OK`、`NaN=0`。
 
 ## ⏳ 待办（本次未做，按优先级）
+- [ ] **集群同步（立即）**：把修好的 `src/sub_read_parameter.f90` 拷到
+      `/work/home/lijunyang/sundong/PorousTest/code/` 并重新 `make` —— 否则集群 run1 仍会报
+      `File already opened in another unit`；建议整份 `src/` 同步，避免版本漂移。
+- [ ] 同类隐患（2026-09-25 按用户要求**未修**）：`util/readflow3d-ver2.5.f90`（99@707 + 96@791）、
+      `util/readflow3d-ver2.4a.f90`（99@681 + 96@765）——同一 `control.ec` 连两个 unit，
+      旧编译器下同样崩；修法与 `scan_control_ec_groups` 相同（传 unit、不自己 open）。
+- [ ] 提交本次修复（建议消息：`fix(io): 不再二次打开 control.ec（旧 libgfortran 报 File already opened in another unit）`）。
 - [ ] **（上一任务）重启文件 `field_restart.dat`**：写流场 `U`(含 LAP ghost 缓冲) + `Ts/Tsn` + `p`
       + `Kstep/tt`；`Kstep_save` 节奏定期保存；启动时存在即自动续算（`Iflag_restart`）。
       新开关放入 `$flow_ec`。交错驱动入口的 `tt/Kstep=0` 需改为“续算时恢复”。

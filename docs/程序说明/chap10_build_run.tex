@@ -1,0 +1,74 @@
+\section{构建、运行与并行}
+\label{sec:build}
+
+\subsection{编译}
+\begin{lstlisting}
+cd src
+make                 # 默认编译器 mpif90；产物 opencfd-ec1.16a.out
+make clean           # 清理 *.o *.mod *.out
+\end{lstlisting}
+当前 \code{makefile} 的编译选项：
+\begin{lstlisting}
+f77 = mpif90
+opt = -g -std=legacy -ffree-line-length-none -freal-4-real-8 -O3
+\end{lstlisting}
+其中 \code{-freal-4-real-8} 把单精度提升为双精度（\code{real(PRE\_EC)}），
+\code{-std=legacy} 兼容旧代码风格。需要 OpenMP 时用 \code{-openmp} 并把 \code{NUM\_THREADS} 设为线程数。
+\textbf{改动任何 \code{src/*.f90} 后必须重新 \code{make} 再验证。}
+
+\subsection{运行}
+\begin{lstlisting}
+cd cases/<case>
+mpirun -np 1 ./opencfd-ec1.16a.out          # 交错耦合（码 12/19）必须单进程
+mpirun -np 4 ./opencfd-ec1.16a.out          # 多进程：需块数 >= 进程数，自动分区
+\end{lstlisting}
+\begin{itemize}
+  \item 启动会依次做：读 \code{control.ec} $\to$ \code{prepare\_bc3d\_input}（校验/生成 \code{bc3d.inp}）
+        $\to$ 网格质量检查 $\to$ \code{Init} $\to$ 读/生成 \code{wall\_dist.dat}
+        $\to$ \code{Init\_flow}（有 \code{field\_restart.dat} 则续算）$\to$ 时间推进；
+  \item 多进程时会自动生成 \code{partation-auto.dat}、\code{part\_grid.dat}；
+        若目录里已有 \code{partation.dat} 则优先使用；
+  \item \textbf{交错耦合模式目录里不要放 \code{partation.dat}}（否则可能被分到多进程而挂死）。
+\end{itemize}
+
+\paragraph{编译/运行环境注意事项（集群经验）}
+\begin{itemize}
+  \item \textbf{编译器的严格程度会暴露代码里违反标准之处}：例如“同一文件同时连到两个 unit”
+        在新版 libgfortran 下被放宽（不报错），但旧版会致命报错
+        \code{File already opened in another unit}。本仓库已在 2026-09-25 修复
+        \code{control.ec} 的该问题；换工具链后若报类似信息，优先按此思路排查
+        （\code{open} 同一文件两次/两个 unit）。
+  \item \textbf{集群上通常是另一份源码副本}：改完要\textbf{同步 \code{src/} 并重新 \code{make}}，
+        再把 \code{opencfd-ec1.16a.out} 拷到算例目录；不要只拷二进制而忘了源码版本一致。
+  \item \textbf{保留 \code{field\_restart.dat}}：作业被时限杀死后可从最近保存点续算；
+        建议把 \code{Kstep\_restart} 设小一些（如 100$\sim$500）以限制重算量。
+  \item 作业脚本示例（PBS/Slurm 通用骨架）：
+\begin{lstlisting}
+cd $CASE_DIR
+module load mpi/...          # 与编译时一致的 MPI
+mpirun -np 1 ./opencfd-ec1.16a.out > run.log 2>&1
+\end{lstlisting}
+\end{itemize}
+
+\subsection{算例目录产物与清理}
+运行产物（可随时删除/重建）：\code{*.vtk}、\code{flow3d.dat}、\code{Residual.dat}、
+\code{force*.log}、\code{*.inc}、\code{mesh-quality.dat}、\code{field\_restart.dat}、
+\code{flow3d\_node.dat}、\code{Ts\_block\_*.dat}、\code{iface\_*.dat}、\code{partation-auto.dat}、
+\code{part\_grid.dat}。
+建议保留的“证据文件”：\code{run*.log}、\code{output\_para.out}、坏例的 \code{Residual.dat}。
+仓库 \code{.gitignore} 已忽略 \code{field\_restart.dat} 与 \code{flow3d\_node.dat} 等大文件。
+
+\subsection{调试手段}
+\begin{itemize}
+  \item \code{IF\_Debug=1}：打印接口配对诊断（\code{dbg\_dump\_interfaces}）；
+  \item \code{Pdebug(1:4)}：分块/残差的额外打印级别；
+  \item \code{Iflag\_bc\_check=2}：边界文件严格校验，便于定位 \code{bc3d.inp} 与
+        \code{bc3d\_interface.inp} 不一致；
+  \item \code{Kstep\_show}、\code{AC\_Print}：控制残差输出频率；
+  \item 多进程时优先看 0 号进程日志；挂死常见原因是“各 rank 的开关取值不一致”
+        （新开关必须进 \code{bcast\_para}）。
+\end{itemize}
+
+\noindent\textbf{依据文件}：\code{src/makefile}、\code{src/opencfd\_ec3d\_v1.16a.f90}、
+\code{src/sub\_partation\_mpi.f90}、\code{memory-bank/constraints.md}。
+%===EOF===

@@ -1,0 +1,95 @@
+\section{输出、重启与耦合状态}
+\label{sec:restart}
+
+\subsection{输出文件总览}
+\begin{table}[htbp]\centering\small
+\caption{运行产物}\label{tab:outputs}
+\begin{tabular}{p{4.1cm}p{3.6cm}p{7.0cm}}
+\toprule
+文件 & 触发 & 内容/单位 \\
+\midrule
+\code{Residual.dat} & \code{Kstep\_show} & 残差（追加写）\\
+\code{force.log}、\code{force-invis-vis.log} & \code{Kstep\_show} & 气动力/力矩（粘性/无粘分开）\\
+\code{flow3d.dat} & \code{Kstep\_save}（且 \code{Iflag\_savefile=1}） & 可压流场（PLOT3D 风格，无量纲）\\
+\code{flow3d\_block\_*.vtk} / \code{flow3d.vtk} & \code{Kstep\_save} & VTK；\code{Iflag\_vtk\_onefile=0} 每块一个，$=1$ 合并；\code{Iflag\_vtk\_SI=1} 输出 SI \\
+\code{flow3d\_node.dat} & \code{Kstep\_save} 且 \code{Iflag\_flow\_node=1} & \textbf{节点} SI 流场，6 变量 \code{d,u,v,w,T,Ts}，unformatted 逐块一条记录 \\
+\code{Ts\_block\_*.dat} & \code{Kstep\_save} & 各固体/多孔块骨架温度（K）\\
+\code{iface\_couple.dat} / \code{iface\_highlow.dat} & 交错每轮 & 界面量（$x_w,T_w,q_w,p_w$ / $|u|_w$）\\
+\code{mesh-quality.dat}、\code{wall\_dist.dat} & 启动/自动 & 网格质量、壁距（缺失自动生成）\\
+\code{field\_restart.dat} & \code{Kstep\_restart}（$\le0$ 时 $=\code{Kstep\_save}$） & \textbf{重启文件}（见 \S\ref{sec:restartfile}）\\
+\code{output\_para.out} & 启动 & 全部生效参数 + 组来源回显（回归比对用）\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{重启文件 \code{field\_restart.dat}}
+\label{sec:restartfile}
+unformatted（双精度）布局：
+\begin{lstlisting}
+record 1 : iver, Total_block, Num_Mesh, NVAR, Kstep, LAP        (iver=2)
+record 2 : tt, Ma, Re, gamma, T_inf, Lscale, dt_global
+每块(全局块序) : nx,ny,nz
+              : U (1:NVAR, 1-LAP:nx+LAP-1, ...)  含完整 LAP=4 鬼点缓冲
+              : Ts, Tsn, p                      固体/骨架温度、上一步 Ts、低速/多孔压力
+[iver=2 追加] trailer : Couple_State_Mode, Conv, Pair, Iter, nf, nk
+                      : Couple_State_Twmax, Couple_State_Tol
+                      : Tw_save, qw_save, u_save, pw_save   (nf x nk; 仅 nf,nk>0)
+\end{lstlisting}
+读入时校验 \code{nblock / NVAR / LAP / 块 1 维数 / Ma / Lscale}，不一致即\textbf{回退到原初始化}
+（均匀场或 \code{Iflag\_init} 路径）；\code{Iflag\_restart=1}（强制）时不可用即 \code{stop 1}。
+读入后自动刷新块间缓冲（\code{update\_buffer\_onemesh} / \code{update\_Ts\_buffer\_onemesh}），
+因此高精度格式的缓冲信息被精确恢复。
+\textbf{旧版本（\code{iver=1}，无 trailer）文件仍可读}，耦合状态视为"未知"（保持旧行为）；
+被 kill 造成的残缺 trailer 也会被 \code{iostat} 容错回退。
+
+\paragraph{开关}
+\begin{itemize}
+  \item \code{Iflag\_restart}：\code{0} 自动（存在即续算，默认）；\code{1} 强制（缺文件报错）；
+        \code{-1} 完全关闭（不读也不写）；
+  \item \code{Kstep\_restart}：写出间隔；$\le0$ 时等于 \code{Kstep\_save}；
+  \item 注意重启文件较大（case1 约 17.5 MB/次），集群上请按需放大间隔。
+\end{itemize}
+
+\subsection{耦合状态与重启续算模式（\code{Iflag\_Couple\_Restart}）}
+交错耦合的界面量（$T_w,q_w,u,p_w$）与收敛状态会随重启文件保存，于是续算可以：
+\begin{itemize}
+  \item \textbf{零跳变}：继续交错时\textbf{直接恢复界面量}，不再从 \code{control.ec} 初值重播；
+  \item \textbf{自动切换}：若上次结束时已满足 \code{Tol\_Couple\_Tw}，则不再重播交错调度，
+        而是把内部 \code{Iflag\_Couple\_Scheme} 置 0，进入\textbf{逐时间步强耦合}主循环
+        （\code{t\_end} 重新生效），并在退出前补写一次重启文件。
+\end{itemize}
+\begin{table}[htbp]\centering\small
+\caption{\code{Iflag\_Couple\_Restart}（组 \code{\$couple\_ec}，默认 0）}\label{tab:cprestart}
+\begin{tabular}{clp{8.6cm}}
+\toprule
+值 & 行为 & 说明 \\
+\midrule
+0 & 自动 & 上次已满足判据 $\Rightarrow$ 切逐步强耦合；否则继续交错（界面量恢复）\\
+1 & 强制强耦合 & 重启后立即进入逐时间步耦合（\code{t\_end} 生效）\\
+2 & 强制交错 & 保持 2026-09-25 之前的行为（仍恢复界面量，避免跳变）\\
+$-1$ & 忽略 & 不判定也不恢复界面量（\textbf{严格复现旧行为}，用于回归测试）\\
+\bottomrule
+\end{tabular}
+\end{table}
+\textbf{切强耦合时自动限制固体预算}：\code{Solid\_Max\_Iter}$=\min$(现值, 20)、
+\code{Solid\_Tol}$=\max$(现值, $10^{-6}$)——只改扫掠上限与容差，SOR 因子与物理不变；
+实际生效值打印在日志与 \code{output\_para.out}。
+
+\subsection{节点流场 \code{flow3d\_node.dat}（\code{Iflag\_flow\_node=1}）}
+\begin{itemize}
+  \item 8 格心平均 $\to$ \textbf{网格节点}，\textbf{SI 单位}，unformatted，
+        \textbf{逐块一条记录}，块序与 \code{Mesh3d.x} 一致，故可直接与 \code{Mesh3d.x} 组合显示；
+  \item 每条记录 \textbf{6 个场}：\code{d, u, v, w, T, Ts}。
+        \code{T} $=$ 流体温度（固体块为固体温度，沿用 \code{flow3d.vtk} 约定）；
+        \code{Ts} $=$ \textbf{固体/骨架温度}（多孔块 LTNE 温差因此可见；流体/低速块镜像 \code{T}）；
+  \item 校验工具：\code{python3 util/check\_flow3d\_node.py}（打印每块维度、点数与量级统计）。
+\end{itemize}
+
+\paragraph{MPI 约定（改代码时必守）}
+读写文件\textbf{只由 0 号进程做}并遍历全局块序；其它 rank 只遍历\textbf{自己拥有}的块
+（\code{B\_n(m)} 仅本进程有效，非 0 号进程访问全局块表会越界/挂死）。
+新增开关必须同时进 \code{bcast\_para}（否则各 rank 取值不一致会在 I/O 处死锁）。
+
+\noindent\textbf{依据文件}：\code{src/sub\_restart.f90}、\code{src/sub\_IO.f90}、
+\code{docs/重启与节点流场输出说明.md}。
+%===EOF===

@@ -1,0 +1,132 @@
+\section{跨区域耦合}
+\label{sec:coupling}
+
+\subsection{两种耦合模式}
+由 \code{\$couple\_ec: Iflag\_Couple\_Scheme} 选择：
+
+\begin{table}[htbp]\centering\small
+\caption{耦合模式}\label{tab:couplemode}
+\begin{tabular}{clp{9.0cm}}
+\toprule
+取值 & 模式 & 说明 \\
+\midrule
+0 & \textbf{逐时间步同时耦合}（tight/强耦合） & 每个时间步把所有块各推进一次，然后调用
+    \code{couple\_fluid\_solid\_interfaces} 等例程刷新交界面鬼点；气/固同步前进。\\
+1 & \textbf{分段交错耦合}（staggered） & 主程序改走 \code{run\_staggered\_multiregion}：
+    先推进一侧若干步（chunk），再解另一侧，反复交替并用外层判据收口；\code{t\_end} 不起作用。\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{交错模式的调度表（\code{src/sub\_multi\_region.f90}）}
+第 $it$ 轮（$it=1,\dots,\code{Niter\_Couple\_Outer}$）的气体步数
+\begin{equation}
+n_{step}(it)=
+\begin{cases}
+\code{Kstep\_Couple\_Comp}, & it\le \code{Niter\_Couple\_Warm},\\[2pt]
+\max\!\bigl(\code{Kstep\_Couple\_Min},\ \code{Kstep\_Couple\_Comp}/2^{\,it-\code{Niter\_Couple\_Warm}}\bigr), & \text{否则},
+\end{cases}
+\end{equation}
+即“先粗稳、再细修”。整段总步数 $=\sum_{it} n_{step}(it)$。
+例如 case1（\code{Comp=1000, Warm=2, Outer=12, Min=1}）$=1000,1000,500,250,125,62,31,15,7,3,1,1=\mathbf{2995}$ 步。
+
+\paragraph{外层收敛判据}
+\begin{itemize}
+  \item 码 11/13/19（含固体/多孔）：$\max\lvert\Delta T_w\rvert<\code{Tol\_Couple\_Tw}$（K）；
+  \item 码 12（高低速流-流）：还要求 $\max\lvert\Delta p_w\rvert<\code{Tol\_Couple\_p}$（Pa）与
+        $\max\lvert\Delta u_w\rvert<\code{Tol\_Couple\_u}$（m/s）；
+  \item 判据从第 2 轮起生效（第 1 轮仅作初始化）；满足即提前退出，否则跑满 \code{Niter\_Couple\_Outer} 轮并打印
+        \code{(not fully converged)}——\textbf{这是正常结束，不是崩溃}。
+\end{itemize}
+
+\subsection{交错耦合参数表}
+\begin{table}[htbp]\centering\small
+\caption{组 \code{\$couple\_ec}}\label{tab:coupleparams}
+\begin{tabular}{llp{8.2cm}}
+\toprule
+参数 & 默认值 & 说明/选取建议 \\
+\midrule
+\code{Iflag\_Couple\_Scheme} & 0 & 0 同时耦合；1 分段交错 \\
+\code{Kstep\_Couple\_Comp} & 1000 & 每轮气体段步数基准（\textbf{决定物理时间推进量}）\\
+\code{Niter\_Couple\_Outer} & 60 & 外层轮数（\textbf{交错模式的时间推进总控制}）；太小则物理时间不足 \\
+\code{Niter\_Couple\_Warm} & 0 & 前几轮跑满 \code{Kstep\_Couple\_Comp}（暖机）\\
+\code{Kstep\_Couple\_Min} & 1 & 步数下限；\textbf{不要长期用 1}（末段几十轮只有 1 步，几乎不推进时间），
+      建议 20--100 \\
+\code{Porous\_Chunk\_Iter} & 10 & 每轮多孔段调用多孔求解器的次数（预算 $=\code{AC\_Max\_Iter}\times$ 本值）\\
+\code{Twall\_Couple\_Init} & 300 & 首轮界面壁温初值 [K]（气体侧等温壁）\\
+\code{Tol\_Couple\_Tw} & 2e-2 & 温度外层判据 [K]；与物理时间尺度匹配，否则永不满足 \\
+\code{Tol\_Couple\_p}/\code{Tol\_Couple\_u} & 10 / 1e-2 & 码 12 的压力/速度判据 [Pa] / [m/s] \\
+\code{Iflag\_Couple\_WallFlux} & 0 & CHT 模式：0 耦合式；1 等温 $T_w$/热流 $q_w$ 壁通量式（\code{wfmode}）\\
+\code{Iflag\_Couple\_Restart} & 0 & 重启后按耦合状态续算（见 \S\ref{sec:restart}）\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{交错模式的输出}
+每轮结束写出 \code{iface\_couple.dat}（码 11/13/19：\code{x\_w, T\_w, q\_w, p\_w}）
+或 \code{iface\_highlow.dat}（码 12：\code{x\_w, T\_w, p\_w, |u|\_w}），可直接画界面量收敛曲线。
+
+\subsection{性能与选择指南}
+\begin{table}[htbp]\centering\small
+\caption{两种模式对比（\code{cases/fluid\_solid} 实测，单进程）}\label{tab:cost}
+\begin{tabular}{p{3.4cm}p{5.2cm}p{5.2cm}}
+\toprule
+项目 & 逐时间步同时耦合（0） & 分段交错（1）\\
+\midrule
+固体求解频次 & \textbf{每步一次}（默认 $20000/10^{-9}$ 时约 15--20 s/步） & 每外层轮一次（$\sim$秒级）\\
+气体步数控制 & \code{t\_end} / \code{Kstep\_save}（正常时间推进） & \code{Niter\_Couple\_Outer} 与调度表（\code{t\_end} 无效）\\
+界面信息 & 每步即时更新（无滞后） & 外层轮间滞后（$n_{step}$ 步）；用判据控制滞后量\\
+适用场景 & 界面变化快、强耦合、物理时间短 & 长时程 CHT/发汗冷却，界面缓变\\
+强制要求 & --- & \textbf{必须单进程}（12/19 无跨进程耦合；码 11 有 \code{cht\_mpi\_fluid\_solid\_face}）\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{建议}：先用交错模式把界面"跑稳"（成本低），再视需求切到逐时间步强耦合；
+切换与续算已由 \code{Iflag\_Couple\_Restart} 自动化（见 \S\ref{sec:restart} 与第 9 章 case 示例）。
+
+\subsection{接口配对与连接描述符（新拓扑如何支持）}
+\begin{itemize}
+  \item 读入 \code{bc3d\_interface.inp} 后程序自动完成\textbf{块间配对}、\textbf{接口面指标对齐}
+        （\code{src/sub\_convert\_inp.f90}、\code{src/sub\_IO.f90}）；
+        链接式写法（物理码 + \code{nb1}/\code{face1}）会被"提升"为规范接口码，
+        如 \code{bc<0} 或 $11\le bc\le 19$ 都按界面处理。
+  \item 每个界面几何由描述符 $L_1,L_2,L_3$ 决定：本块第 $k$ 维 $\leftrightarrow$ 邻块第 $|L_k|$ 维，
+        符号表示正/反向。\textbf{耦合例程一律用 L 表做指标映射}，
+        因此像 case1 的 \code{gas i+ (face 4) <-> solid j- (face 2)} 这种"非同向"拓扑，
+        只要该组合被允许即自动工作。
+  \item 可压--固体通用耦合核 \code{couple\_compressible\_fluid\_solid\_face} 明确支持
+        \textbf{任意 $6\times6$ 面组合}；码 11/12/19 的交错驱动在 2026-09-18 已扩展到
+        \code{gas i+ <-> 对侧 j-}（\code{cases/fluid\_solid} 拓扑）。
+  \item 自检：\code{IF\_Debug=1} 时启动会调用 \code{dbg\_dump\_interfaces}，
+        打印每个界面的 \code{face/face1}、节点范围与 \code{L1..L3}——\textbf{新拓扑调试必用}。
+\end{itemize}
+
+\subsection{发汗壁（码 19 的 pair42 分支）}
+当可压气体界面同时是\textbf{冷却剂注入面}时，启用发汗壁：
+气体侧按\textbf{等温壁 $T_w$} $+$ 法向喷射通量处理（\code{wall\_bound\_blowing}），
+多孔侧按界面温度外推骨架温度（$T_{s,g}=T_{s,i}+q_w dx/k_{s,eff}$）并返回新的 $T_w$。
+控制参数：多孔入口由 \code{Porous\_U/V/W\_in}（或 \code{LS\_*} 回落）给定，
+气体侧热流必须有粘性（\code{If\_viscous=1}）。
+
+\subsection{常见问题（FAQ）}
+\begin{description}
+  \item[为什么只算了 2995 步就停了？] 交错模式的\textbf{设计终点}：跑满
+    \code{Niter\_Couple\_Outer} 轮后正常退出（\code{t\_end} 无效）。要继续：
+    ① 直接再跑一次（有 \code{field\_restart.dat} 会自动续算，界面量零跳变）；
+    ② 增大 \code{Niter\_Couple\_Outer}、\code{Kstep\_Couple\_Min}、\code{Niter\_Couple\_Warm}。
+  \item[外层判据永远不满足（判据平台高于 \code{Tol\_Couple\_Tw}）] 把判据放宽到平台之上
+    （如 case1 平台 $\sim$0.1 K，可取 0.2），或接受"跑满轮数"的用法。
+  \item[启动报 \code{File already opened in another unit}] 旧版 libgfortran 对“同一文件连两个 unit”
+    会致命报错（新版放宽）。请使用 2026-09-25 之后修复的 \code{src/sub\_read\_parameter.f90}
+    （该文件里 \code{scan\_control\_ec\_groups} 复用已打开的 unit，不再二次 \code{open}）。
+  \item[\code{-np>1} 挂死/越界] 交错模式（码 12/19）必须 \code{mpirun -np 1}，
+    且目录里不要放 \code{partation.dat}；码 11 支持跨进程 CHT。
+  \item[NaN] 先查低速块：\code{cases/fluid\_solid} 里 \code{LS\_Algorithm=1}（SIMPLE）会立即发散，
+    必须 AC-FV 且 \code{AC\_CFL=2}（详见 \S\ref{sec:lowspeed}）。
+\end{description}
+
+\noindent\textbf{依据文件}：\code{src/sub\_multi\_region.f90}、\code{src/sub\_convert\_inp.f90}、
+\code{src/sub\_IO.f90}、\code{src/opencfd\_ec3d\_v1.16a.f90}、\code{memory-bank/constraints.md}。
+%===EOF===
+

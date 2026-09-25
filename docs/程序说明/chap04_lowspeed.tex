@@ -1,0 +1,136 @@
+\section{低速不可压求解器（\code{BLOCK\_LOWSPEED}）}
+\label{sec:lowspeed}
+
+\subsection{变量约定（易错，务必先读）}
+块类型 2。原始变量\textbf{格心存储}：
+\begin{center}
+\code{U(1) = rho = LS\_rho}（常密度）、\ \code{U(2..4) = 速度分量 [m/s]}、\ \code{U(5) = T [K]}；
+压力在 \code{B\%p}（含鬼点层）。
+\end{center}
+\textbf{注意：低速块存的是速度而不是动量}（\code{rho*u}）。低速/多孔块的物性与结果全部为 \textbf{SI}：
+长度用 \code{mesh\,[grid]} $\times$ \code{Lscale}[m]，速度 m/s，温度 K，压力 Pa。
+
+\subsection{三种压力--速度耦合算法（\code{LS\_Algorithm}）}
+\begin{table}[htbp]\centering\small
+\caption{\code{LS\_Algorithm} 选择}\label{tab:lsalg}
+\begin{tabular}{clp{8.6cm}}
+\toprule
+值 & 算法 & 说明/适用 \\
+\midrule
+1 & SIMPLE  & 经典稳态压力修正；对角占优好、网格均匀的算例（如 \code{lidcavity}）\\
+2 & SIMPLEC & 对动量方程邻居项做一致化处理，收敛略快；强耦合/细长通道可试 \\
+3 & \textbf{AC-FV} & 人工压缩（虚拟压缩）伪时间推进 $+$ LU-SGS（\code{src/sub\_lowspeed\_ac.f90}）。
+    对\textbf{强耦合、长通道、低速流固/流多孔}更鲁棒，是 \code{cases/fluid\_solid} 的\textbf{必需}选择\\
+\bottomrule
+\end{tabular}
+\end{table}
+SIMPLE/SIMPLEC 用 \textbf{Rhie--Chow} 插值抑制棋盘压力振荡，动量/压力/温度分别有欠松弛
+\code{LS\_alpha\_u}/\code{LS\_alpha\_p}/\code{LS\_alpha\_T}；
+每次调用求解器内部迭代 \code{LS\_Max\_Iter} 次或压力修正残差 $<$ \code{LS\_Tol}。
+对流项格式由 \code{LS\_Scheme} 选择：1 一阶迎风（最稳）、2 二阶迎风、3 MUSCL(Van Leer)。
+
+\subsection{低速参数表}
+\begin{table}[htbp]\centering\small
+\caption{组 \code{\$lowspeed\_ec}（全部 SI）}\label{tab:lsparams}
+\begin{tabular}{llp{8.0cm}}
+\toprule
+参数 & 默认值 & 说明/选取建议 \\
+\midrule
+\code{LS\_rho} & 1.2 & 密度 [kg/m$^3$]（\textbf{常密度}）\\
+\code{LS\_mu}  & 1.8e-5 & 动力粘度 [Pa$\cdot$s] \\
+\code{LS\_k}   & 0.025 & 导热系数 [W/(m$\cdot$K)]（温度方程/CHT 用）\\
+\code{LS\_Cp}  & 1005 & 比热 [J/(kg$\cdot$K)] \\
+\code{LS\_T\_ref} & 288.15 & 参考/入口温度 [K]（初场、多孔 \code{Porous\_T\_in} 缺省值）\\
+\code{LS\_Inlet\_Type} & 1 & 1 速度入口；2 质量流量入口；3 压力入口（\textbf{见下方限制}）\\
+\code{LS\_U\_in},\code{LS\_V\_in},\code{LS\_W\_in} & 1,0,0 & 入口速度分量 [m/s] \\
+\code{LS\_Mdot\_in} & 0 & 质量流量 [kg/s]（类型 2）\\
+\code{LS\_P\_in} & 101325 & 入口总压 [Pa]（类型 3）\\
+\code{LS\_P\_out} & 101325 & 出口静压 [Pa]（出口面：给定静压 $+$ 零梯度外推）\\
+\code{LS\_T\_wall} & $-1$ & 壁温 [K]；$<0$ 绝热 \\
+\code{LS\_U\_lid} & 0 & 顶盖驱动速度 [m/s]（$j+$ 面）\\
+\code{LS\_alpha\_p},\code{LS\_alpha\_u},\code{LS\_alpha\_T} & 0.3,0.7,0.7 & 欠松弛因子（SIMPLE/SIMPLEC）\\
+\code{LS\_Max\_Iter},\code{LS\_Tol} & 5000, 1e-8 & 每次调用的内部迭代上限/压力修正残差判据 \\
+\code{LS\_Scheme} & 1 & 1 一阶迎风；2 二阶迎风；3 MUSCL \\
+\code{LS\_Algorithm} & 1 & 1 SIMPLE；2 SIMPLEC；\textbf{3 AC-FV} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{入口类型的使用限制（重要）}
+物理边界码 5 / 21 均触发入口处理（\code{BC\_Inflow} / \code{BC\_LS\_Inlet}），出口用 6 / 22。
+当前实现中 \code{LS\_Inlet\_Type=2}（质量入口）按\textbf{$i$ 面 $+$ 网格单位面积}处理，
+用在 $j$ 面上方向/量纲会错。工程做法：把目标质量通量 $G$ [kg/(m$^2$s)] 换算为等效法向速度
+\begin{equation}
+\code{LS\_V\_in} = \frac{G}{\code{LS\_rho}}
+\end{equation}
+并用速度入口（类型 1）。例如 case2/case3 中 $G=2$ kg/(m$^2$s)、$\rho=1.177$ kg/m$^3$
+$\Rightarrow$ 1.699 m/s（$+y$ 方向）。\textbf{该项已列入待办}（改为按面法向赋速度并明确面积量纲）。
+
+\subsection{AC（人工压缩）求解器参数（\code{LS\_Algorithm=3}）}
+伪时间推进：$\dfrac{\partial q}{\partial \tau}+\beta\nabla\!\cdot\!\mathbf{u}=\cdots$，
+其中 $q=p/\rho$，$\beta=\code{AC\_beta}\cdot U_{ref}^2$（$U_{ref}$ 由入口速度/顶盖速度/
+$\sqrt{|\Delta p|/\rho}$ 依次兜底估计）。默认参数：
+
+\begin{table}[htbp]\centering\small
+\caption{组 \code{\$ac\_ec}（低速与多孔共用）}\label{tab:acparams}
+\begin{tabular}{llp{8.2cm}}
+\toprule
+参数 & 默认值 & 说明 \\
+\midrule
+\code{AC\_Max\_Iter} & 40000 & 每次调用的伪时间迭代上限 \\
+\code{AC\_Print} & 500 & 打印间隔 \\
+\code{AC\_beta} & 10 & $\beta=\code{AC\_beta}U_{ref}^2$（越大越\"定常\"、越稳但越慢）\\
+\code{AC\_CFL} & 2 & 无粘 CFL；\textbf{大 CFL 会数轮后发散，需按算例标定} \\
+\code{AC\_CFLv} & 0.5 & 粘性 CFL \\
+\code{AC\_Tol} & 1e-7 & 收敛判据（无量纲残差）\\
+\code{AC\_w} & 1.0 & LU-SGS 松弛 \\
+\code{AC\_Flux} & 1 & 1 Rusanov(LLF)；2 Steger--Warming（3 $=$ AUSM+ 已于 2026-09-17 移除，会告警回落）\\
+\code{AC\_Recon} & 1 & 1 二阶 MUSCL(van Leer)；2 WENO5；3 WENO3 \\
+\code{AC\_Limiter} & 1 & 1 van Leer；2 minmod \\
+\code{AC\_WenoBlend} & 0 & WENO 路径混入的一阶 Rusanov 比例（保正性用）\\
+\code{AC\_WallRecon} & 1 & 壁/对称面：切向状态单侧二阶重构 \\
+\code{AC\_WallP} & 1 & 壁/对称面：压力二阶线性重构 \\
+\code{AC\_MomDiss} & 0 & 动量耗散：0 lumped（默认）；1 分裂混合；2 纯 $|u_n|$（\textbf{不稳定}）\\
+\code{AC\_MomFrac} & 0.2 & \code{AC\_MomDiss=1} 时保留的声速比例下限 \\
+\bottomrule
+\end{tabular}
+\end{table}
+越界/非法取值由 \code{ac\_check\_controls()} 打印告警并回落到安全默认值（不再静默使用未定义值）。
+
+\paragraph{AC 标定经验（来自已有算例，务必参考）}
+\begin{table}[htbp]\centering\small
+\caption{AC 参数的算例标定记录}\label{tab:accalib}
+\begin{tabular}{lll}
+\toprule
+算例 & 关键设置 & 结论 \\
+\midrule
+\code{lidcavity\_ac} & \code{AC\_CFL=20}, \code{AC\_beta=1}, \code{LS\_Algorithm=3} & 稳定，$Re=100$ 与 Ghia 吻合 \\
+\code{channel/type*} & \code{AC\_*}\ 默认附近 & 三类入口均与 Poiseuille 解析吻合 \\
+\code{high\_low\_fluid\_800K} & \code{AC\_beta=10}, \code{AC\_CFL=20}, \code{AC\_Max\_Iter=20000} & 配 \code{LS\_U\_in=10} 作 $U_{ref}$ $\Rightarrow \beta\approx1000$ m$^2$/s$^2$ \\
+\textbf{\code{fluid\_solid/run\_case2}} & \textbf{\code{AC\_CFL=2}, \code{AC\_beta=10}, \code{AC\_Max\_Iter=5000}} & \code{AC\_CFL=20} 会数轮后 NaN；\code{LS\_Algorithm=1}(SIMPLE) \textbf{第 1 步即发散} \\
+\code{beavers\_joseph/run\_ac} & \code{AC\_CFL=20}, \code{AC\_beta=1000}, \code{AC\_Max\_Iter=1} & 多块 AC 即时交换接口 ghost 的用法 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{温度方程与共轭传热}
+低速块带温度方程（$U(5)=T$，物性 \code{LS\_k}/\code{LS\_Cp}）。与固体块（码 13）或
+可压块（码 12）对接时，界面温度/热流由耦合例程按热流平衡给出（见第 \ref{sec:coupling} 章）。
+壁面热边界由 \code{LS\_T\_wall}（$<0$ 绝热）或跨区域耦合决定。
+
+\subsection{选参建议}
+\begin{itemize}
+  \item \textbf{先判来源}：均匀网格 + 单块 $\to$ SIMPLE 即可；长通道、强耦合、多块、低速流固
+        $\to$ 直接用 AC-FV（\code{LS\_Algorithm=3}）。
+  \item \textbf{AC 稳定三步法}：先 \code{AC\_CFL=2}（保守）跑通 $\to$ 若收敛慢再升到 10--20
+        $\to$ 若出现 NaN 立即回退并调小 \code{AC\_beta}（$\beta$ 大则伪时间步小、更稳）。
+  \item \textbf{残差判据}：\code{AC\_Tol=1e-6}（粗算）$\sim$ \code{1e-7}（默认）；
+        \code{AC\_Max\_Iter} 与多孔段的 \code{Porous\_Chunk\_Iter} 共同决定耦合预算（见 \S\ref{sec:coupling}）。
+  \item \textbf{已知限制}：\code{cases/flatplate\_re1e6} 与 \code{high\_low\_fluid} 存在低速网格病态
+        （收敛慢/精度损失）；SIMPLE 压力求解器为 Jacobi/Gauss--Seidel 型，
+        后续可换 BiCGStab/ILU（见第 \ref{sec:validation} 章待办）。
+\end{itemize}
+
+\noindent\textbf{依据文件}：\code{src/sub\_lowspeed.f90}、\code{src/sub\_lowspeed\_ac.f90}、
+\code{docs/AC-FV-后续工作.md}、\code{docs/程序能力与算例考核总结.md}。
+%===EOF===

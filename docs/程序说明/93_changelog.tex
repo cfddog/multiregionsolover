@@ -1,0 +1,66 @@
+\section{更新记录}
+\label{app:changelog}
+
+\paragraph{维护规则}程序每新增或修改功能，必须：
+\begin{enumerate}
+  \item 更新正文对应章节（含参数表）；
+  \item 新增参数时同步附录 A；
+  \item \textbf{在下表追加一条记录}（日期 / 版本 / 功能 / 涉及源码 / 验证算例与结果）；
+  \item 重新编译本手册（\code{cd docs/程序说明 \&\& ./build.sh}）确认无错误。
+\end{enumerate}
+
+\begin{longtable}{p{2.0cm}p{1.3cm}p{4.3cm}p{3.3cm}p{3.4cm}}
+\caption{版本与功能更新记录}\\
+\toprule
+日期 & 版本 & 功能/改动 & 涉及源码 & 验证 \\
+\midrule
+\endfirsthead
+\toprule
+日期 & 版本 & 功能/改动 & 涉及源码 & 验证 \\
+\midrule
+\endhead
+2026-09-05$\sim$09-18 & 1.0 & 新增块类型 1/2/3（固体导热、低速不可压 SIMPLE/SIMPLEC、
+    多孔 DBF+LTNE），跨区域接口码 11--19，CHT/发汗耦合例程，
+    \code{cases/fluid\_solid} 三算例 & \code{sub\_multi\_region.f90}、
+    \code{sub\_lowspeed.f90}、\code{sub\_porous.f90} 等 & \code{lidcavity}（Ghia）、
+    \code{solid\_1d/annulus}（解析）、\code{beavers\_joseph}（BJ 解析）、码 11/12/19 联调 \\
+2026-09-07 & 1.0 & 合并 VTK 输出 + SI 单位换算；低速/多孔变量约定统一
+    （\code{U(2..4)}=速度） & \code{sub\_IO.f90}、\code{sub\_init.f90} & 算例重跑一致 \\
+2026-09-08/17 & 1.0 & AC-FV 求解器（低速+多孔）：AC\_* 控制、$\beta$、\code{ac\_check\_controls}；
+    移除不稳定的 AUSM+ 路径 & \code{sub\_lowspeed\_ac.f90}、\code{sub\_porous\_ac.f90} &
+    \code{lidcavity\_ac}、\code{channel}、\code{beavers\_joseph/run\_ac} \\
+2026-09-23 & 1.0 & \code{control.ec} 拆分为 7 组 namelist（旧组兼容、严格报错、来源回显）；
+    新增 \code{\$solid\_ec} 四参数 & \code{sub\_read\_parameter.f90}、
+    \code{sub\_modules.f90}、\code{sub\_multi\_region.f90} & 旧↔新 \code{output\_para.out}
+    除新增回显外逐字节一致；两个 util 工具同步支持新格式 \\
+2026-09-23 & 1.0 & 重启文件 \code{field\_restart.dat}（含 LAP=4 缓冲，\code{iver=1}）
+    与节点 SI 流场 \code{flow3d\_node.dat}（6 变量） & \code{sub\_restart.f90}、
+    \code{sub\_IO.f90}、\code{sub\_init.f90} & 单块/多进程续算往返；节点维度与 \code{Mesh3d.x} 一致 \\
+2026-09-24 & 1.0 & \code{flow3d\_node.dat} 由 5 变量扩为 6 变量（补 \code{Ts} 骨架温度）；
+    三例 \code{fluid\_solid} 迁移到 7 组写法 & \code{sub\_IO.f90}、
+    \code{cases/fluid\_solid/*/control.ec} & \code{porous\_ltne\_1d} 可见 $\max|T-T_s|$；
+    A/B 参数逐项一致 \\
+2026-09-25 & 1.0.1 & \textbf{修复启动崩溃}：\code{scan\_control\_ec\_groups} 不再二次
+    \code{open} \code{control.ec}（旧版 libgfortran 报 \code{File already opened in another unit}）&
+    \code{sub\_read\_parameter.f90} & \code{make} EXIT=0；case1 整段 12 轮；
+    \code{output\_para.out} 与修改前逐字节一致 \\
+2026-09-25 & 1.1 & \textbf{重启耦合状态 + 强弱耦合切换}：\code{iver=2} trailer
+    （mode/conv/pair/iter + 界面量）；\code{Iflag\_Couple\_Restart}（0 自动/1 强耦合/2 交错/$-1$ 忽略）；
+    交错续算界面量零跳变；切强耦合时自动限制固体预算并补写重启 & \code{sub\_restart.f90}、
+    \code{sub\_modules.f90}、\code{sub\_multi\_region.f90}、\code{opencfd\_ec3d\_v1.16a.f90}、
+    \code{sub\_read\_parameter.f90} & \code{ct1}（12 轮等价 + 2995$\to$5990 零跳变）、
+    \code{ct2}（自动切强耦合 150$\to$170）、\code{ct3a--d}（四种开关取值）；
+    全部 EXIT=0 / NaN=0 \\
+2026-09-25 & 1.1 & \textbf{本手册 v1.0 建立}（\code{docs/程序说明/}，LaTeX） & \code{docs/程序说明/*} &
+    \code{xelatex} 编译通过 \\
+\bottomrule
+\end{longtable}
+
+\paragraph{待写入本表的已知待办}
+\begin{itemize}
+  \item 多孔速度入口的“按面法向通量”实现（消除 $\sim$28\% 通量缺口）；
+  \item 低速压力求解器改用 BiCGStab/ILU；
+  \item 接口 17（固--多孔）/18（多孔--多孔）；码 12/19 的跨进程耦合；
+  \item \code{util/readflow3d-ver2.4a/2.5.f90} 的同类“双 unit”隐患修复；
+  \item 三例 \code{cases/fluid\_solid/*/README.md}。
+\end{itemize}

@@ -1,0 +1,122 @@
+\section{可压高速求解器（\code{BLOCK\_FLUID}）}
+\label{sec:compressible}
+
+\subsection{变量与无量纲化}
+块类型 0，\textbf{密度基可压 N-S}（RANS 框架）。状态量
+$U=(\rho,\ \rho u,\ \rho v,\ \rho w,\ E)$，无量纲参考量见 \S 1.6：
+$\rho_\infty$、$U_\infty=Ma\,a_\infty$、$T_\infty=\texttt{T\_inf}$、$p^*=p/(\rho_\infty U_\infty^2)$。
+粘性系数由 Sutherland 律 + \code{T\_inf} 定标；层流/湍流 Prandtl 数为 \code{PrL}/\code{PrT}。
+网格坐标乘 \code{Lscale} 得 SI（因此 $Re$ 的参考长度是 \code{Lscale}）。
+
+\subsection{时间推进}
+\begin{table}[htbp]\centering\small
+\caption{时间推进控制参数（组 \code{\$flow\_ec}）}\label{tab:time}
+\begin{tabular}{llp{8.4cm}}
+\toprule
+参数 & 默认值 & 说明/选取建议 \\
+\midrule
+\code{Time\_Method} & 0 & 0 $=$ LU-SGS 隐式（稳态首选）；1 $=$ 一步 Euler；3 $=$ RK3；
+      $-1$ $=$ 双时间步（内迭代）\\
+\code{CFL} & 1.0 & 局部时间步 CFL；定常问题可取 2--5（隐式较鲁棒）\\
+\code{dt\_global} & 0.01 & 全局时间步（无量纲）；非定常/交错耦合里常用 1.0 与 \code{tt} 同步计数\\
+\code{Iflag\_local\_dt} & 1 & 1 $=$ 局部时间步（加速收敛，非定常需置 0）\\
+\code{dtmax}/\code{dtmin} & 10/1e-9 & 时间步上下限\\
+\code{w\_LU} & 1.0 & LU-SGS 松弛因子 \\
+\code{Step\_Inner\_Limit}/\code{Res\_Inner\_Limit} & 20 / 1e-10 & 双时间步内迭代上限/内残差判据 \\
+\code{If\_Residual\_smoothing} & 0 & 残差光滑开关 \\
+\code{If\_dtime\_mesh} & 1 & 网格质量差时自动减小时间步 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{空间离散}
+\begin{table}[htbp]\centering\small
+\caption{空间格式参数}\label{tab:scheme}
+\begin{tabular}{llp{8.2cm}}
+\toprule
+参数 & 默认值 & 可选值与建议 \\
+\midrule
+\code{Iflag\_Scheme} & 5 & 0 一阶迎风；1 NND2；2 UD3；3 MUSCL2U；4 MUSCL2C；5 MUSCL3；6 OMUSCL2；
+      7 WENO5；8 UD5；9 WENO7。\textbf{激波/高超声速建议 5 或 7}；低速内流可用 3 \\
+\code{Iflag\_Flux} & 5 & 1 Steger--Warming；2 HLL；3 HLLC；4 Roe；5 Van Leer；6 AUSM。\\
+\code{IFlag\_Reconstruction} & 0 & 0 原始变量；1 守恒变量；2 特征变量重构 \\
+\code{Bound\_Scheme} & MUSCL2C & 边界插值格式（\code{Scheme\_MUSCL2C}）\\
+\code{IF\_Scheme\_Positivity} & 1 & 正值保持（1 开）；发散/负密度时优先保留开启 \\
+\code{Ldmin,Ldmax} & 1e-6, 1000 & 限制器参数（密度） \\
+\code{Lpmin,Lpmax} & 1e-6, 1000 & 压力限制 \\
+\code{Lumax,LSAmax} & 1000, 1000 & 速度/湍流量限制 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{湍流模型与壁距}
+\begin{itemize}
+  \item \code{Iflag\_turbulence\_model}：0 无；1 BL（代数）；2 SA / New-SA；3 SST（$k$--$\omega$）。
+        默认 0。若需要热流（壁面 $q_w$）\textbf{必须有粘性}：\code{If\_viscous=1}。
+  \item \code{MUT\_MAX}：涡粘上限（$<0$ 不限制），用于极端算例防发散；
+        \code{Kt\_inf}/\code{Wt\_inf} 为 SST 初值；\code{CP1\_NSA}/\code{CP2\_NSA} 为 New-SA 常数。
+  \item 壁距由程序自动计算（\code{wall\_dist.dat}，缺失时自动生成）。
+\end{itemize}
+
+\subsection{来流/参考态与气动力}
+\begin{table}[htbp]\centering\small
+\caption{来流与参考量（组 \code{\$freestream\_ec}）}\label{tab:freestream}
+\begin{tabular}{llp{8.2cm}}
+\toprule
+参数 & 默认值 & 说明 \\
+\midrule
+\code{Ma} & 1.0 & 来流马赫数（可压块）\\
+\code{Re} & 1000 & 雷诺数，\textbf{参考长度为 \code{Lscale}} \\
+\code{T\_inf} & 288.15 & 来流/参考温度 [K]（也是粘性律参考温度、固体块 \code{Ts} 初值）\\
+\code{AoA}/\code{AoS} & 0 & 攻角/侧滑角 [deg] \\
+\code{Twall} & $-1$ & 可压侧物理壁温 [K]；$<0$ 表示绝热壁 \\
+\code{p\_outlet} & $-1$ & 出口压力（无量纲）；$<0$ 表示外插 \\
+\code{gamma},\code{PrL},\code{PrT} & 1.4, 0.7, 0.9 & 比热比、层流/湍流 Prandtl 数 \\
+\code{Lscale} & 1.0 & 长度尺度（1=m，0.001=mm）\\
+\code{Ref\_S}/\code{Ref\_L}/\code{Centroid} & 1/1/0 & 气动力/力矩参考面积、长度、矩心 \\
+\code{Cood\_Y\_UP} & 1 & 坐标系 $y$ 轴朝上标志 \\
+涡轮机族 & --- & \code{IF\_TurboMachinary, Ref\_medium\_usrdef, Turbo\_P0/T0/L0/w, Turbo\_Periodic\_seta}（内流模式，见原版手册）\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{网格、并行与输出节奏}
+\begin{table}[htbp]\centering\small
+\caption{网格/并行/输出参数（组 \code{\$flow\_ec}）}\label{tab:flowio}
+\begin{tabular}{llp{8.0cm}}
+\toprule
+参数 & 默认值 & 说明 \\
+\midrule
+\code{Mesh\_File\_Format} & 0 & 0 unformatted \code{Mesh3d.dat}；1 formatted；\textbf{2 \code{Mesh3d.x}（本仓库算例）}\\
+\code{Num\_Mesh}/\code{Pre\_Step\_Mesh} & 1/0 & 多网格层数与各层预推进步数 \\
+\code{NUM\_THREADS} & 1 & OpenMP 线程数（需 \code{-openmp} 编译）\\
+\code{IFLAG\_LIMIT\_FLOW} & 1 & 流场限制（防止负密度/负压）；算例常置 0 以复现基线结果 \\
+\code{Iflag\_init} & 0 & 初场方式（0 均匀场；1 由 \code{flow3d.dat} 读入；$-1$ 置零）\\
+\code{Kstep\_save} & 1000 & 输出间隔（\code{flow3d.dat}/VTK/\code{Ts\_block}/\code{flow3d\_node}/\code{field\_restart} 同节奏）\\
+\code{Kstep\_show} & 1 & 残差/气动力打印间隔 \\
+\code{Kstep\_average} & 0 & 时间平均输出间隔（0 关闭）\\
+\code{Kstep\_smooth}/\code{Kstep\_init\_smooth} & $-1$/0 & 流场光滑间隔（$<0$ 关闭） \\
+\code{Iflag\_savefile} & 0 & 0 关闭、1 开启 \code{flow3d.dat} \\
+\code{Iflag\_vtk\_onefile} & 0 & 0 每块一个 \code{flow3d\_block\_*.vtk}；1 合并为 \code{flow3d.vtk}（约 11 MB 级）\\
+\code{Iflag\_vtk\_SI} & 0 & 1 $=$ VTK 输出换 SI 单位（含低速/固体块直接输出 SI）\\
+\code{Iflag\_bc\_check} & 1 & 0 旧行为；1 自动生成/校验 \code{bc3d.inp}；2 严格报错 \\
+\code{Periodic\_dX/dY/dZ} & 0 & 周期平移量 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{参数选取建议（经验值）}
+\begin{itemize}
+  \item \textbf{超声速/含激波}：\code{Iflag\_Scheme=5}（MUSCL3）或 7（WENO5）、
+        \code{Iflag\_Flux=5}（Van Leer）或 4（Roe），\code{CFL=1--2}，\code{Time\_Method=0}。
+  \item \textbf{粘性热流/CHT}：务必 \code{If\_viscous=1}；壁温由 \code{Twall}（$<0$ 绝热）或
+        跨区域耦合给出；湍流可选 2（SA）或 3（SST）。
+  \item \textbf{首次调试}：先用较小 \code{Kstep\_save}/\code{Kstep\_show} 看残差，再放大；
+        \code{IF\_Debug=1} 可打印接口配对诊断（\code{dbg\_dump\_interfaces}）。
+  \item \textbf{交错耦合模式}：不要用 \code{t\_end} 控时（由 \code{Niter\_Couple\_Outer} 控制），
+        \code{t\_end} 给大值即可（详见第 \ref{sec:coupling} 章）。
+\end{itemize}
+
+\noindent\textbf{依据文件}：\code{src/sub\_read\_parameter.f90}、\code{src/sub\_flux\_split.f90}、
+\code{src/sub\_time\_advance.f90}、\code{src/sub\_LU\_SGS.f90}、\code{docs/程序能力与算例考核总结.md}。
+%===EOF===

@@ -1,0 +1,69 @@
+\section{验证、回归与已知问题}
+\label{sec:validation}
+
+\subsection{能力 $\leftrightarrow$ 算例对照（验证状态）}
+\begin{table}[htbp]\centering\small
+\caption{主要能力与其考核算例}\label{tab:validation}
+\begin{tabular}{p{4.6cm}p{4.4cm}p{4.6cm}}
+\toprule
+能力 & 考核算例 & 状态/判据 \\
+\midrule
+可压跨声速气动 + SA & \code{DLR-F4}、\code{M6-wing} & 经典 Cp/气动力（原发行例）\\
+混合 FV/FD（SEC） & \code{M6-wing-SEC} & 同上 + 嵌入区 \\
+低速不可压核心 & \code{lidcavity}（Re=100） & Ghia 等 (1982) 中心线剖面，RMS 0.018 \\
+低速三类入口 & \code{channel/type\{1,2,3\}} & Poiseuille 解析（$\bar U,u_{max},dp/dx$）\\
+固体稳态导热 & \code{solid\_1d}、\code{solid\_annulus} & 解析解，误差 $10^{-6}$ K / $1.9\times10^{-3}$ K \\
+多孔 Darcy / LTNE & \code{porous\_plug}、\code{porous\_ltne\_1d} & Darcy--Brinkman 解析 + LTNE 温差 \\
+低速--多孔界面（16） & \code{beavers\_joseph} & Beavers--Joseph (1967) 滑移解析解 \\
+可压--固体共轭（11） & \code{fluid\_solid/run\_case1\_solid} & 交错推进、界面量收敛、重启往返 \\
+低速--固体共轭（13） & \code{bl\_cht} & 共轭传热联调 \\
+可压--低速（12） & \code{high\_low\_fluid*}、\code{fluid\_solid/run\_case2} & 多块高低速稳定性 \\
+可压--多孔（19） & \code{porous\_fluid\_phaseB}、\code{fluid\_solid/run\_case3} & 发汗壁/热耦合（物理收敛待细网格）\\
+重启与节点输出 & \code{solid\_1d}、三例 fluid\_solid & Kstep 往返一致；节点文件与网格一致 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{回归测试方法（改代码后必做）}
+\begin{enumerate}
+  \item \textbf{编译}：\code{cd src \&\& make}，确认 \code{EXIT=0}；
+  \item \textbf{参数等价性}：对至少一个算例跑短程，用
+\begin{lstlisting}
+diff <(grep -v "namelist groups found" old/output_para.out) \
+     <(grep -v "namelist groups found" new/output_para.out)
+\end{lstlisting}
+        比对生效参数；结构改动（如分组）应“除新增回显行外逐行一致”；
+  \item \textbf{数值/稳定性}：\code{grep -i nan run.log} 应为 0；残差应下降；\code{EXIT=0}；
+  \item \textbf{重启往返}：跑一段（写出 \code{field\_restart.dat}）后重启续算，
+        确认 \code{Kstep/tt} 正确恢复、无 NaN、界面量零跳变；
+  \item \textbf{节点输出}：\code{python3 util/check\_flow3d\_node.py} 核对块维度/点数与 \code{Mesh3d.x} 一致；
+  \item \textbf{接口诊断}：新拓扑先用 \code{IF\_Debug=1} 检查 \code{L1..L3} 与 \code{face/face1}。
+\end{enumerate}
+
+\subsection{本手册涉及功能的验证记录（2026-09-25）}
+\begin{itemize}
+  \item \textbf{\code{control.ec} 双 unit 修复}：\code{make} EXIT=0；全部 \code{src} 内
+        \code{control.ec} 仅剩 1 处 \code{open}；case1 整段 12 轮、\code{output\_para.out}
+        与修改前逐字节一致；旧式单组算例（\code{solid\_1d}）正常。
+  \item \textbf{重启耦合状态 + 强弱耦合切换}：\code{ct1}（12 轮等价 + 续算零跳变，Kstep 2995$\to$5990）、
+        \code{ct2}（收敛后自动切逐步强耦合，150$\to$170 并补写重启）、\code{ct3a--d}
+        （自动/强制强耦合/强制交错/忽略四种取值）全部 \code{EXIT=0}、\code{NaN=0}；
+        \code{output\_para.out} 仅多 1 行新回显。
+\end{itemize}
+
+\subsection{已知问题与待办（摘要）}
+\begin{itemize}
+  \item \textbf{多孔速度入口}存在约 28\% 通量缺口（“流量锁定”未实现为按面法向的通量约束）；
+  \item \textbf{低速压力求解器}为迭代型（Jacobi/GS），建议换 BiCGStab/ILU 以加速并提高鲁棒性；
+  \item \textbf{低速网格病态}：\code{flatplate\_re1e6}、\code{high\_low\_fluid} 收敛慢/精度受损；
+  \item \textbf{耦合外迭代}可加 Aitken/Anderson 加速；
+  \item \textbf{接口 17（固--多孔）/18（多孔--多孔）未实现}；码 12/19 无跨进程耦合；
+  \item \textbf{合并 VTK} 改分区输出以降低内存/IO 峰值；
+  \item 三例 \code{cases/fluid\_solid/*/README.md} 待补充；
+  \item \code{util/readflow3d-ver2.4a/2.5.f90} 仍存在“同一 \code{control.ec} 连两个 unit”的隐患
+        （旧编译器会报错，修法与主程序一致）。
+\end{itemize}
+
+\noindent\textbf{依据文件}：\code{docs/程序能力与算例考核总结.md}（§3/§5/§6/§9）、
+\code{docs/重启与节点流场输出说明.md}、\code{memory-bank/progress.md}。
+%===EOF===

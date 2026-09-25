@@ -26,3 +26,12 @@
 - memory-bank/activeContext.md：当前任务、最近决策、下一步
 - memory-bank/progress.md：已完成 / 待办
 - memory-bank/worklog.md：追加一条简要记录
+
+## 程序说明文档（LaTeX）维护规则
+程序每新增/修改一个功能，必须同步更新 `docs/程序说明/`（详见其 `README.md`）：
+1. 更新对应章节（物理模型、控制参数表、示例）；
+2. 新增参数时同步附录 A 参数总表（`91_appendix_params.tex`）与 `control.ec.template`；
+3. 在 `93_changelog.tex` 追加一条记录（日期/版本/功能/涉及源码/验证）；
+4. 重新编译：`cd docs/程序说明 && ./build.sh`（xelatex 两遍，产物
+   `docs/OpenCFD-EC-1.16a-程序说明.pdf`），确认无错误（`build.log`）后再提交。
+

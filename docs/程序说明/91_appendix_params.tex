@@ -1,0 +1,186 @@
+\section{\code{control.ec} 参数总表}
+\label{app:params}
+
+本附录按组列出\textbf{全部}控制参数及其\textbf{代码默认值}（\code{src/sub\_read\_parameter.f90:
+set\_default\_parameter}）。只要算例里不写，就用默认值；写错变量名会报错退出。
+“无量纲”指按来流参考量归一化（\S 1.6）。
+
+\subsection{\code{\$freestream\_ec}（24）}
+\begin{longtable}{p{3.5cm}llp{6.6cm}}
+\caption{来流/参考态/气体物性}\\
+\toprule
+参数 & 默认值 & 单位 & 说明 \\
+\midrule
+\endfirsthead
+\toprule
+参数 & 默认值 & 单位 & 说明 \\
+\midrule
+\endhead
+\code{Ma} & 1.0 & --- & 来流马赫数 \\
+\code{Re} & 1000 & --- & 雷诺数，参考长度 $=$ \code{Lscale} \\
+\code{gamma} & 1.4 & --- & 比热比 \\
+\code{AoA} & 0.0 & deg & 攻角 \\
+\code{AoS} & 0.0 & deg & 侧滑角 \\
+\code{T\_inf} & 288.15 & K & 来流温度（粘性参考、固体 \code{Ts} 初值）\\
+\code{Twall} & $-1$ & K & 可压物理壁温；$<0$ 绝热 \\
+\code{p\_outlet} & $-1$ & 无量纲 & 出口压力；$<0$ 外插 \\
+\code{PrL} & 0.7 & --- & 层流 Prandtl 数 \\
+\code{PrT} & 0.9 & --- & 湍流 Prandtl 数 \\
+\code{Lscale} & 1.0 & m/grid & 长度尺度（mm 网格取 0.001）\\
+\code{Ref\_S}/\code{Ref\_L} & 1.0 / 1.0 & --- & 气动力参考面积/长度 \\
+\code{Centroid(1:3)} & 0,0,0 & --- & 力矩参考点 \\
+\code{Cood\_Y\_UP} & 1 & --- & $y$ 轴朝上标志 \\
+\code{Kt\_inf}/\code{Wt\_inf} & 1e-5 / 0.01 & --- & SST 初值 \\
+\code{IF\_TurboMachinary} & 0 & --- & 涡轮机内流模式开关 \\
+\code{Ref\_medium\_usrdef} & 0 & --- & 是否用户自定义参考介质 \\
+\code{Turbo\_P0}/\code{Turbo\_T0} & 101330 / 288.15 & Pa / K & 涡轮机总压/总温 \\
+\code{Turbo\_L0}/\code{Turbo\_w} & 1.0 / 0 & m / --- & 参考长度/转速 \\
+\code{Turbo\_Periodic\_seta} & 0 & deg & 周期扇区角 \\
+\bottomrule
+\end{longtable}
+
+\subsection{\code{\$flow\_ec}（52）}
+\begin{longtable}{p{3.7cm}llp{6.3cm}}
+\caption{流场控制：时间步/格式/模型/网格/输出/重启}\\
+\toprule
+参数 & 默认值 & 单位 & 说明 \\
+\midrule
+\endfirsthead
+\toprule
+参数 & 默认值 & 单位 & 说明 \\
+\midrule
+\endhead
+\code{t\_end} & 100 & 无量纲 & 终止时间（\textbf{交错耦合模式下无效}）\\
+\code{Kstep\_save} & 1000 & --- & 输出间隔（流场/VTK/节点/重启同节奏）\\
+\code{Kstep\_show} & 1 & --- & 残差与气动力打印间隔 \\
+\code{Kstep\_average} & 0 & --- & 时间平均输出间隔（0 关闭）\\
+\code{Kstep\_smooth} & $-1$ & --- & 流场光滑间隔（$<0$ 关闭）\\
+\code{Kstep\_init\_smooth} & 0 & --- & 初始阶段光滑间隔 \\
+\code{CFL} & 1.0 & --- & 局部时间步 CFL \\
+\code{dt\_global} & 0.01 & 无量纲 & 全局时间步 \\
+\code{dtmax}/\code{dtmin} & 10 / 1e-9 & --- & 时间步上下限 \\
+\code{Iflag\_local\_dt} & 1 & --- & 1 局部时间步；非定常请置 0 \\
+\code{Time\_Method} & 0 & --- & 0 LU-SGS；1 Euler；3 RK3；$-1$ 双时间步 \\
+\code{Step\_Inner\_Limit} & 20 & --- & 双时间步内迭代上限 \\
+\code{Res\_Inner\_Limit} & 1e-10 & --- & 内残差判据 \\
+\code{w\_LU} & 1.0 & --- & LU-SGS 松弛因子 \\
+\code{If\_Residual\_smoothing} & 0 & --- & 残差光滑开关 \\
+\code{If\_dtime\_mesh} & 1 & --- & 网格差时自动减小时间步 \\
+\code{Iflag\_Scheme} & 5 & --- & 空间格式（0..9，见 \S 3.3）\\
+\code{Iflag\_Flux} & 5 & --- & 无粘通量（1..6，见 \S 3.3）\\
+\code{IFlag\_Reconstruction} & 0 & --- & 重构变量（0 原始/1 守恒/2 特征）\\
+\code{Bound\_Scheme} & MUSCL2C & --- & 边界插值格式 \\
+\code{IF\_Scheme\_Positivity} & 1 & --- & 正值保持开关 \\
+\code{IFLAG\_LIMIT\_FLOW} & 1 & --- & 流场限制（防负密度/负压）\\
+\code{Iflag\_turbulence\_model} & 0 & --- & 0 无/1 BL/2 SA/3 SST \\
+\code{If\_viscous} & 1 & --- & 0 无粘/1 粘性（热流必需 1）\\
+\code{Iflag\_init} & 0 & --- & 初场：0 均匀；1 读 \code{flow3d.dat}；$-1$ 置零 \\
+\code{MUT\_MAX} & $-1$ & --- & 涡粘上限（$<0$ 不限）\\
+\code{CP1\_NSA}/\code{CP2\_NSA} & 0.2 / 100 & --- & New-SA 常数 \\
+\code{Ldmin,Ldmax} & 1e-6, 1000 & --- & 密度限制器 \\
+\code{Lpmin,Lpmax} & 1e-6, 1000 & --- & 压力限制器 \\
+\code{Lumax}/\code{LSAmax} & 1000 / 1000 & --- & 速度/湍流量限制 \\
+\code{Mesh\_File\_Format} & 0 & --- & 0 unformatted；1 formatted；2 \code{Mesh3d.x} \\
+\code{Num\_Mesh} & 1 & --- & 网格层数（多网格）\\
+\code{Pre\_Step\_Mesh(1:3)} & 0 & --- & 各层预推进步数 \\
+\code{NUM\_THREADS} & 1 & --- & OpenMP 线程数 \\
+\code{IF\_Debug} & 0 & --- & 1 打印接口诊断 \\
+\code{Pdebug(1:4)} & 1 & --- & 调试打印级别 \\
+\code{Periodic\_dX/dY/dZ} & 0 & --- & 周期平移量 \\
+\code{IF\_Innerflow} & 0 & --- & 内流模式开关 \\
+\code{Iflag\_savefile} & 0 & --- & 1 写 \code{flow3d.dat} \\
+\code{Iflag\_vtk\_onefile} & 0 & --- & 0 每块一个 VTK；1 合并 \code{flow3d.vtk} \\
+\code{Iflag\_vtk\_SI} & 0 & --- & 1 VTK 输出 SI 单位 \\
+\code{Iflag\_bc\_check} & 1 & --- & 0 旧行为；1 生成/校验；2 严格报错 \\
+\code{Iflag\_restart} & 0 & --- & 0 自动续算；1 强制；$-1$ 关闭 \\
+\code{Kstep\_restart} & 0 & --- & 重启写出间隔（$\le0$ 时 $=$ \code{Kstep\_save}）\\
+\code{Iflag\_flow\_node} & 0 & --- & 1 写 \code{flow3d\_node.dat}（节点 SI 流场）\\
+\bottomrule
+\end{longtable}
+
+\subsection{\code{\$lowspeed\_ec}（21，全部 SI）}
+\begin{longtable}{p{3.5cm}llp{6.4cm}}
+\caption{低速不可压块}\\
+\toprule
+参数 & 默认值 & 单位 & 说明 \\
+\midrule
+\endhead
+\code{LS\_rho} & 1.2 & kg/m$^3$ & 常密度 \\
+\code{LS\_mu} & 1.8e-5 & Pa$\cdot$s & 动力粘度 \\
+\code{LS\_k} & 0.025 & W/(m$\cdot$K) & 导热系数 \\
+\code{LS\_Cp} & 1005 & J/(kg$\cdot$K) & 比热 \\
+\code{LS\_T\_ref} & 288.15 & K & 参考/初场温度 \\
+\code{LS\_Inlet\_Type} & 1 & --- & 1 速度；2 质量；3 压力入口 \\
+\code{LS\_U\_in}/\code{LS\_V\_in}/\code{LS\_W\_in} & 1 / 0 / 0 & m/s & 入口速度分量 \\
+\code{LS\_Mdot\_in} & 0 & kg/s & 入口质量流量（类型 2）\\
+\code{LS\_P\_in} & 101325 & Pa & 入口总压（类型 3）\\
+\code{LS\_P\_out} & 101325 & Pa & 出口静压 \\
+\code{LS\_T\_wall} & $-1$ & K & 壁温；$<0$ 绝热 \\
+\code{LS\_U\_lid} & 0 & m/s & 顶盖驱动速度（$j+$ 面）\\
+\code{LS\_alpha\_p} & 0.3 & --- & 压力欠松弛 \\
+\code{LS\_alpha\_u} & 0.7 & --- & 速度欠松弛 \\
+\code{LS\_alpha\_T} & 0.7 & --- & 温度欠松弛 \\
+\code{LS\_Max\_Iter} & 5000 & --- & 每次调用内迭代上限 \\
+\code{LS\_Tol} & 1e-8 & --- & 收敛判据（压力修正残差）\\
+\code{LS\_Scheme} & 1 & --- & 1 一阶迎风/2 二阶迎风/3 MUSCL \\
+\code{LS\_Algorithm} & 1 & --- & 1 SIMPLE/2 SIMPLEC/3 AC-FV \\
+\bottomrule
+\end{longtable}
+
+\subsection{\code{\$ac\_ec}（15）}
+\begin{longtable}{p{3.5cm}llp{6.4cm}}
+\caption{人工压缩（AC）求解器}\\
+\toprule
+参数 & 默认值 & 单位 & 说明 \\
+\midrule
+\endhead
+\code{AC\_Max\_Iter} & 40000 & --- & 伪时间迭代上限/次调用 \\
+\code{AC\_Print} & 500 & --- & 打印间隔 \\
+\code{AC\_beta} & 10 & --- & $\beta=\code{AC\_beta}U_{ref}^2$ \\
+\code{AC\_CFL} & 2 & --- & 无粘 CFL（大值易发散）\\
+\code{AC\_CFLv} & 0.5 & --- & 粘性 CFL \\
+\code{AC\_Tol} & 1e-7 & --- & 收敛判据 \\
+\code{AC\_w} & 1.0 & --- & LU-SGS 松弛 \\
+\code{AC\_Flux} & 1 & --- & 1 Rusanov/2 Steger--Warming \\
+\code{AC\_Recon} & 1 & --- & 1 MUSCL/2 WENO5/3 WENO3 \\
+\code{AC\_Limiter} & 1 & --- & 1 van Leer/2 minmod \\
+\code{AC\_WenoBlend} & 0 & --- & WENO 混入一阶通量比例 \\
+\code{AC\_WallRecon} & 1 & --- & 壁面切向单侧二阶重构 \\
+\code{AC\_WallP} & 1 & --- & 壁面压力二阶重构 \\
+\code{AC\_MomDiss} & 0 & --- & 0 lumped/1 分裂混合/2 纯 $|u_n|$ \\
+\code{AC\_MomFrac} & 0.2 & --- & 分裂混合保留声速比例 \\
+\bottomrule
+\end{longtable}
+
+\subsection{\code{\$solid\_ec}（4）、\code{\$porous\_ec}（8）、\code{\$couple\_ec}（12）}
+\begin{longtable}{p{4.1cm}llp{6.0cm}}
+\caption{固体 / 多孔 / 耦合调度}\\
+\toprule
+参数 & 默认值 & 单位 & 说明 \\
+\midrule
+\endhead
+\code{Solid\_GS\_Omega} & 1.7 & --- & 固体 SOR 因子 \\
+\code{Solid\_Max\_Iter} & 20000 & --- & 固体最大扫掠数 \\
+\code{Solid\_Min\_Iter} & 5 & --- & 判据生效前最少扫掠 \\
+\code{Solid\_Tol} & 1e-9 & K & 固体收敛判据 $\max|\Delta T_s|$ \\
+\code{Porous\_T\_ref} & 288.15 & K & 骨架温度初值 \\
+\code{Porous\_alpha\_Ts} & 0.7 & --- & 骨架温度欠松弛 \\
+\code{Porous\_Max\_Iter} & 5000 & --- & 多孔内迭代上限 \\
+\code{Porous\_Tol} & 1e-8 & --- & 多孔收敛判据 \\
+\code{Porous\_U\_in}/\code{V\_in}/\code{W\_in} & 0/0/0 & m/s & 多孔入口速度（全 0 时回落 \code{LS\_*}) \\
+\code{Porous\_T\_in} & 0 & K & 多孔入口温度（$\le0$ 回落 \code{LS\_T\_ref}）\\
+\code{Iflag\_Couple\_Scheme} & 0 & --- & 0 同时耦合/1 分段交错 \\
+\code{Kstep\_Couple\_Comp} & 1000 & --- & 每轮气体步数基准 \\
+\code{Niter\_Couple\_Outer} & 60 & --- & 外层轮数 \\
+\code{Niter\_Couple\_Warm} & 0 & --- & 满步暖机轮数 \\
+\code{Kstep\_Couple\_Min} & 1 & --- & 步数下限（建议 20$\sim$100）\\
+\code{Porous\_Chunk\_Iter} & 10 & --- & 每轮多孔求解次数 \\
+\code{Twall\_Couple\_Init} & 300 & K & 首轮界面壁温 \\
+\code{Tol\_Couple\_Tw} & 2e-2 & K & 温度外层判据 \\
+\code{Tol\_Couple\_p}/\code{u} & 10 / 1e-2 & Pa / m/s & 码 12 压力/速度判据 \\
+\code{Iflag\_Couple\_WallFlux} & 0 & --- & 0 耦合式/1 等温 $T_w$+热流壁通量式 \\
+\code{Iflag\_Couple\_Restart} & 0 & --- & 0 自动/1 强制强耦合/2 强制交错/$-1$ 忽略 \\
+\bottomrule
+\end{longtable}
+%===EOF===
+
