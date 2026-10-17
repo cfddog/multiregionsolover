@@ -569,8 +569,18 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 !----------------------------------------------------------------------
 ! Node-centred SI flow field for display together with Mesh3d.x
 !   file: flow3d_node.dat (unformatted; name in Global_Var FLOWNODE_FILE)
-!   - one record per block, GLOBAL block order (= the Mesh3d.x / flow3d.dat
+!   - PLOT3D solution / function-file header (3 records) so that generic
+!     post-processors (Tecplot, ParaView, ...) recognise the file without
+!     needing Mesh3d.x:
+!       record 1 : Total_block                     number of blocks
+!       record 2 : (bNi(m),bNj(m),bNk(m), m=1,Total_block)   block dimensions
+!       record 3 : NVAR_NODE (= 6)                 number of variables
+!     (before 2026-09-25 the file had NO header: readers had to take the
+!      dimensions from Mesh3d.x; util/check_flow3d_node.py still copes with
+!      both layouts)
+!   - then one record per block, GLOBAL block order (= the Mesh3d.x / flow3d.dat
 !     block order), each record holds d,u,v,w,T,Ts at the nx*ny*nz GRID NODES
+!     (i fastest, then j, then k, the 6 fields in sequence -> PLOT3D Q order)
 !       T  = fluid temperature [K]  (solid block: the solid Ts, as in flow3d.vtk)
 !       Ts = solid/skeleton temperature [K] (solid & porous; for fluid/low-speed
 !            blocks, which have no solid phase, Ts mirrors T so that every block
@@ -593,6 +603,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    real(PRE_EC),allocatable,dimension(:,:,:,:):: U
    integer:: m,m1,i,j,k,nx,ny,nz,mt,Num_data,ierr,tag
    integer:: Recv_from_ID, status(MPI_status_size)
+   integer,parameter:: NVAR_NODE=6      ! 节点场个数 d,u,v,w,T,Ts (=文件头"变量数")
    real(PRE_EC),parameter:: R_AIR_SI=287.0d0
    real(PRE_EC),parameter:: MU_SI0=1.716d-5, T_SI0=273.15d0, S_SI=110.4d0
    real(PRE_EC):: sc_rho,sc_u,sc_T,a_ref,mu_inf_p
@@ -606,9 +617,15 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
    sc_rho   = Re*mu_inf_p/(Ma*a_ref*max(Lscale,1.d-30))
    sc_T     = T_inf
 
+!  PLOT3D 解(Q)/函数型文件头：三条头记录给出 块数 / 各块维数 / 变量数，
+!  使 Tecplot、ParaView 等工具可直接识别（旧文件无头，必须靠 Mesh3d.x 才
+!  知道维度和变量数）。头记录只由 0 号进程写。
    if(my_id .eq. 0) then
      print*, " write ", trim(FLOWNODE_FILE), " (node-centred, SI units) ......"
      open(99,file=FLOWNODE_FILE,form="unformatted",status="replace")
+     write(99) Total_block
+     write(99) (bNi(m),bNj(m),bNk(m), m=1,Total_block)
+     write(99) NVAR_NODE
    endif
 
    if(my_id .eq. 0) then

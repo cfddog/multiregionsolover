@@ -283,6 +283,12 @@
     Type (Mesh_TYPE),pointer:: MP
     Type (Block_TYPE),pointer:: B	 
   
+!  Iflag_restart < 0: read_restart is not called at all, so `restarted` must be
+!  pre-set here.  Previously it was left UNINITIALISED in that case, which made
+!  the cold-start initialisation below non-deterministic (observed 2026-09-26:
+!  with Iflag_restart=-1 some runs started from uninitialised U/Ts -> NaN in the
+!  staggered code-12 driver, while other runs of the same deck were fine).
+   restarted = .false.
    if(Iflag_restart .ge. 0) call read_restart(restarted)
    if(.not. restarted) then
    if(Iflag_init .le. 0) then
