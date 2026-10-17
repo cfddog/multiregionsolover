@@ -1,13 +1,15 @@
-# OpenCFD-EC 1.16a 程序说明（LaTeX 源）
+# MultiPhysMixSolver 程序说明（LaTeX 源）
 
 本目录是**程序说明文档**的 LaTeX 源码，最终 PDF 为
-`docs/OpenCFD-EC-1.16a-程序说明.pdf`（根目录另有一份副本）。
+`docs/MultiPhysMixSolver-程序说明.pdf`（`docs/OpenCFD-EC-1.16a-程序说明.pdf`
+为同名旧文件副本，`build.sh` 会同步更新以兼容旧链接）。
 
 ## 编译
 
 ```bash
 cd docs/程序说明
-./build.sh          # 生成 main.pdf，并拷贝到 docs/OpenCFD-EC-1.16a-程序说明.pdf
+./build.sh          # 生成 main.pdf，并拷贝到 docs/MultiPhysMixSolver-程序说明.pdf
+                    # （同时更新旧名 docs/OpenCFD-EC-1.16a-程序说明.pdf）
 ./build.sh clean    # 清理中间文件
 ```
 

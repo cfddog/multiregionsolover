@@ -5,7 +5,8 @@
   ① 更新对应章节；② 新增参数同步**附录 A** 与 `control.ec.template`；③ **附录 C 追加更新记录**；
   ④ `cd docs/程序说明 && ./build.sh` 重编译（xelatex 两遍；须 0 error、0 undefined reference）。
   手册源为 ASCII 文件名（`main.tex` + `chap01..11` + `91/92/93`），中文目录名 `docs/程序说明/`；
-  PDF 交付物 `docs/OpenCFD-EC-1.16a-程序说明.pdf`。
+  PDF 交付物 `docs/MultiPhysMixSolver-程序说明.pdf`（旧名
+  `docs/OpenCFD-EC-1.16a-程序说明.pdf` 由 `build.sh` 同步更新，保留兼容）。
   LaTeX 注意：`\code{...}` 内必须转义下划线（写 `\_`），数学符号要放进 `$...$`；新增章节记得在
   `main.tex` 里 `\input`。
 - 每次新任务开始，**先按序读取**：`memory-bank/projectbrief.md` → `activeContext.md` →

@@ -32,7 +32,8 @@ src/                     单一可执行的主程序 + 各子模块（含 makefi
 cases/                   算例（每个含 Mesh3d.x/bc3d.inp/bc3d_interface.inp/material.in/control.ec…）
 docs/                    工作日志、程序能力总结、进度摘要、AC-FV 后续工作
                          程序说明（LaTeX 手册）：docs/程序说明/（xelatex 编译）
-                         PDF：docs/OpenCFD-EC-1.16a-程序说明.pdf
+                         PDF：docs/MultiPhysMixSolver-程序说明.pdf
+                         （旧名 docs/OpenCFD-EC-1.16a-程序说明.pdf 同步保留）
 memory-bank/             本记忆库（projectbrief/activeContext/progress/worklog/constraints）
 util/  run_lid/  sample_code/
 ```
@@ -63,10 +64,11 @@ cd ../cases/<case> && mpirun -np 1 ./MultiPhysMixSolver
 （`sub_convert_inp.f90::Convert_bc`）。
 
 ## 6. 参考文档
-- **`docs/程序说明/`（LaTeX 程序说明手册，v1.0，2026-09-25）**：面向用户的权威手册，含
+- **`docs/程序说明/`（LaTeX 程序说明手册，v1.5，2026-10-17）**：面向用户的权威手册，含
   块类型/接口码/单位约定、固体/高速/低速/多孔各求解器与参数选取建议、输出与重启、
   三个 fluid_solid 算例详解、参数总表（附录 A）、编号速查（附录 B）、
-  **更新记录（附录 C）**；PDF：`docs/OpenCFD-EC-1.16a-程序说明.pdf`。
+  **更新记录（附录 C）**；PDF：`docs/MultiPhysMixSolver-程序说明.pdf`
+  （旧名 `docs/OpenCFD-EC-1.16a-程序说明.pdf` 同步保留）。
   **新功能必须同步更新该手册（见 `.clinerules` 与 `constraints.md §0`）。**
 - `docs/工作日志.md`（830+ 行，逐次开发的权威记录，含历史 commit 说明）
 - `docs/程序能力与算例考核总结.md`（能力→算例→验证状态，可作为功能清单）
