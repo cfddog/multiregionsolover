@@ -1,13 +1,18 @@
 # Active Context — 当前任务 / 最近决策 / 下一步
 
-> 更新时间：2026-09-26（**最新 §0f：固体/低速/多孔区域残差监视输出**）。**HEAD = `fe7f86b`**
->（`29fc24f` 功能/重构主提交之后的记忆库/IO 提交均已 push）。
+> 更新时间：2026-10-17（**最新 §0m：3 块 AC 修复提交入库 + 冒烟复验**）。**HEAD = `5094fd8`**
+>（本轮 `29eae92`→`10ee6e2`→`6a804fa`→`5094fd8` 四个提交；随后一个记忆库提交）。
 > 本次全部改动（control.ec 7 组拆分 + 重启/节点输出 + 三算例迁移 + 文档/记忆库）**已提交并推送**；
 > 仅 `.vscode/settings.json`（主题设置）有意未提交。
 > 上一版（2026-09-18，fluid_solid 三算例）已归档为 `memory-bank/archive_activeContext_2026-09-18.md`。
 > **2026-10-17：程序已更名 `MultiPhysMixSolver`**（旧名 `opencfd-ec1.16a.out` 由 `make` 建兼容软链），
 > 详见 §0h；并行改造 P0（跨进程安全网）已完成并提交（§0h 末），P1 起未开始。
-> **2026-10-17（最新）：构建布局重构（§0i）** —— 顶层 `makefile` + `src/`（仅源码）+
+> **2026-10-17（最新）：手册 §4.7「多块离散一致性」（§0k）** —— 对流界面单值通量/刻意
+> 一阶、粘性两层差分自然等值反号（**不需要**角点数据）、O 型极坐标网格**仍二阶**
+> （`cylinder_re40_half` 实测 Cd +0.3%）；手册升 **1.6.2**。
+> **2026-10-17：AC 的 `p` halo 统一 + `IF_Debug=3` 缓冲区自检（§0j）** ——
+> 三种进程/块分布实测 `max|dU|=max|dp|=0`；手册 1.6.1。
+> **2026-10-17：构建布局重构（§0i）** —— 顶层 `makefile` + `src/`（仅源码）+
 > `build/`（`*.o`/`*.mod`）+ `bin/`（可执行）+ `cases/`；`make -j4` 已可用。
 > 提交：`c8e423d`（更名）→ `c7537f1`（P0）→ `d92f720`（PDF 名引用）→ 本轮（构建布局，v1.6）。
 > **本轮（第四轮）改动尚未提交**：`src/sub_IO.f90`、`util/check_flow3d_node.py`、两份 docs、手册与记忆库。
@@ -15,6 +20,129 @@
 > 2 个 util 工具 + 模板 + 4 份文档 + 记忆库）。
 > **第六轮（2026-09-26）改动尚未提交**：区域残差监视输出（`src/sub_debug.f90`、
 > `sub_multi_region.f90`、`sub_lowspeed(_ac).f90`、`sub_porous(_ac).f90` + 手册 4 处 + 总结文档 + 记忆库）。
+
+## 0m. 2026-10-17（收尾提交）：3 块 AC 修复入库 + 冒烟复验 ✅
+
+**提交（`main`，本轮 4 个）**
+- `29eae92` fix(ac)：界面通量符号 + `is_high` 判据、`AC_MPI_Sync`、`p` halo、
+  `IF_Debug=3` 缓冲自检、`init_ac_parallel_flags`、`read_solid_bc` 启动死锁。
+- `10ee6e2` cases(lidcavity_ac_3blk)：输入 + `gen_single42.py` + `analyze_3blk.py`
+  + `prep.sh` + README + 目录内 `.gitignore`（实测目录不入库）。
+- `6a804fa` docs(manual)：手册 **1.6.3**（符号约定段 + `tab:ac3blk` + changelog）。
+- `5094fd8` chore：删除根目录遗留 `control.ec`（输入按算例分发）。
+
+**提交前修正（都是为了"文档=代码"一致）**
+- 删除 `ac_res_norm` 中 `IF_Debug=1` 的临时 `DBG2` 统计块；`ac_dbg=1` 的界面诊断保留
+  （默认 0）。
+- `cases/lidcavity_ac_3blk/control.ec`：`AC_Max_Iter` 50→**1**、`t_end`/`Kstep_save`
+  1000/250→**10000/10000**，与实测配置一致。
+- `control.ec.template`：闭腔 + np>1 **不再报错**，改为"压力水平由全局 1 号块锚定"
+  （代码 `init_ac_parallel_flags` 已改，模板注释是旧的）。
+- 冒烟（新二进制，2000 外步）：np1/np2 均无 NaN、u∈[−0.207,1]，
+  `np2 vs np1 max|Δu|=8.7e-4`（瞬态量级，收敛后 1e-6）；`make -j2` EXIT=0。
+
+**未提交（有意）**：`.vscode/settings.json`（主题）、`cases/ssh/`（集群信息）、`workplan.md`。
+
+## 0l. 最新（2026-10-17）：3 块 AC 方腔「界面通量符号 + is_high 判据」两处致命 bug 修复 ✅
+
+**现象**：`cases/lidcavity_ac_3blk`（Re=100，42×42，三块等分 x，界面 x=1/3、2/3）在任何
+进程数下都不收敛：块 1 的 `i=nx-1` 与块 3 的 `i=1` 出现棋盘模态并指数增长（增长因子
+≈1.3/步）；即便压住发散，界面仍整列错位（u 达 1.68/1.83）。**np=1/2/3 结果逐位相同**
+⇒ 先判为离散 bug（而非竞争 bug），并靠 np=1 隔离验证定位。
+
+**根因（`ac_face_flux_rus1_own`，`src/sub_lowspeed_ac.f90`）**
+1. 两侧都做 `RAC += FLX*A`，而两侧传入的面法向**相同**（i 面恒 +x），Rusanov 耗散项
+   −λ/2·(q_R−q_L) 在界面上相互抵消 ⇒ 界面棋盘模态零阻尼。正解：低侧 `RAC -= FLX*A`、
+   高侧 `RAC += FLX*A`。
+2. `is_high` 判据写反（把"ghost 索引更大"当成高侧），中央通量两侧同时反向 ⇒ 界面变抽吸源。
+   正解：按 own/ghost 索引关系判（`iG>iO`、`jG>jO`、`kG>kO` ⇒ 低侧），与块号、进程号无关。
+
+**验证**
+- np=1/2/3（10^4 步）：`max|Δu|=1.16e-6`、`max|Δv|=2.4e-7`、`max|Δp|=9.8e-7`；
+  np=2 与 np=3 **逐位相同**（进程数无关）。
+- 3×10^4 步收敛（`res_q≈3e-14`），u∈[−0.233, 0.926] ⊂ [−1,1]；vs Ghia RMS：u 0.02095 /
+  v 0.04365（与已验证的单块 40×40 答案 0.02095 一致）。
+- 同网格单块 42×42 对照（新增 `gen_single42.py`，目录 `s42`）：`max|Δu|=9.3e-3`、
+  rms 3.0e-3 —— 与界面**刻意一阶**的预期误差同量级（h=1/42、∂u/∂x≈0.4 ⇒ ~5e-3）；
+  离界面 3 胞以外两者逐位一致。单块 42×42 vs Ghia：u 0.02013 / v 0.04387。
+- 关键约定：**`AC_Max_Iter=1` 是这类多块算例的要求**（np=1 同伪步刷新与 np≥2 外步末刷新
+  的耦合节奏才一致；`>1` 时界面滞后于块内）。
+
+**文档**：`chap04` 新增「两侧各算路径的符号约定」段（含两条 bug 说明）+ 表 `tab:ac3blk`；
+`93_changelog` **1.6.3**；`main.tex` 1.6.3；`./build.sh` **0 error**。
+
+**下一步**：其余待办不变；可选：把「3 块 vs 单块」的界面误差做成 h 减半的收敛性表。
+
+## 0k. 最新（2026-10-17）：手册 §4.7「多块离散一致性」+ 曲面网格适用性 ✅
+
+**审阅提问**：① 多块 AC 的对流/粘性离散是否需要特殊处理？二阶 Laplacian 为什么不需要
+角点数据？② 这种"三个一维二阶差分"在不横平竖直的网格（圆柱 O 型）上会不会失效？
+
+**核对结论（源码只读）**
+- 对流 `ac_face_flux`：法向 5 点 `a..e`（`AC_Recon=1` 只用 `b..e`/1 层 ghost；WENO5 用
+  `a`/2 层）。内面循环 `ii=2..nx-1` **排除界面面**（防双计）；界面面用 `ac_ifc_flux_own`
+  （`FSH` owner 单值，全局块号定 owner，`ac_ifc_src_cell` 复用缓冲交换的 `L1/L2/L3` 映射）
+  或跨进程回退 `ac_face_flux_rus1_own`，**两者都只用一阶 Rusanov**（界面 ghost 每外步才刷
+  新，二阶重构会激发 checkerboard）。
+- 粘性 `ac_viscous_res`（`sub_lowspeed_ac.f90:1830--1893`）：`f=1..nx` **不排除**界面面，
+  `if(f-1>=1)/if(f<=nx-1)` 只累加到真实内胞；`H=ν(u_f−u_{f-1})/d`，
+  `d=0.5|x(f+1)−x(f-1)|`，斜网格取 `dproj=|Δx·n|`（>0.2d 才用）。两侧分子相同 ⇒
+  `d_A=d_B` 时**恰好等值反号**，界面动量守恒，**不需要** `FSH`。壁面 `d=Δn=2d_wall` ⇒
+  `H=−νu_1/d_wall`（半个胞心距口径，二阶）。
+- 只含 `∂xx+∂yy+∂zz`、**无混合导数** ⇒ 7 点面邻居壳层闭合，ghost-角点从不被读取；
+  写成应力张量形式最坏也只需 ghost-**edge**。
+
+**曲面/非正交（不会失效，三条前提）**：① 速度存**笛卡尔分量**（本代码如此）⇒ 逐分量标量
+Laplacian 与坐标系无关，不需要柱坐标曲率项；② ν 常数（`LS_mu`）；③ 法向导数用"索引线差分
+÷ 法向投影"（过松弛法）：正交网格严格相等，O 型网格 `i`=径向 / `j`=周向时 skew =
+`O(Δθ)=O(h)` ⇒ 仍**二阶**；FV 用真实面积/体积、无显式 `1/r` ⇒ **无坐标奇点**。
+实测 `cases/cylinder_re40_half`（O 型极坐标，120×80 / 160×120，Re=40，AC）：`Cd`
+1.5706→1.5536 vs Rogers&Kwak 1.549（**+0.3%**），`Cd_p` −0.2%，壁面积分↔远场动量平衡
+互校（1.5706↔1.5708）。会降阶：恒剪切网格（非正交度不随 h 减小）→ 一阶；`μ(T)` 未实现；
+界面非共形/间距跳变 → 界面不守恒。
+
+**文档**：`chap04` §4.7（表 17 依赖表、对流三件事、界面粘性等值反号表、角点判据、曲面网格
+适用性、表 18 实测）；`93_changelog` 1.6.2；`main.tex` 1.6.2；`./build.sh` 0 error /
+0 undefined（第二遍消解前向引用；PDF 无 `??`，新增内容在 pp.18–20）。
+
+**下一步**：见 §0j 末（`ac_zero_mean_p` 全局均值、`AC_MPI_Sync=0 & np>1` 升级/报错、`FSH`
+跨进程回退）；另：若将来上 9 点/紧致/顶点型格式，**必须先扩 ghost 角点交换**（当前只填面
+slab）。
+
+## 0j. 最新（2026-10-17）：AC 的 `p` halo 统一 + 缓冲区交换自检（`IF_Debug=3`）✅
+
+**问题（用户指出）**：`p` 不在 `U(1:5)` 内。同进程 `p` 的 ghost 原先由
+`Umessage_send_mpi` 里一个“融合块”拷贝，条件只有 `LOWSPEED↔LOWSPEED`，且依附于
+`U` 的调用点；`p_send_mpi` 又只在 `AC_MPI_Sync==1` 分支里调用 ⇒ 缺省
+`AC_MPI_Sync=0` 时 np=1 有新鲜 `p`、np>1 永远不刷新；`AC_MPI_Sync=1` 时同进程
+`p` 被拷两遍；多孔驱动在 np=1 时完全不刷新 halo。
+
+**方案 A（已实施）**
+1. 删除融合块：`p` 只走 `p_send_mpi`/`p_recv_mpi`。同进程直写（无临时数组、无 MPI），
+   跨进程才打包 `MPI_Bsend`；两侧过滤条件一致（`LOWSPEED|POROUS` × `LOWSPEED|POROUS`）。
+2. 驱动条件对齐：`AC_MPI_Sync==1 .or. Total_proc==1` 时**同时**刷新 `U` 与 `p`
+   （`sub_lowspeed_ac.f90`、`sub_porous_ac.f90`，后者新增 np=1 分支）。
+3. 新增 `check_buffer_exchange` + `IF_Debug=3`：哨兵值逐 ghost 胞**严格**比对，
+   非破坏性（保存/恢复）；同进程直接比，跨进程把“邻居 ghost 应有内容”发给对侧再比。
+
+**实测**（`/tmp/acbuf`，`t_end=20`，`AC_MPI_Sync=1`，三例 EXIT=0）
+
+| 分布 | 算例 | 子面 同/跨 | ghost 胞 | max\|dU\| / max\|dp\| |
+|---|---|---|---|---|
+| 1 进程 2 块 | `channel_ac_2blk` | 2 / 0 | 320 | 0 / 0 PASS |
+| 2 进程 各 1 块 | `channel_ac_2blk` | 0 / 2 | 320 | 0 / 0 PASS |
+| 2 进程 各 2 块 | `channel_ac_4blk` | 4 / 4 | 960 | 0 / 0 PASS |
+
+**踩坑**：① 自检第一版用 `nb1`（接收块号）算期望值 → 必然差 ~1e9；
+② 跨进程**不能** `B1 => Mesh%Block(B_n(nb1))`（`B_n` 只对本进程块有效，会指到错块）；
+③ `size()` 已含 NVAR 维，`NVAR*size()` 使 `MPI_Recv` 声明 5 倍缓冲 → 堆损坏（malloc assert）。
+
+**未做 / 下一步**：`ac_zero_mean_p` 仍是**块局部**均值（无压力 BC 的多块 AC 会出现块间
+`p` 偏置，建议改为全局均值 `MPI_Allreduce`）；`AC_MPI_Sync=0 & np>1` 伪步内仍不刷新（仅告警）；
+P2 的“所有块统一步数”只在 `AC_MPI_Sync=1` 下实现。
+文档：`chap04` 新增 §`ac-halo`/§`bufchk`、附录 A 补 `AC_MPI_Sync` 与 `IF_Debug=3`、
+`93_changelog` 1.6.1，PDF 已重编译（0 error）。
+
 
 ## 0i. 最新（2026-10-17）：构建布局重构 `makefile + src/ + build/ + bin/ + cases/` ✅
 
