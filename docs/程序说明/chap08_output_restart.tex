@@ -12,7 +12,7 @@
 \code{force.log}、\code{force-invis-vis.log} & \code{Kstep\_show} & 气动力/力矩（粘性/无粘分开）\\
 \code{flow3d.dat} & \code{Kstep\_save}（且 \code{Iflag\_savefile=1}） & 可压流场（PLOT3D 风格，无量纲）\\
 \code{flow3d\_block\_*.vtk} / \code{flow3d.vtk} & \code{Kstep\_save} & VTK；\code{Iflag\_vtk\_onefile=0} 每块一个，$=1$ 合并；\code{Iflag\_vtk\_SI=1} 输出 SI \\
-\code{flow3d\_node.dat} & \code{Kstep\_save} 且 \code{Iflag\_flow\_node=1} & \textbf{节点} SI 流场，6 变量 \code{d,u,v,w,T,Ts}，unformatted 逐块一条记录 \\
+\code{flow3d\_node.dat} & \code{Kstep\_save} 且 \code{Iflag\_flow\_node=1} & \textbf{节点} SI 流场，6 变量 \code{d,u,v,w,T,Ts}，unformatted（3 条 PLOT3D-Q 头 + 逐块一条记录）\\
 \code{Ts\_block\_*.dat} & \code{Kstep\_save} & 各固体/多孔块骨架温度（K）\\
 \code{iface\_couple.dat} / \code{iface\_highlow.dat} & 交错每轮 & 界面量（$x_w,T_w,q_w,p_w$ / $|u|_w$）\\
 \code{mesh-quality.dat}、\code{wall\_dist.dat} & 启动/自动 & 网格质量、壁距（缺失自动生成）\\
@@ -76,6 +76,21 @@ $-1$ & 忽略 & 不判定也不恢复界面量（\textbf{严格复现旧行为}�
 实际生效值打印在日志与 \code{output\_para.out}。
 
 \subsection{节点流场 \code{flow3d\_node.dat}（\code{Iflag\_flow\_node=1}）}
+\textbf{文件布局}（unformatted；2026-09-25 起带 \textbf{PLOT3D 解(Q)/函数型文件头}）：
+\begin{lstlisting}
+记录1 : Total_block                        块数
+记录2 : (ni,nj,nk) m=1..Total_block        各块节点维数
+记录3 : NVAR_NODE = 6                      变量数
+其后每块(全局块序，与 Mesh3d.x 同序) :
+  记录 : d,u,v,w,T,Ts  at (i=1..nx, j=1..ny, k=1..nz)   共 6*ni*nj*nk 个双精度
+\end{lstlisting}
+头 3 条记录（块数与维数、变量数）使 Tecplot/ParaView 的 \textbf{PLOT3D 读法}
+（网格 \code{Mesh3d.x} $+$ 解/函数型文件 \code{flow3d\_node.dat}）能直接识别块数与各块维数；
+\textbf{2026-09-25 之前的文件没有头记录}，读端只能用 \code{Mesh3d.x} 提供维数
+（\code{util/check\_flow3d\_node.py} 自动识别两种布局，即旧文件仍可校验）。
+注意：6 个场是\textbf{自定义变量表}（\code{d,u,v,w,T,Ts}，SI），\textbf{不是} PLOT3D 标准的
+5 个守恒变量（$\rho,\rho u,\rho v,\rho w,E$），读入后请自行命名变量；
+Tecplot 中选 PLOT3D 数据、网格用 \code{Mesh3d.x}、解/函数文件用 \code{flow3d\_node.dat}。
 \begin{itemize}
   \item 8 格心平均 $\to$ \textbf{网格节点}，\textbf{SI 单位}，unformatted，
         \textbf{逐块一条记录}，块序与 \code{Mesh3d.x} 一致，故可直接与 \code{Mesh3d.x} 组合显示；

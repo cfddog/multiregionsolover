@@ -23,7 +23,53 @@ $h_v$ 为体积换热系数 [W/(m$^3$K)]；$h_v=0$ 时退化为局部热平衡�
 变量约定与低速块一致：\code{U(1)=$\rho$}、\code{U(2..4)=速度}、\code{U(5)=T\_f}、压力在 \code{B\%p}，
 骨架温度在 \code{B\%Ts}（初值 \code{Porous\_T\_ref}）。全部为 \textbf{SI}。
 
-\subsection{多孔参数表}
+\subsection{$\varepsilon\to0$ 与 $\varepsilon=1$ 两个极限（2026-09-26）}
+Ergun 关系的两个端点 $\varepsilon=0,1$ 对应两个有明确物理意义的极限，
+程序对二者都做了\textbf{显式}处理（内部常数 \code{EPS\_SOLID\_POROUS}$=10^{-8}$）。
+
+\paragraph{$\varepsilon=1$：无骨架（纯流体）极限}
+$d_p=10^{-3}$ m 时 $K=d_p^2\varepsilon^3/[150(1-\varepsilon)^2]\to1.0\times10^{24}$ m$^2$，
+于是 Darcy 项 $c_{drag}=\varepsilon^2\mu/K\approx2\times10^{-29}$ s$^{-1}$、
+Forchheimer 项 $\varepsilon^3F\rho\lvert u\rvert/\sqrt{K}$ 同阶——阻力\textbf{自动为零}，
+动量方程退化为纯 Navier--Stokes。在 \code{LS\_Algorithm=3} 下多孔 AC 与低速 AC
+\textbf{共用同一引擎}（\code{sub\_lowspeed\_ac.f90} 的 \code{ac\_*}/\code{lows\_ac\_work}），
+故 $\varepsilon=1$ 时多孔块的动量/连续方程与同几何、同边界的 \code{BLOCK\_LOWSPEED}
+块逐项相同；能量侧 $\varepsilon k_f=k_f$、$(1-\varepsilon)k_s=0$，$h_v>0$ 时骨架方程
+退化为 $0=h_v(T_f-T_s)\Rightarrow T_s\equiv T_f$（壁温由流体相决定）。
+界面处骨架相消失：\code{set\_porous\_Ts\_flux} 在 $(1-\varepsilon)k_s\le10^{-6}$ W/(m\,K) 时
+改用零梯度鬼点，避免热流外推 $T_s^{g}=T_s^{i}+q_w\Delta x/[(1-\varepsilon)k_s]$
+在 $\varepsilon\to1$ 时发散（$\varepsilon=1$ 时原式给出 $\sim10^{32}$ K 的鬼点温度）。
+
+\emph{注意}：码 19 的\textbf{气体侧}界面模型是“无滑移等温壁 + 可选发汗”，
+码 12 的气体侧是“流--流连续界面”，两者属于\textbf{不同界面模型}。
+因此 $\varepsilon=1$ 与低速算例的等价性只在\textbf{块内方程}层面严格成立，
+数值差值应集中在界面相邻排（见第 \ref{sec:validation} 章极限验证表）。
+
+\paragraph{$\varepsilon=0$：不可渗固体极限}
+$\varepsilon=0$ 时 $K=0$，原实现的 Darcy 项 $=\varepsilon^2\mu/\max(K,10^{-30})=0/\text{有限}=0$，
+即“阻力为零”——多孔块会退化成\textbf{自由流体}（与物理相反）；同时 \code{porous.inp}
+的校验只接受 $(0,1]$，$\varepsilon=0$ 被\textbf{静默重置为 0.9}。
+2026-09-26 起：
+\begin{itemize}
+  \item \code{porous.inp} 接受闭区间 $[0,1]$，$\varepsilon=0$ 时打印“impermeable-solid limit”提示；
+  \item 阻力系数中 $\varepsilon\leftarrow\max(\varepsilon,10^{-8})$（$K$ 下限 $10^{-30}$ 不再乘
+        $\varepsilon^2=0$），得 $c_{drag}\approx1.8\times10^{9}$ s$^{-1}$，与 $\varepsilon\sim10^{-8}$
+        的结果连续；\code{AC} 路径对角置 $10^{30}$、\code{SIMPLE} 路径 $a_p$ 加同样量级的源项；
+  \item 动量求解后\textbf{显式冻结} $u=v=w=0$（含鬼点层），故 $\varepsilon\le10^{-8}$ 时速度严格为 0；
+  \item 骨架导热 $\to k_s$、$\varepsilon k_f\to0$，$h_v>0$ 时 $T_f\equiv T_s$，
+        $T_s$ 满足纯导热，即\textbf{与同几何、同热边界的 \code{BLOCK\_SOLID} 等价}。
+\end{itemize}
+
+\paragraph{界面有效导热（两相体积加权）}
+多孔界面的骨架鬼点热流外推（以及 \code{solid\_bc.inp} 热流/Robin 面的骨架鬼点）
+统一改用两相体积加权有效导热
+\begin{equation}
+k_{eff}=\varepsilon k_f+(1-\varepsilon)k_s ,
+\end{equation}
+代替原来的 $(1-\varepsilon)k_s$（原式在 $\varepsilon\to1$ 时退化到 0 使鬼点发散）。
+$\varepsilon=0.30$ 时 $k_{eff}$ 与 $(1-\varepsilon)k_s$ 相差 $0.07\%$，既有算例结果基本不变。
+
+
 \begin{table}[htbp]\centering\small
 \caption{组 \code{\$porous\_ec} 与相关文件}\label{tab:porousparams}
 \begin{tabular}{llp{8.0cm}}
@@ -64,10 +110,39 @@ $h_v$ 为体积换热系数 [W/(m$^3$K)]；$h_v=0$ 时退化为局部热平衡�
         $\Rightarrow$ \textbf{改这两个参数前先估时间}。
 \end{itemize}
 
+\subsection{残差监视输出（2026-09-26 起）}
+多孔块同样按\textbf{区域}给出残差统计（与固体/低速统一格式，实现见
+\code{src/sub\_debug.f90} 的 \code{region\_res\_stat}）：\code{max} 为区域内逐胞残差幅值最大值，
+\code{rms} $=\sqrt{\sum r^2/N}$ 为区域平均水平，\code{at (i,j,k)} 为 \code{max} 所在胞及胞心坐标 $[$\code{m}$]$。
+\begin{lstlisting}
+ Region res [porous SIMPLE div(F)] block   1 (BLOCK_POROUS) step=    100 : max= 0.68507753E-04  rms= 0.37874783E-04  at (i,j,k)=(    1    1    1)  xyz=[ 0.125000E-04  0.500000E-01  0.500000E-01] m  res_p= 0.68508E-04
+ Region res [porous AC flow] block   1 (BLOCK_POROUS) final=   3001 : max= 0.15329889E-03  rms= 0.53819222E-04  at (i,j,k)=(   21    1    1)  xyz=[ 0.410000E+01  0.250000E-01  0.500000E+00] m  res_q= 0.14300E-04 res_m= 0.15330E-03
+ Region res [porous LTNE fluid |dTf|] block   1 (BLOCK_POROUS) final=  3001 : max= 0.72812682E+01  rms= 0.38006826E+01  at (i,j,k)=(  400    1    1)  xyz=[ 0.998750E-02  0.500000E-01  0.500000E-01] m  dT(window)= 0.72813E+01
+ Region res [porous LTNE frame |dTs|] block   1 (BLOCK_POROUS) final=  3001 : max= 0.77265863E+01  rms= 0.44862730E+01  at (i,j,k)=(  400    1    1)  xyz=[ 0.998750E-02  0.500000E-01  0.500000E-01] m  dT(window)= 0.77266E+01
+\end{lstlisting}
+\begin{itemize}
+  \item \textbf{SIMPLE（\code{LS\_Algorithm=1/2}）}：残差量 $=\lvert\mathrm{div}\,\mathbf{F}\rvert$（\code{res\_p}，
+        与 \code{Porous\_Tol} 比较）；每 100 次外迭代 1 行 + 结束 1 行（\code{final=}）。
+  \item \textbf{AC（\code{LS\_Algorithm=3}）}：过程行 \code{AC-porous iter ...}（间隔 \code{AC\_Print}），
+        结束 1 行区域汇总（行尾附 \code{res\_q}/\code{res\_m}）。
+  \item \textbf{LTNE（$h_v>0$）}：流动收敛后解双温度对，结束对流体/骨架各打 1 行
+        （\code{porous LTNE fluid |dTf|}/\code{porous LTNE frame |dTs|}），统计 100 步窗口内的温度变化，
+        \code{at (i,j,k)} 给出变化最大处——LTNE 未收敛时该位置通常在入口/界面附近。
+  \item 逐迭代 \code{DBG}/\code{DEBUG}/\code{AC-porous LTNE iter} 等调试行已删除。
+\end{itemize}
+
 \subsection{参数选取建议}
 \begin{itemize}
   \item \textbf{$\varepsilon$}：颗粒床 0.36--0.45；金属泡沫/丝网 0.8--0.95；
-        本仓库 case3 取 0.30（致密多孔壁）。
+        本仓库 case3 取 0.30（致密多孔壁）。区间 $[0,1]$ 全部合法，
+        两端点分别退化为“纯流体”与“不可渗固体”（见本节首小节的极限说明）。
+  \item \textbf{极限算例}：\code{cases/fluid\_solid/limits/}（$t$--迭代预算已压缩）给出
+        $\varepsilon=1$、$\varepsilon=1\times10^{-6}$、$\varepsilon=0$ 与
+        \code{run\_case1\_solid}/\code{run\_case2\_lowspeed} 的短调度对照。
+        该套 deck 目前只用于回归“极限分支不崩、$\varepsilon=0$ 速度逐点为 0”；
+        “$\varepsilon=1$ 复现低速、$\varepsilon=0$ 复现固体”的\textbf{定量}对照
+        尚未通过（两 deck 的界面码 19 与 11/12 不是同一模型），实测与原因见
+        第 \ref{sec:limitresults} 节。
   \item \textbf{$d_p$}：用实际颗粒/孔径 [m]；$K\propto d_p^2$，$d_p$ 偏大会低估阻力。
   \item \textbf{$h_v$}：由换热面积密度估算 $h_v\approx a_s h_{conv}$（$a_s$ 比表面积 [m$^2$/m$^3$]）；
         金属泡沫典型 $10^{5}$--$10^{7}$ W/(m$^3$K)。$h_v$ 越大 LTNE 温差越小。

@@ -51,9 +51,83 @@ diff <(grep -v "namelist groups found" old/output_para.out) \
         \code{output\_para.out} 仅多 1 行新回显。
 \end{itemize}
 
+\subsection{多孔 $\varepsilon$ 极限的实测（2026-09-26 一轮，2026-10-17 复核）}
+\label{sec:limitresults}
+算例清单见第 \ref{sec:cases} 章表 \ref{tab:limitcases}，算例文件、运行说明与完整数据见
+\code{cases/fluid\_solid/limits/README.md}。五个目录的网格与短调度预算相同，
+块类型/$\varepsilon$ 不同；$T$/$T_s$ 列可直接互比，速度列只能与同接口模型的参照比
+（\code{run\_por\_eps0} 的接口是码 19，\code{run\_ref\_case1} 是码 11）。
+块1 节点值范围如下（\code{flow3d\_node.dat}，SI）：
+
+\begin{table}[htbp]\centering\small
+\caption{$\varepsilon$ 极限算例实测（块1，节点值范围；$t$--迭代预算压缩到 200 步）}
+\label{tab:limitresults}
+\begin{tabular}{p{3.5cm}p{2.2cm}p{2.5cm}p{2.3cm}p{2.3cm}}
+\toprule
+算例 & $u$ [m/s] & $v$ [m/s] & $T$ [K] & $T_s$ [K] \\
+\midrule
+\code{run\_ref\_case1}（固，码 11） & 0 & 0 & 300--800 & 300--800 \\
+\code{run\_ref\_case2}（低速，码 12） & $-0.134$--$0.687$ & 0.273--17.71 & 203.7--299.8 & 同 $T$ \\
+\code{run\_por\_eps1} & $-16.91$--$17.64$ & $-10.76$--6.77 & 300（未变） & 300（未变） \\
+\code{run\_por\_eps1m6} & $\pm6\times10^{-10}$ & $-4.5\times10^{-6}$--1.425 & 300（未变） & 301.4--302.9 \\
+\code{run\_por\_eps0} & 0（精确） & 0（精确） & 300--303.1 & 300--303.1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent 读法：$\varepsilon=0$ 的 $u,v,w$ 逐点为浮点 0（通过）；$\varepsilon=1$ 的阻力自零
+（有 O(10) m/s 流动，通过），但其速度方向与参照不同（未通过）；三个多孔算例的 $T$ 都停在
+初值、$T_s$ 最多 +3 K（能量未推进）。
+
+\paragraph{已确认}
+\begin{itemize}
+  \item 五例全部 \code{EXIT=0}、\code{run.log} 无 \code{NaN}，
+        \code{util/check\_flow3d\_node.py} 报 \code{STRUCTURE OK}；
+  \item $\varepsilon=0$ 时块1 的 $u,v,w$ 在\textbf{全部节点}（含鬼点层写入的边界节点行）
+        逐点为浮点 0 —— “不可渗固体极限”的显式冻结分支按设计工作；
+  \item $\varepsilon=1$ 时 Darcy/Forchheimer 源项确实消失（块内出现 O(10) m/s 流动，
+        而 $\varepsilon=10^{-6}$ 时 $|u|\lesssim10^{-9}$ m/s），未出现发散。
+\end{itemize}
+
+\paragraph{尚未通过（负结果）}
+\begin{itemize}
+  \item \textbf{$\varepsilon=1$ 与低速块的逐点一致性不成立}：块1 主速度分量在
+        $u$（$\pm17.6$ m/s），参照 \code{run\_ref\_case2} 在 $v$（17.7 m/s）；
+        \code{--blocks 1} 对照给出 $\max|\Delta u|=17.6$ m/s、$\max|\Delta v|=28.0$ m/s、
+        $\max|\Delta T|=96.3$ K，差值\textbf{不限于}界面相邻排。原因之一是界面码 19
+        的气体侧是“无滑移等温壁 + 可选发汗”，而码 12 是流--流连续；多孔侧的界面处理
+        也可能不允许冷却剂穿出，使块内形成回流而非贯穿流。
+  \item \textbf{$\varepsilon=0$ 与固体块的温度场不重合}：$\max|\Delta T|=498.6$ K
+        （\code{run\_por\_eps0} 的 $T_s$ 只到 303 K，固体参照到 800 K）。两 deck 仅
+        接口码 19 vs 11 不同，因此这一步检验的其实是\textbf{界面壁模型}，不是块内导热。
+  \item \textbf{多孔块能量几乎不推进}：三个多孔算例的流体 $T$ 均停在初值 300 K，
+        $T_s$ 最多变化 3 K —— \code{Niter\_Couple\_Outer=2}、\code{Porous\_Chunk\_Iter=2}
+        时多孔段一共只被调用 4 次，来不及响应。
+\end{itemize}
+
+\noindent 因此表 \ref{tab:limitresults} 的定位是\textbf{回归快照}（分支不崩 + $\varepsilon=0$
+速度精确为零），不是“$\varepsilon=1$ 复现低速、$\varepsilon=0$ 复现固体”的定量证据。
+要取得定量证据需：① 对照双方使用\textbf{同一接口模型}（12$\leftrightarrow$12 或
+19$\leftrightarrow$19）；② 把外层轮数与多孔段预算提高一个量级（或跑到稳态）。
+
+\subsection{本手册涉及功能的验证记录（2026-10-17）}
+\begin{itemize}
+  \item \textbf{\code{flow3d\_node.dat} 头记录回归修复}：工作树版本曾写成 2 条
+        （块数 + 每块 \code{ni,nj,nk,nvar}），与 \ref{sec:restart} 章及 1.1 条目不符。
+        恢复为 3 条后，\code{solid\_1d}（1 块）与 \code{channel\_ac\_4blk}（4 块）的
+        文件均通过 \code{util/check\_flow3d\_node.py}（\code{STRUCTURE OK}）；
+        \code{check}/\code{compare} 两个脚本同时兼容 2 条过渡写法，2026-09-26 的
+        limits 文件仍可读。
+  \item \textbf{冷启动确定性}：\code{Iflag\_restart=-1} 时不调用 \code{read\_restart}，
+        而 \code{restarted} 此前未初始化；复现到“同一 deck 偶发 NaN”。置初值后
+        \code{solid\_1d} 的冷启动 \code{EXIT=0}、无 \code{NaN}、节点场范围与正常起步一致。
+\end{itemize}
+
 \subsection{已知问题与待办（摘要）}
 \begin{itemize}
   \item \textbf{多孔速度入口}存在约 28\% 通量缺口（“流量锁定”未实现为按面法向的通量约束）；
+  \item \textbf{$\varepsilon$ 极限的定量对照未通过}（界面码 19 的壁模型 + 压缩调度 +
+        $\varepsilon=1$ 多孔侧可能不允许穿出），见第 \ref{sec:limitresults} 节；
   \item \textbf{低速压力求解器}为迭代型（Jacobi/GS），建议换 BiCGStab/ILU 以加速并提高鲁棒性；
   \item \textbf{低速网格病态}：\code{flatplate\_re1e6}、\code{high\_low\_fluid} 收敛慢/精度受损；
   \item \textbf{耦合外迭代}可加 Aitken/Anderson 加速；

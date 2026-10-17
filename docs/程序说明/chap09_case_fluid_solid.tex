@@ -218,7 +218,53 @@ case3 一轮太慢 & 压缩 \code{AC\_Max\_Iter}$\times$\code{Porous\_Chunk\_Ite
 \end{tabular}
 \end{table}
 
-\noindent\textbf{依据文件}：\code{cases/fluid\_solid/*/control.ec}（各目录另有 \code{control.ec.legacy} 旧写法备份）、
+\subsection{极限算例（\code{cases/fluid\_solid/limits}，2026-09-26）}
+两个解析极限 —— “$\varepsilon=1$ 复现低速（纯 N--S）”“$\varepsilon=0$ 复现固体导热” ——
+在 \code{cases/fluid\_solid/limits/} 下放置了 5 个\textbf{短调度}算例（物理设置与三例一致，
+仅压缩 $t$--迭代预算，便于回归；每个目录都自带 \code{control.ec}）。
+\textbf{注意}：实测表明这套 deck 目前只能回归“极限分支不崩 + $\varepsilon=0$ 速度逐点为 0”，
+\textbf{定量}的“复现低速/复现固体”尚未通过（界面码不同 + 调度过短），
+实测数据、原因分析与后续方案见 \code{cases/fluid\_solid/limits/README.md} 与
+第 \ref{sec:limitresults} 节：
+
+\begin{table}[htbp]\centering\small
+\caption{极限算例一览（\code{cases/fluid\_solid/limits/}）}\label{tab:limitcases}
+\begin{tabular}{p{3.6cm}p{5.2cm}p{5.0cm}}
+\toprule
+目录 & 块1 & 对照算例 / 目的 \\
+\midrule
+\code{run\_ref\_case1} & 固体（码 11） & case1 短调度参照（$T_s$=固体温度）\\
+\code{run\_ref\_case2} & 低速（码 12） & case2 短调度参照 \\
+\code{run\_por\_eps1} & 多孔 $\varepsilon=1$、$h_v=2\times10^6$ & \code{run\_ref\_case2}：阻力 $\to0$ \\
+\code{run\_por\_eps1m6} & 多孔 $\varepsilon=10^{-6}$ & \code{run\_ref\_case1}：$\varepsilon\to0$ 逼近 \\
+\code{run\_por\_eps0} & 多孔 $\varepsilon=0$ & \code{run\_ref\_case1}：精确固体极限 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{共同短调度（与三例的差异仅此三项）}
+\code{Kstep\_Couple\_Comp=100}、\code{Kstep\_Couple\_Min=100}、\code{Niter\_Couple\_Warm=10}、
+\code{Niter\_Couple\_Outer=2}、\code{Porous\_Chunk\_Iter=2}、\code{AC\_Max\_Iter=5000}、
+\code{Porous\_Max\_Iter=3000}、\code{Solid\_Max\_Iter=3000/Solid\_Tol=1e-8}、
+\code{Kstep\_save=100}（\code{Kstep=100/200} 各写一次 \code{flow3d\_node.dat}）、
+\code{Iflag\_restart=-1}（不读不写重启，保证两个待比较算例的初场完全一致）。
+参照算例 \code{run\_ref\_case2}/\code{run\_ref\_case1} 与极限算例使用\textbf{完全相同的}
+\textbf{调度与 AC 预算}，因此比较是“同预算、同初场”的逐点对照。
+
+\paragraph{边界对齐}
+\code{run\_por\_eps0} 的 \code{bc3d.inp} 把块1 \code{j+} 面由 case3 的冷却剂入口（码 5）
+改为 case1 的等温壁（码 2 + \code{solid\_bc.inp} 面 5 = 300 K），
+使 $\varepsilon=0$ 的多孔块与 case1 的固体块几何/热边界逐面一致（接口仍为码 19 vs 11）。
+
+\paragraph{对照工具}
+\code{python3 util/compare\_flow3d\_node.py <ref> <test>}：读两个算例的
+\code{flow3d\_node.dat}（节点值、SI），逐块逐变量给出 $\max|\Delta|$、$\mathrm{rms}|\Delta|$、
+$\max|\text{ref}|$、$\max|\Delta|$ 位置，以及\textbf{排除界面节点行 / 界面侧第一层单元}后的同一组指标，
+便于判断差值是否只由界面模型差异造成。2026-09-26 一轮的实测是\textbf{负结果}：
+$\varepsilon=1$ 与低速参照的主速度分量不同（$u$ vs $v$），$\varepsilon=0$ 与固体的
+$T_s$ 相差 ~500 K，差值不限于界面一排 —— 详见第 \ref{sec:limitresults} 节。
+
+
 \code{docs/进度\_fluid\_solid三算例.md}、\code{docs/重启与节点流场输出说明.md}。
 %===EOF===
 

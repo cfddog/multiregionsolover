@@ -28,7 +28,7 @@
 | `$ac_ec` | 15 | 人工压缩(AC)求解器（低速与多孔共用） | `AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, AC_WallRecon, AC_WallP, AC_MomDiss, AC_MomFrac` |
 | `$solid_ec` | 4 | 固体导热块（**新增**：原为代码内硬编码） | `Solid_GS_Omega=1.7, Solid_Max_Iter=20000, Solid_Min_Iter=5, Solid_Tol=1e-9` |
 | `$porous_ec` | 8 | 多孔介质块 | `Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in` |
-| `$couple_ec` | 12 | 跨区域（分段交错）耦合调度 | `Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, Niter_Couple_Warm, Kstep_Couple_Min, Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux, Porous_Chunk_Iter, Iflag_Couple_Restart` |
+| `$couple_ec` | 13 | 跨区域（分段交错）耦合调度 | `Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, Niter_Couple_Warm, Kstep_Couple_Min, Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux, Porous_Chunk_Iter, Iflag_Couple_Restart, **Iflag_Couple_Stop**` |
 | 旧组 `$control_ec` | 128(+4) | 历史单组，**完全保留** | 全部变量，`Solid_*` 追加在末尾 |
 
 合计：现有 128 个变量全部覆盖，另加 4 个固体控制量。
@@ -36,7 +36,12 @@
 **不在 control.ec 里**（仍是独立文件，因为是逐块/逐面数据）：
 - `material.in`：块类型表 + 每块 `(rho, Cp, k)`
 - `solid_bc.inp`：固体/多孔逐面热边界 `Tw / Qw / htc`
-- `porous.inp`：多孔块 `eps, dp, hv`
+- `porous.inp`：多孔块 `eps, dp, hv`（块号 + 孔隙率 + 颗粒尺度[m] + 体积换热系数[W/(m³K)]）。
+  **2026-09-26 起 `eps` 取闭区间 `[0,1]`**（原 `(0,1]`，`eps=0` 曾被静默重置为 0.9）：
+  `eps=1`=无骨架纯流体极限（阻力自动为 0），`eps=0`=不可渗固体极限（速度冻结为 0、
+  骨架退化为纯导热）。内部常数 `EPS_SOLID_POROUS=1e-8` 与界面两相有效导热
+  `k_eff=εk_f+(1−ε)k_s` 见 `src/sub_modules.f90`、`src/sub_multi_region.f90`；
+  极限验证算例见 `cases/fluid_solid/limits/`。
 - `bc3d.inp` / `bc3d_interface.inp`：边界与块间对接
 
 ## 3. 读取规则（兼容 + 严格）
@@ -124,4 +129,43 @@ $end
 - 该路径退出前会**补写一次重启文件**（否则 `t_end` 落在两次 `Kstep_save` 之间就没有文件可续）。
 - case1 这类"`max|dT_w|` 平台 ~0.1 K > `Tol_Couple_Tw=1e-2`"的算例永远不会自动判定为已收敛：
   要么放宽 `Tol_Couple_Tw`，要么直接 `Iflag_Couple_Restart=1`。
+
+## 9. 交错外层停机判据（2026-09-26 新增，`Iflag_Couple_Stop`）
+
+**背景**：交错耦合（`Iflag_Couple_Scheme=1`）原先只有两个出口——界面量判据
+（`Tol_Couple_Tw` / 码 12 的 `p,u`）或跑满 `Niter_Couple_Outer` 轮；`t_end` 在该模式下被忽略，
+所以"想跑够物理时间就停"和"收敛了就停"都不好表达。
+
+- `Iflag_Couple_Stop`（`$couple_ec`，默认 **0**）：
+
+  | 取值 | 含义 |
+  |---|---|
+  | `0` | **旧行为**（回归默认）：只看界面量判据与 `Niter_Couple_Outer`，`t_end` 无效 |
+  | `1` | 每轮末做停机测试，满足**任一**条件即退出：① 累积物理时间 `Mesh%tt >= t_end`；② 全局所有残差 < 各自标准 |
+
+- 残差口径（`couple_stop_test`，每轮取最差块并做 MPI 归约；只统计本算例**实际存在**的块）：
+
+  | 块类型 | 残差 | 标准（既有控制量） |
+  |---|---|---|
+  | `BLOCK_FLUID` | 流体块胞心 `B%Res` 的 RMS（`max` over NVAR） | `Res_Inner_Limit`（默认 1e-10） |
+  | `BLOCK_LOWSPEED` / `BLOCK_POROUS` | AC 无量纲 `max(res_q, res_m)` | `AC_Tol`（默认 1e-7） |
+  | `BLOCK_SOLID` | 固体 GS 最后一次扫掠的 `max|ΔTs|` | `Solid_Tol`（默认 1e-9） |
+
+- 要点：
+  - `Niter_Couple_Outer` 仍是**安全上限**；界面量判据同时保留，谁先满足谁停（两套判据互不影响）；
+  - `Iflag_Couple_Stop=1` 时气体段会按剩余时间**截断**
+    （`nstep=min(nstep, ⌊(t_end-tt)/dt_global⌋+1)`），因此最多只超过 `t_end` 一个时间步；
+  - 低速/多孔块用 SIMPLE（`LS_Algorithm≠3`）时**不登记残差** ⇒ "残差达标"永假，只可能由
+    `t_end` 或 `Niter_Couple_Outer` 结束（不会误判为已收敛）；
+  - 每轮打印 `stop test: tt=... t_end=... tt_reached=... res comp/ls/por/solid=... all_res_ok=...`
+    （`-1.` 表示该块类型不在本算例中），退出提示区分"到 `t_end`"与"残差达标"。
+
+**验证**（单进程 smokes，全部 `EXIT=0`）：
+- 码 19（`cases/fluid_solid/run_case3_porous` 改 `t_end=25`）：第 3 轮气体段由 10 截断为 6 步，
+  `tt=26 ≥ t_end` ⇒ `stopped: physical time reached t_end`；
+- 同算例把 `AC_Tol`/`Res_Inner_Limit` 放宽到 1e30（模拟"已收敛"）：第 1 轮即
+  `all_res_ok= T` ⇒ `stopped: all global residuals below standard`；
+- 码 11（case1）：固体 GS 残差实测登记为 ~`7.1e-10`，`Res_Inner_Limit=1e-10` 未达 ⇒ 继续跑，
+  跑满 `Niter_Couple_Outer` 后按旧提示退出；
+- `Iflag_Couple_Stop=0`：日志中无 `stop test` 行，其余与旧版一致。
 

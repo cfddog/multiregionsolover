@@ -53,6 +53,50 @@
     全部 EXIT=0 / NaN=0 \\
 2026-09-25 & 1.1 & \textbf{本手册 v1.0 建立}（\code{docs/程序说明/}，LaTeX） & \code{docs/程序说明/*} &
     \code{xelatex} 编译通过 \\
+2026-09-25 & 1.1 & \code{flow3d\_node.dat} 增加 \textbf{PLOT3D 解(Q)/函数型文件头}
+    （3 条：块数 / 各块维数 / 变量数 $=6$），Tecplot/ParaView 可直接识别；
+    旧无头文件仍可读（\code{util/check\_flow3d\_node.py} 自动识别） & \code{sub\_IO.f90}、
+    \code{util/check\_flow3d\_node.py} & \code{solid\_1d}（1 块）与 \code{channel\_ac\_4blk}
+    （4 块）实测：旧二进制输出 $=$ 新文件去掉 3 条头记录（逐字节一致），\code{STRUCTURE OK} \\
+2026-09-26 & 1.3 & \textbf{固体/低速/多孔求解器输出精简 + 区域残差统计}：
+    每次求解只保留“每 100 次迭代 1 行过程监视 + 1 行结束汇总”，每行给出该\textbf{区域}的
+    $\max$、平均 RMS $=\sqrt{\sum r^2/N}$ 与 $\max$ 所在胞 $(i,j,k)$ 及物理坐标；
+    删除全部逐迭代 \code{DBG}/\code{DEBUG}/\code{GS iter} 调试输出
+    （固体 GS、SIMPLE 低速/多孔、AC 低速/多孔、AC 能量、LTNE 双温度；
+    AC 过程行间隔仍由 \code{AC\_Print} 控制）& \code{sub\_debug.f90}
+    （新 \code{region\_stat\_mod}）、\code{sub\_multi\_region.f90}、
+    \code{sub\_lowspeed.f90}、\code{sub\_porous.f90}、\code{sub\_lowspeed\_ac.f90}、
+    \code{sub\_porous\_ac.f90} & \code{solid\_1d}、\code{channel\_ac\_4blk}、
+    \code{porous\_ltne\_1d}（SIMPLE 与 \code{run\_ac}）、\code{porous\_plug\_ac}、
+    \code{fluid\_solid} 码 11/12/19 短跑；全部 EXIT=0，\code{max} 与旧日志一致 \\
+2026-09-26 & 1.2 & \textbf{交错外层停机判据}：新增 \code{Iflag\_Couple\_Stop}
+    （0 旧行为/1 满足 $tt\ge t_{end}$ \textbf{或} 全局残差全达标即停，\code{Niter\_Couple\_Outer}
+    保留为安全上限）；可压块 RMS$\le$\code{Res\_Inner\_Limit}、AC $\mathrm{res}_q/\mathrm{res}_m\le$\code{AC\_Tol}、
+    固体 GS $\le$\code{Solid\_Tol}；气体段按剩余时间截断避免冲过 $t_{end}$ &
+    \code{sub\_multi\_region.f90}（\code{couple\_stop\_test} + 三个交错驱动）、
+    \code{sub\_modules.f90}、\code{sub\_read\_parameter.f90}、\code{sub\_lowspeed\_ac.f90}、
+    \code{sub\_porous\_ac.f90} & \code{case3}（码 19）$t_{end}$ 停机：3 轮 $tt=26$；
+    残差停机：1 轮；\code{case1}（码 11）固体残差 $7.1\times10^{-10}$ 实测登记；
+    \code{Iflag\_Couple\_Stop=0} 输出与旧版一致；全部 EXIT=0 \\
+2026-09-26 & 1.4 & \textbf{多孔 $\varepsilon$ 的两个显式极限}：\code{porous.inp} 接受闭区间
+    $[0,1]$（$\varepsilon=0$ 不再被静默重置为 0.9）；阻力按 $\varepsilon\leftarrow\max(\varepsilon,10^{-8})$
+    计算并\textbf{显式冻结} $u=v=w=0$（$\varepsilon\le10^{-8}$）；界面骨架鬼点改用
+    $k_{eff}=\varepsilon k_f+(1-\varepsilon)k_s$，并在 $(1-\varepsilon)k_s\le10^{-6}$ 时退化零梯度；
+    新增 \code{cases/fluid\_solid/limits/}（5 个短调度算例）与逐点对照工具
+    \code{util/compare\_flow3d\_node.py} & \code{sub\_porous.f90}、\code{sub\_porous\_ac.f90}、
+    \code{sub\_multi\_region.f90}、\code{sub\_modules.f90}、\code{sub\_read\_parameter.f90} &
+    5 例全部 EXIT=0 / NaN=0；$\varepsilon=0$ 块1 的 $u,v,w$ 在全部节点\textbf{精确为 0}；
+    与参照算例的定量对照为\textbf{负结果}（界面 19 的壁模型 + 压缩调度），见第 \ref{sec:validation} 章 \\
+2026-10-17 & 1.4.1 & \textbf{修复/回归}：(1) \code{flow3d\_node.dat} 头记录恢复为
+    \textbf{3 条}标准 PLOT3D-Q 写法（工作树版本曾误写成“块数 + 每块 4 个整数”，
+    与第 \ref{sec:restart} 章及 1.1 条目不符；检查脚本对两种布局仍兼容）；
+    (2) \code{Iflag\_restart<0} 时 \code{restarted} 未初始化（同一 deck 偶尔从未初始化
+    场起步/NaN），改为先置 \code{.false.}；
+    (3) \code{run\_limits.sh} 改为按脚本位置推导仓库根目录 &
+    \code{sub\_IO.f90}、\code{sub\_init.f90}、\code{util/check\_flow3d\_node.py}、
+    \code{util/compare\_flow3d\_node.py}、\code{cases/fluid\_solid/limits/run\_limits.sh} &
+    \code{make -j4} EXIT=0；\code{solid\_1d}（1 块）与 \code{channel\_ac\_4blk}（4 块）
+    节点文件 \code{STRUCTURE OK}；\code{Iflag\_restart=-1} 冷启动 EXIT=0、无 NaN \\
 \bottomrule
 \end{longtable}
 

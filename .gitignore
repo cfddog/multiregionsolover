@@ -18,7 +18,8 @@ __pycache__/
 .deep-copilot/
 
 # 编译日志(src/)
-/src/build*.log
+/src/*.log
+/src/*.pre_invfix
 
 # 算例运行产生的监控/临时文件
 cases/**/Residual.dat
@@ -38,6 +39,39 @@ cases/**/run_sync.log
 # 重启文件与节点流场输出（二进制、体量大；需要时可 git add -f）
 cases/**/field_restart.dat
 cases/**/flow3d_node.dat
+
+# 算例运行产物（场文件/可视化/中间网格/备份）；输入文件
+# （control.ec、bc3d.inp、porous.inp、material.inp、Mesh3d.x、*.py、README*）不入此列
+cases/**/*.vtk
+cases/**/flow3d.dat
+cases/**/Ts_block_*.dat
+cases/**/Mesh3d.dat
+cases/**/bc3d.inc
+cases/**/partation.dat
+cases/**/bc3d_interface.dat
+cases/**/plot.pw
+cases/**/*.bak
+cases/**/*.bak2
+cases/**/*.orig
+cases/**/gen.log
+cases/**/force-invis-vis.log
+cases/**/run*.log
+cases/**/try*.log
+cases/**/test.log
+cases/**/time.log
+cases/**/fg.log
+cases/**/driver.log
+cases/**/verify_cp.log
+cases/**/cp_wall.dat
+cases/**/Step_mess.dat
+cases/**/part_grid.dat
+cases/**/partation-auto.dat
+cases/**/mesh-quality.dat
+cases/**/bc3d_interface.inc
+cases/**/iface_*.dat
+
+# 第三方样例代码（MATLAB），非本程序构建所需
+/sample_code/
 
 # LaTeX 程序说明（docs/程序说明/）的中间文件；保留 .tex/.pdf/build.sh/README.md
 docs/程序说明/*.aux

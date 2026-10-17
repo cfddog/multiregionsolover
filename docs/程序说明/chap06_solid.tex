@@ -25,8 +25,15 @@ k\sum_{faces}\frac{A_{f}}{d_{f}}\,(T_{nb}-T_{i}) = 0 ,
 \bottomrule
 \end{tabular}
 \end{table}
-日志形如 \code{Solid solver Block 1 GS iterations: 1400 final res: 8.8e-10}：
-打印的扫掠数达到 \code{Solid\_Max\_Iter}$+1$ 说明\textbf{未达容差}（需增大上限、调 $\omega$ 或检查边界）。
+\paragraph{日志（2026-09-26 起统一格式）}固体 GS 每 100 次扫掠打 1 行过程监视行，
+求解结束再打 1 行汇总行（\code{final=}），两者格式一致：
+\begin{lstlisting}
+ Region res [solid GS |dTs|] block   1 (BLOCK_SOLID) step=   1400 : max= 0.34994764E-06  rms= 0.19965370E-06  at (i,j,k)=(    1   74    1)  xyz=[ 0.332071E+00 -0.899771E-02  0.250000E-01] m
+\end{lstlisting}
+三个量依次是：\code{max} $=\max\lvert\Delta T_s\rvert$（即 \code{Solid\_Tol} 的判据量）、
+\code{rms} $=\sqrt{\sum \Delta T_s^2/N}$（区域内平均水平）、\code{at (i,j,k)} $=$ 最大变化所在胞
+及其胞心物理坐标 $[$\code{m}$]$。扫掠数达到 \code{Solid\_Max\_Iter}$+1$ 说明\textbf{未达容差}
+（需增大上限、调 $\omega$ 或检查边界）。此前的 \code{GS iter} / \code{DBG: Ts(...)} 逐次调试输出已删除。
 
 \subsection{热边界（\code{solid\_bc.inp}）}
 逐面给定：\textbf{$T_w>0$ 等温壁（K）；$T_w<0$ 给定热流 $Q_w$ [W/m$^2$]}；可选追加

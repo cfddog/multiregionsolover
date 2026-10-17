@@ -108,7 +108,16 @@ q_w=\frac{k_s\,(T_i-T_{s,i})}{dx_s}\ \ [\text{W/m}^2],
 \code{restart from ... Kstep=} / \code{continue staggered run at Kstep=} & 续算起点 \\
 \code{coupling state mode= ... satisfied= ...} & 重启文件里的耦合状态 \\
 \code{switch to per-step (tight) coupling} & 自动/强制切强耦合 \\
-\code{Solid solver Block ... GS iterations:} & 固体 GS 扫掠数（$=\code{Max\_Iter}+1$ 表示未收敛）\\
+\code{Region res ...} &
+\textbf{区域残差统计}（2026-09-26 起，固体/低速/多孔统一格式）：
+\code{Region res [<残差名>] block n (<块类型>) step=/final= k : max= ... rms= ... at (i,j,k)= ... xyz=[...] m}
+给出区域内 $\max$、平均 RMS $=\sqrt{\sum r^2/N}$、$\max$ 所在胞 $(i,j,k)$ 与胞心坐标 $[$\code{m}$]$；
+\code{step=} 为过程监视行（每 100 次迭代/扫掠 1 行），\code{final=} 为结束汇总行。
+残差名：\code{solid GS |dTs|}、\code{low-speed/porous SIMPLE div(F)}、
+\code{low-speed/porous AC flow}、\code{... AC energy |dT|}、\code{... LTNE fluid/frame |dTf|/|dTs|}；
+行尾保留旧字段 \code{res\_q}/\code{res\_m}/\code{res\_p}/\code{dT(window)} \\
+\code{The Max Residuals are} / \code{The R.M.S Residuals are} & 可压块（\code{BLOCK\_FLUID}）每方程
+逐块 $\max$ 与 RMS（\code{comput\_max\_Res\_onemesh}，格式未变）\\
 \code{write field\_restart.dat OK} & 重启文件写出 \\
 \bottomrule
 \end{tabular}

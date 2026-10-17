@@ -118,6 +118,30 @@ $\sqrt{|\Delta p|/\rho}$ 依次兜底估计）。默认参数：
 可压块（码 12）对接时，界面温度/热流由耦合例程按热流平衡给出（见第 \ref{sec:coupling} 章）。
 壁面热边界由 \code{LS\_T\_wall}（$<0$ 绝热）或跨区域耦合决定。
 
+\subsection{残差监视输出（2026-09-26 起）}
+低速块（SIMPLE 与 AC 两条路径）都按\textbf{区域}给出残差统计，格式与固体/多孔统一
+（实现见 \code{src/sub\_debug.f90} 的 \code{region\_res\_stat}）：
+
+\begin{lstlisting}
+ Region res [low-speed SIMPLE div(F)] block   1 (BLOCK_LOWSPEED) step=    100 : max= 0.68507753E-04  rms= 0.37874783E-04  at (i,j,k)=(    1    1    1)  xyz=[ 0.125000E-04  0.500000E-01  0.500000E-01] m  res_p= 0.68508E-04
+ Region res [low-speed AC flow] block   1 (BLOCK_LOWSPEED) final=    801 : max= 0.98116454E-01  rms= 0.97358024E-02  at (i,j,k)=(   24    1    1)  xyz=[ 0.273990E+00 -0.500000E-05  0.250000E-01] m  res_q= 0.96343E-02 res_m= 0.98116E-01
+\end{lstlisting}
+
+\begin{itemize}
+  \item \code{max}：区域内逐胞残差幅值的最大值；\code{rms} $=\sqrt{\sum r^2/N}$：区域平均（均方根）水平；
+        \code{at (i,j,k)}：\code{max} 所在胞及其胞心坐标 $[$\code{m}$]$。
+        该口径与可压块已有的 \code{Res\_max}/\code{Res\_rms} 一致，四类块可用同一套语言比较。
+  \item \textbf{SIMPLE（\code{LS\_Algorithm=1/2}）}：残差量 $=\lvert\mathrm{div}\,\mathbf{F}\rvert$
+        （质量不平衡，即 \code{res\_p}，与 \code{LS\_Tol} 比较）；
+        每 100 次外迭代打 1 行，结束打 1 行 \code{final=}。
+  \item \textbf{AC（\code{LS\_Algorithm=3}）}：过程行仍是 \code{AC iter ... res\_q= ... res\_m= ...}
+        （间隔由 \code{AC\_Print} 控制，默认 500）；求解结束额外打 1 行区域汇总
+        （\code{max/rms/位置} 为两种残差合并后的逐胞幅值，行尾附 \code{res\_q}/\code{res\_m} 以便与旧日志对照）。
+  \item \textbf{AC 温度方程}：收敛后打 1 行 \code{[low-speed AC energy |dT|]}，统计 50 步窗口内的
+        温度变化 $|\Delta T|$（行尾 \code{dT(window)=}）。
+  \item 原来每次迭代的 \code{DBG}/\code{DEBUG} 调试行已全部删除；各求解器只在结束行汇总。
+\end{itemize}
+
 \subsection{选参建议}
 \begin{itemize}
   \item \textbf{先判来源}：均匀网格 + 单块 $\to$ SIMPLE 即可；长通道、强耦合、多块、低速流固

@@ -13,7 +13,9 @@
 0 & \textbf{逐时间步同时耦合}（tight/强耦合） & 每个时间步把所有块各推进一次，然后调用
     \code{couple\_fluid\_solid\_interfaces} 等例程刷新交界面鬼点；气/固同步前进。\\
 1 & \textbf{分段交错耦合}（staggered） & 主程序改走 \code{run\_staggered\_multiregion}：
-    先推进一侧若干步（chunk），再解另一侧，反复交替并用外层判据收口；\code{t\_end} 不起作用。\\
+    先推进一侧若干步（chunk），再解另一侧，反复交替并用外层判据收口；默认
+    \code{t\_end} 不起作用，可用 \code{Iflag\_Couple\_Stop=1} 让 $t_{end}$ 与残差判据参与停机
+    （见下文“交错外层的停机判据”）。\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -39,6 +41,55 @@ n_{step}(it)=
         \code{(not fully converged)}——\textbf{这是正常结束，不是崩溃}。
 \end{itemize}
 
+\subsection{交错外层的停机判据（\code{Iflag\_Couple\_Stop}，新增）}
+默认（\code{Iflag\_Couple\_Stop=0}）交错模式只按上一小节的界面量判据收口，且跑满
+\code{Niter\_Couple\_Outer} 轮后退出，$t_{end}$ 不参与。\code{Iflag\_Couple\_Stop=1} 时，
+\textbf{每轮结束}都做一次“停机测试”，满足下列\textbf{任一}条件即退出外层循环：
+
+\begin{enumerate}
+  \item \textbf{物理时间到点}：累积物理时间（气体段每步累加 \code{dt\_global}，即
+        \code{Mesh\%tt}）$\ge t_{end}$。为避免明显冲过 $t_{end}$，该模式下当前气体段长度
+        还会被截断为 $\min\!\bigl(n_{step},\ \lfloor (t_{end}-tt)/dt\rfloor+1\bigr)$
+        （$dt=\code{dt\_global}$，最多超一个时间步，与主循环 \code{do while(Mesh(1)\%tt < t\_end)}
+        的行文一致）；
+  \item \textbf{全局残差全部达标}：\textbf{该网格中出现的每一种块}的残差都低于各自求解器的标准。
+\end{enumerate}
+
+\begin{table}[htbp]\centering\small
+\caption{\code{Iflag\_Couple\_Stop=1} 时“全局残差”的口径（\code{couple\_stop\_test}）}\label{tab:couplestop}
+\begin{tabular}{lll}
+\toprule
+块类型 & 残差（每轮取最差块，MPI 归约） & 标准 \\
+\midrule
+\code{BLOCK\_FLUID}    & $\max_m \mathrm{RMS}(B\%\mathrm{Res}_m)$（仅流体块胞心，$m=1..\code{NVAR}$） & \code{Res\_Inner\_Limit}（默认 $10^{-10}$）\\
+\code{BLOCK\_LOWSPEED} & AC 无量纲 $\max(\mathrm{res}_q,\mathrm{res}_m)$ & \code{AC\_Tol}（默认 $10^{-7}$）\\
+\code{BLOCK\_POROUS}   & AC 无量纲 $\max(\mathrm{res}_q,\mathrm{res}_m)$ & \code{AC\_Tol}（默认 $10^{-7}$）\\
+\code{BLOCK\_SOLID}    & 固体 GS 最后一次扫掠的 $\max|\Delta T_s|$ & \code{Solid\_Tol}（默认 $10^{-9}$）\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{itemize}
+  \item 残差由各求解器\textbf{自行登记}（AC 求解器、固体 GS 求出后在轮首清零的全局量里取 $\max$），
+        可压块残差由 \code{couple\_stop\_test} 现场统计；
+  \item \textbf{低速/多孔块用 SIMPLE（\code{LS\_Algorithm}$\ne$3）时不登记残差}，此时
+        “全局残差达标”永远为假 ⇒ 只可能由 $t_{end}$ / \code{Niter\_Couple\_Outer} 结束
+        （不会误判为收敛）；
+  \item \code{Niter\_Couple\_Outer} 仍是\textbf{安全上限}；原 \code{Tol\_Couple\_Tw}/\code{p}/\code{u}
+        界面判据\textbf{保持有效}，两套判据互相独立，谁先满足谁停；
+  \item 每轮都会打印一行 \code{stop test: tt/ t\_end/ tt\_reached/ res comp,ls,por,solid/ all\_res\_ok}
+        便于事后判断是哪一侧先到；退出时的提示区分“到 $t_{end}$”与“残差达标”
+        （\code{-1.} 表示该块类型不在本算例中）。
+\end{itemize}
+
+\paragraph{示例}码 19（可压-多孔）取 $t_{end}$ 停机：
+\begin{verbatim}
+$couple_ec
+  Iflag_Couple_Scheme=1, Iflag_Couple_Stop=1,
+  Niter_Couple_Outer=20, Kstep_Couple_Comp=100, Niter_Couple_Warm=0
+$end
+\end{verbatim}
+
 \subsection{交错耦合参数表}
 \begin{table}[htbp]\centering\small
 \caption{组 \code{\$couple\_ec}}\label{tab:coupleparams}
@@ -58,6 +109,9 @@ n_{step}(it)=
 \code{Tol\_Couple\_p}/\code{Tol\_Couple\_u} & 10 / 1e-2 & 码 12 的压力/速度判据 [Pa] / [m/s] \\
 \code{Iflag\_Couple\_WallFlux} & 0 & CHT 模式：0 耦合式；1 等温 $T_w$/热流 $q_w$ 壁通量式（\code{wfmode}）\\
 \code{Iflag\_Couple\_Restart} & 0 & 重启后按耦合状态续算（见 \S\ref{sec:restart}）\\
+\code{Iflag\_Couple\_Stop} & 0 & 0 旧行为（只看界面量判据与 \code{Niter\_Couple\_Outer}）；
+       1 另外满足 \code{tt}$\ge$\code{t\_end} \textbf{或} 全局残差全达标即停（表
+       \ref{tab:couplestop}）\\
 \bottomrule
 \end{tabular}
 \end{table}

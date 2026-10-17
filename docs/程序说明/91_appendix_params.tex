@@ -152,7 +152,7 @@ set\_default\_parameter}）。只要算例里不写，就用默认值；写错�
 \bottomrule
 \end{longtable}
 
-\subsection{\code{\$solid\_ec}（4）、\code{\$porous\_ec}（8）、\code{\$couple\_ec}（12）}
+\subsection{\code{\$solid\_ec}（4）、\code{\$porous\_ec}（8）、\code{\$couple\_ec}（13）}
 \begin{longtable}{p{4.1cm}llp{6.0cm}}
 \caption{固体 / 多孔 / 耦合调度}\\
 \toprule
@@ -180,7 +180,24 @@ set\_default\_parameter}）。只要算例里不写，就用默认值；写错�
 \code{Tol\_Couple\_p}/\code{u} & 10 / 1e-2 & Pa / m/s & 码 12 压力/速度判据 \\
 \code{Iflag\_Couple\_WallFlux} & 0 & --- & 0 耦合式/1 等温 $T_w$+热流壁通量式 \\
 \code{Iflag\_Couple\_Restart} & 0 & --- & 0 自动/1 强制强耦合/2 强制交错/$-1$ 忽略 \\
+\code{Iflag\_Couple\_Stop} & 0 & --- & 0 旧行为/1 满足 $tt\ge t_{end}$ \textbf{或} 全局残差全达标即停 \\
 \bottomrule
 \end{longtable}
+
+\paragraph{多孔介质的极限内部常数（非 namelist 参数，2026-09-26）}
+\begin{itemize}
+  \item \code{porous.inp} 的 $\varepsilon$ 取值区间为\textbf{闭区间} $[0,1]$
+        （原为 $(0,1]$，$\varepsilon=0$ 曾被静默重置为 0.9）：
+        $\varepsilon=0$ = 不可渗固体极限，$\varepsilon=1$ = 无骨架纯流体极限。
+  \item \code{EPS\_SOLID\_POROUS} $=10^{-8}$（\code{src/sub\_modules.f90} 的 \code{Global\_Var}）：
+        阻力系数中按 $\varepsilon\leftarrow\max(\varepsilon,\code{EPS\_SOLID\_POROUS})$
+        计算（$c_{drag}\approx1.8\times10^{9}$ s$^{-1}$），且多孔动量求解后把
+        $u=v=w$ 冻结为 0（含鬼点层）。
+  \item 界面骨架鬼点有效导热 $k_{eff}=\varepsilon k_f+(1-\varepsilon)k_s$
+        （\code{set\_porous\_Ts\_flux} 与 \code{porous\_ghost}）；当
+        $(1-\varepsilon)k_s\le10^{-6}$ W/(m\,K) 时界面鬼点退化为零梯度。
+  \item 相关算例：\code{cases/fluid\_solid/limits/}（$\varepsilon=1$、$\varepsilon=10^{-6}$、
+        $\varepsilon=0$ 的短调度极限对照）与 \code{util/compare\_flow3d\_node.py}。
+\end{itemize}
 %===EOF===
 
