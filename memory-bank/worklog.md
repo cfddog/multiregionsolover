@@ -590,3 +590,24 @@ module region_stat_mod          ! 常量 RES_PRINT_STEP = 100（硬编码显示�
 6 个新 `Mesh3d.x` 单独提交。集群副本（`/work/home/lijunyang/sundong/PorousTest/code/`）
 仍需同步 + `make`，旧 libgfortran 的双 unit 检查本地测不出来。
 
+## 🗓 2026-10-17 · 程序更名 MultiPhysMixSolver（数值惰性）
+
+**改动**：`git mv src/opencfd_ec3d_v1.16a.f90 src/multiphysmixsolver.f90`；`src/makefile`
+（`EXE = MultiPhysMixSolver`，链接后 `ln -sf $(EXE) opencfd-ec1.16a.out`，`clean` 两者都删）；
+启动横幅 5 行 + 文件头注释；`sub_read_parameter.f90:383` 的 `output_para.out` 版本行；
+22 个 `cases/**` 脚本/README；`.vscode/{tasks,launch}.json`；手册 `main/chap01/chap09/chap10/93_changelog`
+（v1.5）与 `build.sh`；`docs/程序能力与算例考核总结.md`、`docs/重启与节点流场输出说明.md`。
+
+**有意不改**：`flow3d.dat` / `Ts_block_*.dat` / `bc3d.inc` 的数据头字符串仍是 `OpenCFD-EC`
+（后处理兼容）；`field_restart.dat` 为纯数值记录，与文件名无关；`docs/工作日志.md`、
+`docs/进度_fluid_solid三算例.md`、`memory-bank/{worklog 旧条目,progress 旧条目,archive_*}` 保留历史原名。
+
+**验证**：串行 `make clean && make` EXIT=0；以 `git show HEAD:` 复原更名前源码编译旧二进制，
+与新版在 `channel_ac_2blk`（2 块 + AC，5 步）同输入对跑：`flow3d.dat` / `field_restart.dat` /
+`Residual.dat` / `force.log` / 两块 `*.vtk` / `Step_mess.dat` **逐字节相同**，
+`output_para.out` 仅第 1 行版本串不同（预期）；`docs/程序说明/build.sh` 两遍 0 error（49 页）。
+
+**坑**：`make -j4` 在本 makefile（无模块依赖声明）下会竞态报
+`Cannot open module file 'precision_ec.mod'` ⇒ **一律串行 `make`**。
+
+**下一步**：并行改造 P0（跨进程安全网）→ P1（`p` halo）→ … → P6，见 activeContext §0h。

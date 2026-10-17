@@ -56,7 +56,7 @@ du/dy|₀₊ = (u_int − u_D)/λ      (等效 BJ 滑移系数 α=1，基于 K_e
 python3 gen_case.py --nx 81 --nyf 41 --nyp 49 --lx 8 --tend 250 \
                     --maxiter 80 --tol 1e-6 --ksave 250
 # 2) 运行
-mpirun -np 1 ./opencfd-ec1.16a.out
+mpirun -np 1 ./MultiPhysMixSolver
 # 3) 对比解析解（num_python 环境含 numpy/matplotlib）
 conda run -n num_python python3 plot_validation/pv_bj.py
 ```
@@ -81,7 +81,7 @@ conda run -n num_python python3 plot_validation/pv_bj.py
 - `src/sub_multi_region.f90`：新增 `couple_lowspeed_porous_interfaces(nMesh)`
   处理 LOWSPEED–POROUS（接口码 16）共形界面，双向 ghost 填充
   （U(1..5)、B%p；不交换多孔 Ts）。
-- `src/opencfd_ec3d_v1.16a.f90`：三个时间分支中在
+- `src/multiphysmixsolver.f90`：三个时间分支中在
   `couple_solid_solid_interfaces` 后调用新例程。
 
 ## 说明与局限
@@ -119,5 +119,5 @@ dp/dx 一致、Darcy 平台与剖面趋势;界面滑移存在 AC 系统性偏高
 `run_coarse/validation_bj_coarse.png`(u_i 误差仅 1.6%)。
 
 复现:`cd run_ac && python3 ../gen_case.py --nx 81 --nyf 21 --nyp 25 --lx 8 &&
-(按上方 control.ec 改 LS_Algorithm/AC_*/t_end)&& mpirun -np 1 ../../../src/opencfd-ec1.16a.out
+(按上方 control.ec 改 LS_Algorithm/AC_*/t_end)&& mpirun -np 1 ../../../src/MultiPhysMixSolver
 && python3 ../plot_validation/pv_bj.py --case .`。

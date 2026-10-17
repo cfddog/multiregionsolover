@@ -4,6 +4,8 @@
 *.out
 work.*
 *.pc
+# 主程序产物（makefile 的 EXE；旧名 *.out 已覆盖）
+/src/MultiPhysMixSolver
 
 # 编辑器/IDE
 *.swp

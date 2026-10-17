@@ -21,5 +21,5 @@ dp=1 mm、hv=2e6 W/m³K、冷端 G=2 kg/(m²·s) 300 K 空气注入 + 骨架 Rob
 - 与 Step-1 的 2.14e6 W/m² 差异属**解耦误差**：Step-1 的壁面替身温度≈797 K，而真正
   多孔壁热面为 1198 K，驱动温差变小。全收敛需"可压↔多孔（码 19）"共轭迭代。
 
-复现：`python3 gen_case.py 401 2 2 && mpirun -np 1 ./opencfd-ec1.16a.out && conda run -n num_python python3 validate_conv.py`。
+复现：`python3 gen_case.py 401 2 2 && mpirun -np 1 ./MultiPhysMixSolver && conda run -n num_python python3 validate_conv.py`。
 图：`validation_ltne_hg800.png`。

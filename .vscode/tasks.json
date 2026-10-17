@@ -48,7 +48,7 @@
         {
             "label": "run MPI",
             "type": "shell",
-            "command": "mpirun -n ${input:numProcs} ./opencfd-ec1.16a.out",
+            "command": "mpirun -n ${input:numProcs} ./MultiPhysMixSolver",
             "problemMatcher": [],
             "presentation": {
                 "reveal": "always",

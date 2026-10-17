@@ -29,7 +29,7 @@ interfaces also meet at the corner points (-0.5, 1) and (0.5, 1).
 Re = rho*U*W/mu is set in control.ec through LS_mu (rho=1, U=1, W=1):
 Re=100 -> mu=0.01, Re=500 -> mu=2e-3, Re=1000 -> mu=1e-3.
 
-Run:  python3 gen_case.py   then   ../../src/opencfd-ec1.16a.out
+Run:  python3 gen_case.py   then   ../../src/MultiPhysMixSolver
 """
 import struct
 import os

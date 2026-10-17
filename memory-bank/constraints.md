@@ -47,7 +47,8 @@
 
 ## 3. 环境与运行约束
 - 编译：`cd src && make`（`mpif90`；`-freal-4-real-8` 等来自 `src/makefile`）；
-  产物 `src/opencfd-ec1.16a.out`。改 `src/*.f90` 后必须重新 `make` 再验证。
+  产物 `src/MultiPhysMixSolver`，并自动建兼容软链 `src/opencfd-ec1.16a.out`。
+  改 `src/*.f90` 后必须重新 `make` 再验证。
 - **交错耦合（`Iflag_Couple_Scheme=1`）必须单进程**（`mpirun -np 1`，目录里不要放 `partation.dat`）：
   跨进程耦合目前只对码 11 实现（`cht_mpi_fluid_solid_face`），**12/19 未实现跨进程**。
 - **一个文件同时只能有一个连接（2026-09-25 教训，务必遵守）**：不得对**已打开的文件**用另一个

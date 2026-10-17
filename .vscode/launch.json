@@ -3,10 +3,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug OpenCFD-EC (gdb, 单进程)",
+            "name": "Debug MultiPhysMixSolver (gdb, 单进程)",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/src/opencfd-ec1.16a.out",
+            "program": "${workspaceFolder}/src/MultiPhysMixSolver",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/src",

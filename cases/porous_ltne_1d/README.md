@@ -46,7 +46,7 @@ l1,2 = (−A ± √(A²+4B))/2
 ```bash
 cd cases/porous_ltne_1d
 python3 gen_case.py 401 2 2     # nx=401(Δy=25 µm), 准一维横向 2 节点；也可 ny=nz=9
-mpirun -np 1 ./opencfd-ec1.16a.out      # ~1–1.5 min（Porous_Max_Iter=150000）
+mpirun -np 1 ./MultiPhysMixSolver      # ~1–1.5 min（Porous_Max_Iter=150000）
 conda run -n num_python python3 validate_ltne.py
 ```
 
@@ -121,7 +121,7 @@ conda run -n num_python python3 validate_ltne.py
 与 SIMPLE 结果及一阶收敛趋势一致(流体一阶迎风的数值扩散为误差主源);
 图 `validation_ltne_ac.png`(401)、`validation_ltne_ac_101/201.png`,
 明细见各目录 `validation_ltne_ac.txt`。复现:`cd run_ac && cp ../material.in ../porous.inp ../solid_bc.inp .
-&& ../gen_case.py 401 2 2 && mpirun -np 1 ../../../src/opencfd-ec1.16a.out`。
+&& ../gen_case.py 401 2 2 && mpirun -np 1 ../../../src/MultiPhysMixSolver`。
 
 
 - `gen_case.py`：生成 `Mesh3d.dat/.x`、`bc3d.inp`（i- 入口码 5，i+ 出口码 6，

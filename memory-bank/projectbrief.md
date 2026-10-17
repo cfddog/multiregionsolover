@@ -40,10 +40,11 @@ util/  run_lid/  sample_code/
 ## 3. 构建与运行
 ```bash
 cd src && make            # mpif90，opt=-O3 -freal-4-real-8 -std=legacy …
-                          # 产物：src/opencfd-ec1.16a.out
-cd ../cases/<case> && mpirun -np 1 ./opencfd-ec1.16a.out
+                          # 产物：src/MultiPhysMixSolver（+ 兼容软链 opencfd-ec1.16a.out）
+cd ../cases/<case> && mpirun -np 1 ./MultiPhysMixSolver
 ```
-（算例目录里通常把 `opencfd-ec1.16a.out` 软链到 `src/` 的产物。）
+（算例目录里通常把 `MultiPhysMixSolver` 软链到 `src/` 的产物；旧名 `opencfd-ec1.16a.out`
+仍由 `make` 自动建立的软链支持，2026-10-17 更名。）
 
 ## 4. 算例关键输入文件
 | 文件 | 作用 |

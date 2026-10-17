@@ -380,7 +380,7 @@ end
 
  !---output paramters----------------------------
     open(99,file="output_para.out")
-	write(99,*) "-------OpenCFD-EC (Ver 1.1t), (c) Li Xinliang, lixl@imech.ac.cn--"
+	write(99,*) "-------MultiPhysMixSolver (based on OpenCFD-EC Ver 1.1t), (c) Li Xinliang, lixl@imech.ac.cn--"
 	write(99,*) "-------------------------------------------"
 	write(99,*) "Ma=", Ma,  "  Re= ", Re , "gamma=", gamma
 	write(99,*) "PrL=", PrL, "PrT=",PrT

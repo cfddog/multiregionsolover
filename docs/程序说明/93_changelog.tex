@@ -97,6 +97,15 @@
     \code{util/compare\_flow3d\_node.py}、\code{cases/fluid\_solid/limits/run\_limits.sh} &
     \code{make -j4} EXIT=0；\code{solid\_1d}（1 块）与 \code{channel\_ac\_4blk}（4 块）
     节点文件 \code{STRUCTURE OK}；\code{Iflag\_restart=-1} 冷启动 EXIT=0、无 NaN \\
+2026-10-17 & 1.5 & \textbf{程序更名为 \code{MultiPhysMixSolver}}（基于 OpenCFD-EC 1.16a）：
+    主程序文件、makefile 产物、启动横幅、手册/算例脚本同步；\code{make} 自动建立
+    \code{opencfd-ec1.16a.out} 兼容软链；\textbf{数据文件头字符串}（\code{flow3d.dat} /
+    \code{Ts\_block\_*.dat} / \code{bc3d.inc}）保持 \code{OpenCFD-EC} 以兼容旧后处理，
+    重启文件为纯数值记录、不受更名影响 &
+    \code{src/multiphysmixsolver.f90}（原 \code{opencfd\_ec3d\_v1.16a.f90}）、
+    \code{src/makefile}、\code{src/sub\_read\_parameter.f90}、\code{docs/程序说明/*}、
+    \code{cases/**/README.md} & \code{make} EXIT=0；\code{channel\_ac\_2blk}、
+    \code{porous\_ltne\_1d} 冒烟运行正常；本手册重编译无错误 \\
 \bottomrule
 \end{longtable}
 

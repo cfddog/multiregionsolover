@@ -55,7 +55,7 @@ p∞=ρ∞·R·T_inf≈2046 Pa（作为低速区参考压力，LS_P_in=LS_P_out=
 ## 复现
 ```bash
 cd cases/high_low_fluid
-./opencfd-ec1.16a.out    # Iflag_init=0 冷启动（覆盖 flow3d.dat / flow3d.vtk）
+./MultiPhysMixSolver    # Iflag_init=0 冷启动（覆盖 flow3d.dat / flow3d.vtk）
 ```
 旧 Ma=2 设置与历次日志存档在 `_backup_ma2/`。
 

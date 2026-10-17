@@ -58,4 +58,4 @@ interface19_phaseA 的 **hv=0 且骨架无底端散热 BC（solid_bc.inp 缺省�
   AC_Max_Iter 预算；如需“真收敛”建议：(a) Block1 重建/加密后处理退化单元；
   (b) 给多孔骨架加底端热沉（solid_bc.inp 等温或 Robin 冷端）或 hv>0 冷却剂
   通流（transpiration），否则 T_w 只能以储热方式逼近气体近壁温。
-- 复现：`cd run_ac_staggered && mpirun -np 1 ./opencfd-ec1.16a.out`。
+- 复现：`cd run_ac_staggered && mpirun -np 1 ./MultiPhysMixSolver`。

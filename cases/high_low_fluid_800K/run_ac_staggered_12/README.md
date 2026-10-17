@@ -12,4 +12,4 @@
 低速段 AC 3000 伪步收敛到 res_q≈4.3e5;界面 T_w≈440–447 K、p_w≈2.77e4 Pa、
 |u|_w≈O(1e-3) m/s;外层 dT≈3.5 K / dp≈1.1e2 Pa(未到 `Tol_Couple_p`,需更多轮次)。
 
-复现:`mpirun -np 1 ./opencfd-ec1.16a.out`(编译好的 binary 在 src/)。
+复现:`mpirun -np 1 ./MultiPhysMixSolver`(编译好的 binary 在 src/)。

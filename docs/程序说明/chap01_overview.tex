@@ -114,7 +114,7 @@ $p_{ref}=\rho_{ref}U_{ref}^2$。
 
 \subsection{目录结构}
 \begin{lstlisting}
-src/                 主程序 + 各子模块（含 makefile），产物 opencfd-ec1.16a.out
+src/                 主程序 + 各子模块（含 makefile），产物 MultiPhysMixSolver（兼容软链 opencfd-ec1.16a.out）
 cases/               算例（网格/边界/物性/control.ec）
 docs/                文档；程序说明源码在 docs/程序说明/，PDF 在 docs/
 util/                后处理/网格工具（readflow3d、check_flow3d_node.py 等）
@@ -123,12 +123,14 @@ memory-bank/         开发记忆库（projectbrief/activeContext/progress/workl
 
 \subsection{最小上手流程}
 \begin{enumerate}
-  \item \code{cd src \&\& make}（默认 \code{mpif90}，产物 \code{opencfd-ec1.16a.out}）；
+  \item \code{cd src \&\& make}（默认 \code{mpif90}，产物 \code{MultiPhysMixSolver}，
+        并生成兼容软链 \code{opencfd-ec1.16a.out}）；
   \item 复制 \code{control.ec.template} 到算例目录，按需保留/修改各 namelist 组；
   \item 准备 \code{Mesh3d.x}、\code{bc3d.inp}、\code{bc3d\_interface.inp}、\code{material.in}
         （多孔/固体再加 \code{porous.inp}、\code{solid\_bc.inp}）；
-  \item \code{cd cases/<case> \&\& mpirun -np 1 ./opencfd-ec1.16a.out}
-        （交错耦合模式必须单进程，详见第 \ref{sec:build} 章）。
+  \item \code{cd cases/<case> \&\& mpirun -np 1 ./MultiPhysMixSolver}
+        （交错耦合模式必须单进程，详见第 \ref{sec:build} 章；旧软链
+        \code{opencfd-ec1.16a.out} 仍可用）。
 \end{enumerate}
 
 \noindent\textbf{依据文件}：\code{src/sub\_modules.f90}、\code{src/sub\_multi\_region.f90}、

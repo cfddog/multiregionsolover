@@ -5,7 +5,7 @@ opt= -g -std=legacy -ffree-line-length-none -freal-4-real-8 -O3
 #opt=-O3 -openmp
 
 srs=  sub_modules.f90 \
-      opencfd_ec3d_v1.16a.f90 \
+      multiphysmixsolver.f90 \
       sub_interfaces.f90 sub_init.f90 sub_Residual.f90 \
       sub_flux_split.f90 sub_boundary.f90 sub_turbulence_BL.f90 \
       sub_turbulence_SA.f90 sub_turbulence_NewSA.f90 sub_turbulence_SST.f90 \
@@ -29,9 +29,12 @@ OBJS=$(srs:.f90=.o)
 	$(f77) $(opt) -c $<
 
 
+EXE = MultiPhysMixSolver
+
 default: $(OBJS)
-	$(f77) $(opt)  -o opencfd-ec1.16a.out $(OBJS)
+	$(f77) $(opt)  -o $(EXE) $(OBJS)
+	ln -sf $(EXE) opencfd-ec1.16a.out   # 兼容旧算例脚本/软链（旧名 = 新二进制）
 
 clean:
-	rm -f *.out *.o work.* *.pc *.mod
+	rm -f $(EXE) opencfd-ec1.16a.out *.out *.o work.* *.pc *.mod
 

@@ -27,7 +27,7 @@ Tol_Couple_Tw       = 2.d-2   ! 外层收敛判据 max|ΔT_w| [K]
 
 ## 代码改动（本功能）
 - `src/sub_modules.f90` / `src/sub_read_parameter.f90`：上述新 namelist 控制量。
-- `src/opencfd_ec3d_v1.16a.f90`：`Iflag_Couple_Scheme=1` 时主程序改走新的
+- `src/multiphysmixsolver.f90`：`Iflag_Couple_Scheme=1` 时主程序改走新的
   `run_staggered_fluid_porous`（否则原 `while(tt<t_end)` 时间循环不变）。
 - `src/sub_multi_region.f90`：新增 `run_staggered_fluid_porous`（含
   `fill_gas_wall_ghost`、`set_porous_Ts_flux`、`T_nd_from_U` 内部例程）；

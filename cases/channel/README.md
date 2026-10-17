@@ -29,10 +29,10 @@ python3 ../lidcavity/gen_mesh.py --nx 161 --ny 41 --nz 2 --Lx 8.0 --Ly 1.0 --dz 
 
 求解控制：`LS_Scheme=3`（MUSCL）、`LS_Algorithm=1`（SIMPLE）、`LS_alpha_u=0.5`、`LS_alpha_p=0.2`、`LS_Tol=1e-8`。
 
-运行（binary 为 `src/` 编译所得 `opencfd-ec1.16a.out`）：
+运行（binary 为 `src/` 编译所得 `MultiPhysMixSolver`）：
 
 ```bash
-mpirun -np 1 ./opencfd-ec1.16a.out
+mpirun -np 1 ./MultiPhysMixSolver
 ```
 
 ## 验证结果（x≥5 充分发展区 vs 解析 Poiseuille `u=6Ū y(1-y)`）

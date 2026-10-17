@@ -24,7 +24,7 @@
   便于与码 12 对照）、hv=0（无相间换热）、骨架 k_s=13.4；Ts 初始 300 K。
 - control：LS/porous 侧 ρ=0.317 kg/m³、p=2.7314e4 Pa、等效粘性 ν≈1e-2 m²/s（沿用
   high_low 网格稳定性处理）；`Iflag_vtk_onefile=0`。
-- 运行：`mpirun -np 1 ./opencfd-ec1.16a.out`（t_end=150，单进程约 2 min）。
+- 运行：`mpirun -np 1 ./MultiPhysMixSolver`（t_end=150，单进程约 2 min）。
 
 ## 验收结果（t_end=150，exit 0，无 NaN）
 | 块 | 码12（LS 替身）温度范围 K | 码19/PhaseA（多孔）温度范围 K |

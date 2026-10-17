@@ -1,5 +1,5 @@
 %==============================================================================
-%  OpenCFD-EC 1.16a 程序说明（多块/多区域扩展版）
+%  MultiPhysMixSolver 程序说明（多物理混合多块；基于 OpenCFD-EC 1.16a）
 %  编译：  xelatex main.tex   （连续两次以生成目录与交叉引用）
 %  或：    ./build.sh
 %  注意：  中文用 ctex + Fandol 字体（xeCJK），务必用 xelatex/lualatex，勿用 pdflatex
@@ -19,7 +19,7 @@
 \usepackage[hidelinks,bookmarksnumbered]{hyperref}
 
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small OpenCFD-EC 1.16a 程序说明}
+\fancyhead[L]{\small MultiPhysMixSolver 程序说明}
 \fancyhead[R]{\small 第\,\thepage\,页}
 \renewcommand{\headrulewidth}{0.4pt}
 \setlist{nosep,leftmargin=1.7em}
@@ -41,18 +41,18 @@
   captionpos=b
 }
 
-\title{\bfseries OpenCFD-EC 1.16a 程序说明\\[0.4em]
- \large 多块/多区域扩展版\\[0.2em]
+\title{\bfseries MultiPhysMixSolver 程序说明\\[0.4em]
+ \large 多物理混合多块求解器（基于 OpenCFD-EC 1.16a）\\[0.2em]
  \normalsize 固体导热 · 可压高速 · 不可压低速 · 多孔介质 · 跨区域耦合}
 \author{基于 Li Xinliang（中科院力学所 LHD）OpenCFD-EC 1.16a 的可压缩密度基基线扩展}
-\date{版本 1.0 \quad 2026-09-25}
+\date{版本 1.5 \quad 2026-10-17}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
 \noindent
-本手册面向 OpenCFD-EC 1.16a 的\textbf{多块/多区域扩展版}，系统说明：
+本手册面向 \textbf{MultiPhysMixSolver}（基于 OpenCFD-EC 1.16a 的\textbf{多物理混合多块扩展}），系统说明：
 \begin{enumerate}
   \item 程序的块类型体系（可压流体 / 固体 / 低速不可压 / 多孔介质）与跨区域接口码；
   \item 各求解器的物理模型、离散方法、\textbf{控制参数含义、默认值、选取建议与典型标定经验}；

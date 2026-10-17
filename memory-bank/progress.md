@@ -253,3 +253,37 @@
       按**面法向**赋速度分量并明确面积量纲（使 `LS_Inlet_Type=2` 可直接按 kg/(m²·s) 输入）。
 - [ ] 已知未实现（历史遗留）：接口 17/18；12/19 的**跨进程**耦合；固体/骨架 Ts 与 LS 温度的重启读回。
 
+
+## 2026-10-17 · 程序更名 MultiPhysMixSolver
+
+- [x] `git mv src/opencfd_ec3d_v1.16a.f90 src/multiphysmixsolver.f90`；文件头注释 + 启动横幅。
+- [x] `src/makefile`：`EXE = MultiPhysMixSolver`，链接后建兼容软链 `opencfd-ec1.16a.out`；
+      `clean` 同时删除两者。**串行 `make`**（`-j4` 会因缺模块依赖竞态失败）。
+- [x] `sub_read_parameter.f90` 的 `output_para.out` 版本行；`.gitignore` 加 `/src/MultiPhysMixSolver`。
+- [x] 22 个 `cases/**` 的 README / `gen_case.py` / `run_*.sh`；`.vscode/{tasks,launch}.json`。
+- [x] 手册 v1.5（`main/chap01/chap09/chap10/93_changelog` + `build.sh` 产物名）；PDF 49 页 0 error；
+      旧 PDF 文件名同步更新保留兼容。
+- [x] 文档源码引用：`docs/程序能力与算例考核总结.md`、`docs/重启与节点流场输出说明.md`、
+      `cases/beavers_joseph/README.md`、`cases/porous_fluid_phaseB/staggered_tw/README.md`。
+- [x] 逐位一致回归：更名前/后二进制在 `channel_ac_2blk`（2 块 + AC，5 步）全部输出逐字节相同
+      （`output_para.out` 仅版本行不同）。
+- [ ] 集群副本同步 `/work/home/lijunyang/sundong/PorousTest/code/` 后 `make` 复验。
+- [ ] 数据文件头字符串（`flow3d.dat`/`Ts_block_*.dat`/`bc3d.inc`）**保持旧名**；若将来要改，
+      需同时给两个 util 脚本加“双读兼容”，单独一次提交。
+
+## 并行改造待办（P0→P6，均未开始）
+
+- [ ] **P0** 跨进程安全网：接口 12/19/14/18 的远端分支不再静默 `cycle`；
+      统计远端界面数 + `MPI_Allreduce`，`np>1` 时未实现即 `MPI_Abort(2)` 并打印提示。
+- [ ] **P1** 低速/多孔压力 `p` 的跨进程 halo（`p_send_mpi`/`p_recv_mpi`，镜像 `Ts_*`）；
+      AC 判据 `ac_have_pressure_bc` 用 `MPI_LOR` 全局化；`ac_zero_mean_p` 用全局均值。
+- [ ] **P2** 驱动层伪时间步循环 A 方案：每伪步都做 halo（含 `p`），`AC_Max_Iter` 统一；
+      保留 `AC_MPI_Sync` 兼容开关。
+- [ ] **P3** 固体扫描数在 `np>1` 时统一（`Solid_Sync_Chunk`），消除 `Solid_Min_Iter` 早退导致的挂死。
+- [ ] **P4** 码 12（低速--固体）跨进程：`hl_iface_mpi`，几何克隆 `ls_por_iface_mpi`，两侧都调用。
+- [ ] **P5** 码 19（可压--多孔）跨进程：`cpb_iface_mpi`，非对称 2 标量打包（气体 `p_phys`、多孔 `T_w`）。
+- [ ] **P6** 码 14/18 跨进程（`ss_iface_mpi` 或复用 `Ts` 缓冲）；手册新增《并行能力矩阵》章；
+      4 块/4 进程混合算例 `t07_mix4`。
+- [ ] `cases/parallel/`：`mkpart.py` 生成 `partation.dat`、`run_para_verify.sh` 跑 np=1 vs np=2
+      并断言 `max|d|=0`；测试 t01–t07 随各级加入。
+

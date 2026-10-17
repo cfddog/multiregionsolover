@@ -38,7 +38,7 @@ LS_rho=1.0, LS_U_in=1.0, LS_P_in=LS_P_out=0     ! 无量纲
 LS_mu = W/Re = 0.04/Re                          ! Re=790 ⇒ 5.0633e-5
 LS_Algorithm=3, AC_beta=1, AC_CFL=20, AC_CFLv=0.1
 AC_Max_Iter=20, t_end=3000~20000, Kstep_save=1000
-../../src/opencfd-ec1.16a.out
+../../src/MultiPhysMixSolver
 ```
 （`AC_Max_Iter` 大 + `t_end=1` 会冻结界面通量而产生假解，见 `docs/工作日志.md` 2026-09-15。）
 

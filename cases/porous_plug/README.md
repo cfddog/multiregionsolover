@@ -27,7 +27,7 @@
 ## 运行
 
 ```bash
-mpirun -np 1 ./opencfd-ec1.16a.out
+mpirun -np 1 ./MultiPhysMixSolver
 ```
 
 ## 验证结果（Python 绘图检查）

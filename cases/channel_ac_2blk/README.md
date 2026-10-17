@@ -23,7 +23,7 @@
 ```bash
 python3 gen_case.py
 # 同步调度（正确）：AC_Max_Iter=20, t_end=3000, Kstep_save=1000
-../../src/opencfd-ec1.16a.out
+../../src/MultiPhysMixSolver
 ```
 
 **关键**：多块 AC 的每个外步里各块只推进少量内迭代（`AC_Max_Iter=20`），

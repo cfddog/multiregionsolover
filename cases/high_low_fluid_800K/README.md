@@ -17,4 +17,4 @@ Block1（低速块）本步**暂作被冷却壁面替身**（不改为多孔）�
 
 局限：Block1 是流体替身而非多孔 LTNE 壁，界面温度由该替身决定（≈797 K）；真共轭
 （可压↔多孔 码 19）未实现时，此值仅为热侧负荷量级标定。复现：
-`mpirun -np 1 ./opencfd-ec1.16a.out`（control.ec：T_inf=800，Iflag_vtk_onefile=0）。
+`mpirun -np 1 ./MultiPhysMixSolver`（control.ec：T_inf=800，Iflag_vtk_onefile=0）。

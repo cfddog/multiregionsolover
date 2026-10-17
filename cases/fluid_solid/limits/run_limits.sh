@@ -3,7 +3,7 @@
 # 仓库根目录由脚本位置推导（cases/fluid_solid/limits -> ../../..），可整体拷贝到别处运行
 L=$(cd "$(dirname "$0")" && pwd)
 R=$(cd "$L/../../.." && pwd)
-EXE=$R/src/opencfd-ec1.16a.out
+EXE=$R/src/MultiPhysMixSolver
 if [ ! -x "$EXE" ]; then
   echo "executable not found: $EXE  (run 'make' in $R/src first)"; exit 1
 fi

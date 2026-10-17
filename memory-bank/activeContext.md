@@ -5,11 +5,47 @@
 > 本次全部改动（control.ec 7 组拆分 + 重启/节点输出 + 三算例迁移 + 文档/记忆库）**已提交并推送**；
 > 仅 `.vscode/settings.json`（主题设置）有意未提交。
 > 上一版（2026-09-18，fluid_solid 三算例）已归档为 `memory-bank/archive_activeContext_2026-09-18.md`。
+> **2026-10-17：程序已更名 `MultiPhysMixSolver`**（旧名 `opencfd-ec1.16a.out` 由 `make` 建兼容软链），
+> 详见下方 §0h；并行改造（P0–P6）尚未开始。
 > **本轮（第四轮）改动尚未提交**：`src/sub_IO.f90`、`util/check_flow3d_node.py`、两份 docs、手册与记忆库。
 > **第五轮（2026-09-26）改动同样尚未提交**：`Iflag_Couple_Stop` 停机判据（6 个源文件 +
 > 2 个 util 工具 + 模板 + 4 份文档 + 记忆库）。
 > **第六轮（2026-09-26）改动尚未提交**：区域残差监视输出（`src/sub_debug.f90`、
 > `sub_multi_region.f90`、`sub_lowspeed(_ac).f90`、`sub_porous(_ac).f90` + 手册 4 处 + 总结文档 + 记忆库）。
+
+## 0h. 最新（2026-10-17）：程序更名 **MultiPhysMixSolver** ✅（后续并行改造从 P0 开始）
+
+**动机**：多物理（可压 / 低速 AC / 固体 / 多孔）混合求解，旧名 `OpenCFD-EC-1.16a` 已不达意。
+**原则**：更名**数值完全惰性**；旧名保留为兼容软链，旧算例目录零改动。
+
+**改动清单**
+| 类别 | 内容 |
+|---|---|
+| 源码 | `git mv src/opencfd_ec3d_v1.16a.f90 src/multiphysmixsolver.f90`；文件头注释 + 启动横幅（5 行，含 “based on OpenCFD-EC 1.16a”） |
+| 构建 | `src/makefile`：`srs` 换名、`EXE = MultiPhysMixSolver`、链接后 `ln -sf $(EXE) opencfd-ec1.16a.out`、`clean` 同时删两者 |
+| 输出 | `sub_read_parameter.f90:383` 的 `output_para.out` 版本行改为 `MultiPhysMixSolver (based on OpenCFD-EC Ver 1.1t)` |
+| **未改（有意）** | `flow3d.dat` / `Ts_block_*.dat` / `bc3d.inc` 等**数据文件头字符串仍为 `OpenCFD-EC`**（后处理兼容）；`field_restart.dat` 是纯数值记录，与文件名无关 |
+| 算例 | 22 个 `cases/**` 的 README / `gen_case.py` / `run_*.sh` 中可执行名改为 `MultiPhysMixSolver`（`run_limits.sh`、`run_grid.sh` 等按脚本位置推导 `src/` 的也一并改） |
+| 编辑器 | `.vscode/tasks.json`（run MPI）、`.vscode/launch.json`（gdb program/name） |
+| 文档 | 手册 `main.tex`（标题/页眉/摘要）、`chap01`、`chap09`、`chap10`、`93_changelog.tex` 1.5；`docs/程序能力与算例考核总结.md`、`docs/重启与节点流场输出说明.md`、`cases/beavers_joseph`、`cases/porous_fluid_phaseB/staggered_tw` 的源码引用；`build.sh` 产物名 |
+| 产物 | `docs/MultiPhysMixSolver-程序说明.pdf`（新）+ `docs/OpenCFD-EC-1.16a-程序说明.pdf`（同名旧文件同步更新，保留兼容）；49 页、0 error |
+
+**验证（本地）**
+- `cd src && make clean && make` → EXIT=0，产出 `MultiPhysMixSolver` + 软链 `opencfd-ec1.16a.out -> MultiPhysMixSolver`。
+- **逐位一致回归**：用 `git show HEAD:...` 复原更名前源码另建 `/tmp/oldsrc` 编译旧二进制，
+  与新版在 `cases/channel_ac_2blk`（**2 块 + AC，5 步，`Kstep_save=5`**）同输入对跑：
+  `flow3d.dat`、`field_restart.dat`、`Residual.dat`、`force.log`、两块 `*.vtk`、`Step_mess.dat`
+  **全部逐字节相同**；唯一差异是 `output_para.out` 第 1 行版本串（预期）。
+- `docs/程序说明/build.sh` 两遍通过，0 error / 0 undefined reference。
+- ⚠️ `make -j4` 会因 makefile 无模块依赖而竞态失败（本次实测 `Cannot open module file`），
+  **本仓库一律用串行 `make`**（或用 `make -j4` 前先单独 `make sub_modules.o`）。
+
+**下一步（并行改造，按 P0→P6 逐级验证）**
+P0 跨进程安全网（12/19/14/18 远端界面计数 + `MPI_Allreduce` + `MPI_Abort(2)`）→
+P1 `p` 的跨进程 halo（`p_send/p_recv_mpi`）+ AC 全局判据 → P2 驱动层逐步 halo →
+P3 固体扫描数统一 → P4 码 12 → P5 码 19 → P6 码 14/18 + 手册《并行能力矩阵》；
+每级都在 `cases/parallel/` 下用 np=1 vs np=2 的 `max|d|=0` 验收。详见 `workplan.md` 与
+`cases/parallel/`（待建）。
 
 ## 0g. 最新（2026-10-17）：第四～七轮改动分组提交 + ε 极限“负结果”澄清 ✅
 
@@ -207,7 +243,7 @@
 - `src/sub_multi_region.f90`：三个交错驱动（11/13、12、19）① 若 trailer 带同 pair、同形状的界面量
   ⇒ **直接恢复 `fp_Tw/fp_qw/fp_u/fp_pw`**（跨重启**零跳变**，不再从 `control.ec` 重播）；
   ② 每轮判据算完后 `set_couple_state(...)` 登记状态。`Iflag_Couple_Restart=-1` 时全部忽略（旧行为）。
-- `src/opencfd_ec3d_v1.16a.f90`：分派处按状态决定是否走交错驱动——
+- `src/multiphysmixsolver.f90`（更名前为 `opencfd_ec3d_v1.16a.f90`）：分派处按状态决定是否走交错驱动——
   `0`=自动（上次已满足 ⇒ 切强耦合）/`1`=强制强耦合/`2`=强制交错/`-1`=忽略；
   切强耦合时把 `Iflag_Couple_Scheme` 内部置 0、**自动限制固体每步预算**
   （`Solid_Max_Iter=min(现值,20)`、`Solid_Tol=max(现值,1e-6)`；只动扫掠上限与容差，物理/松弛因子不变）
