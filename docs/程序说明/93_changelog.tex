@@ -106,6 +106,16 @@
     \code{src/makefile}、\code{src/sub\_read\_parameter.f90}、\code{docs/程序说明/*}、
     \code{cases/**/README.md} & \code{make} EXIT=0；\code{channel\_ac\_2blk}、
     \code{porous\_ltne\_1d} 冒烟运行正常；本手册重编译无错误 \\
+2026-10-17 & 1.5.1 & \textbf{跨进程安全网（P0）}：新增 \code{check\_remote\_coupling\_support}，
+    启动时统计“邻居在别的进程 $+$ 无 MPI 版本”的界面（12/14/17/18/19），
+    \code{MPI\_Allreduce} 后 \code{MPI\_Abort(2)} 并打印清单，
+    杜绝“静默不耦合却成功结束” &
+    \code{src/sub\_multi\_region.f90}、\code{src/multiphysmixsolver.f90}、
+    \code{docs/程序说明/chap07\_coupling.tex} &
+    \code{-np 1} 回归（\code{channel\_ac\_2blk} 2 块 AC 5 步）输出与改前逐字节相同；
+    \code{fluid\_solid} deck 把 \code{material.in} 改为 \code{0 2}（可压--低速跨进程）$+$ 2 进程
+    $\Rightarrow$ EXIT=2 且打印 \code{12(...)}；原 \code{fluid\_solid}（多孔--低速，码 16）
+    2 进程正常越过自检并进入迭代 \\
 \bottomrule
 \end{longtable}
 

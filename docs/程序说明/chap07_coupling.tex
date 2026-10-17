@@ -131,7 +131,7 @@ $end
 气体步数控制 & \code{t\_end} / \code{Kstep\_save}（正常时间推进） & \code{Niter\_Couple\_Outer} 与调度表（\code{t\_end} 无效）\\
 界面信息 & 每步即时更新（无滞后） & 外层轮间滞后（$n_{step}$ 步）；用判据控制滞后量\\
 适用场景 & 界面变化快、强耦合、物理时间短 & 长时程 CHT/发汗冷却，界面缓变\\
-强制要求 & --- & \textbf{必须单进程}（12/19 无跨进程耦合；码 11 有 \code{cht\_mpi\_fluid\_solid\_face}）\\
+强制要求 & --- & \textbf{必须单进程}（12/19 无跨进程耦合；码 11 有 \code{cht\_mpi\_fluid\_solid\_face}）；多进程时启动自检会 \code{MPI\_Abort(2)} 拒绝运行（见下文“跨进程安全网”）\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -155,6 +155,35 @@ $end
   \item 自检：\code{IF\_Debug=1} 时启动会调用 \code{dbg\_dump\_interfaces}，
         打印每个界面的 \code{face/face1}、节点范围与 \code{L1..L3}——\textbf{新拓扑调试必用}。
 \end{itemize}
+
+\subsection{跨进程安全网（启动自检）}
+当前只有四条\textbf{跨进程}交换通路：码 15（可压--可压，\code{U(1:5)} 缓冲）、
+码 11/13（固--气/低速，\code{cht\_mpi\_fluid\_solid\_face}）、
+码 16（低速--多孔，\code{ls\_por\_iface\_mpi}），以及固体/多孔 \code{Ts} 缓冲
+（\code{Ts\_send/\_recv\_mpi}）。其余混合界面（12 可压--低速、14 固--固、
+17 固--多孔、18 多孔--多孔、19 可压--多孔）\textbf{只有同进程耦合}。
+
+旧行为：当界面两侧的块被 \code{partation.dat} 分到不同进程时，这些界面在耦合例程中
+直接 \code{cycle} 跳过——作业\textbf{照常“成功”结束}，但两侧物理上完全未耦合
+（最危险的失败模式）。
+
+现版本在 \code{Init\_flow} 之后、时间推进之前调用 \code{check\_remote\_coupling\_support}：
+遍历全部界面，统计“远端 $+$ 无 MPI 版本”的条目，\code{MPI\_Allreduce} 求和后若
+$>0$ 则打印清单并用 \code{MPI\_Abort(2)} 终止整个作业：
+\begin{lstlisting}
+==============================================================
+ ERROR: cross-process coupling is NOT implemented for
+          12(compressible<->low-speed)
+         remote interface entries (summed over all ranks) =           2
+ The job would otherwise run physically UNCOUPLED on these
+ interfaces, so it is aborted on purpose.
+ Fix: (a) run with -np 1 (all blocks in one process), or
+      (b) put both sides of every coupled interface on the
+          same process in partation.dat.
+==============================================================
+\end{lstlisting}
+\code{-np 1} 不受影响（自检直接返回）。多进程跑这些组合时，只能把同一界面的两侧
+放到同一进程，或等待后续版本补上对应的 \code{*\_mpi} 例程。
 
 \subsection{发汗壁（码 19 的 pair42 分支）}
 当可压气体界面同时是\textbf{冷却剂注入面}时，启用发汗壁：

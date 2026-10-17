@@ -3401,3 +3401,118 @@
     print*, ' ---------------------------------------------------------------------------'
    end subroutine dbg_dump_interfaces
 
+!==============================================================================
+! Cross-process safety net for unimplemented cross-region couplings.
+!
+! Only four cross-process exchange paths exist today:
+!   * 15  compressible <-> compressible      : U(1:5) buffer exchange
+!   * 11/13 solid <-> (compressible|low-speed): cht_mpi_fluid_solid_face
+!   * 16  low-speed <-> porous               : ls_por_iface_mpi
+!   * Ts buffer exchange for solid / porous  : Ts_send/_recv_mpi
+! Every other mixed pair (12 compressible<->low-speed, 14 solid<->solid,
+! 17 solid<->porous, 18 porous<->porous, 19 compressible<->porous) has a
+! LOCAL coupling only.  When the two blocks live on different MPI processes the
+! pair used to be skipped silently, producing a "successful" run in which the
+! two sides were physically UNCOUPLED -- the worst possible failure mode.
+!
+! check_remote_coupling_support (called once at start-up, before time marching)
+! counts such remote pairs on every rank, sums them with MPI_Allreduce and
+! aborts the whole job through abort_remote_uncoupled with a clear message.
+! np = 1 is unaffected (no neighbour is remote anyway).
+!==============================================================================
+  subroutine check_remote_coupling_support(nMesh)
+   use Global_Var
+   use const_var
+   implicit none
+   integer,intent(in):: nMesh
+   Type (Block_TYPE),pointer:: B
+   TYPE (BC_MSG_TYPE),pointer:: Bc2
+   integer:: mBlock, ksub, nb, t_own, t_nb
+   integer:: n12, n14, n17, n18, n19
+   character(len=256):: msg
+
+   if(Total_proc <= 1) return
+   n12=0; n14=0; n17=0; n18=0; n19=0
+
+   do mBlock=1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(.not. associated(B%bc_msg2)) cycle
+     do ksub=1, B%subface
+       Bc2 => B%bc_msg2(ksub)
+       if(.not. is_interface_bc(Bc2%bc)) cycle
+       nb = Bc2%nb1
+       if(nb <= 0) continue
+       if(B_proc(nb) == my_id) continue      ! same process -> local coupling
+       t_own = B%Block_type
+       t_nb  = Block_Type_List(nb)
+!      ---- pairs that DO have a cross-process path (see header) --------------
+       if(t_own == BLOCK_LOWSPEED .and. t_nb == BLOCK_POROUS)  continue  ! 16
+       if(t_own == BLOCK_POROUS   .and. t_nb == BLOCK_LOWSPEED) continue ! 16
+       if(t_own == BLOCK_SOLID    .and. &
+          (t_nb == BLOCK_FLUID .or. t_nb == BLOCK_LOWSPEED))    continue  ! 11/13
+       if((t_own == BLOCK_FLUID .or. t_own == BLOCK_LOWSPEED) .and. &
+          t_nb == BLOCK_SOLID)                                  continue  ! 11/13
+!      ---- unimplemented remote pairs ----------------------------------------
+       if((t_own == BLOCK_FLUID .and. t_nb == BLOCK_LOWSPEED) .or. &
+          (t_own == BLOCK_LOWSPEED .and. t_nb == BLOCK_FLUID)) then
+         n12 = n12 + 1
+       else if(t_own == BLOCK_SOLID .and. t_nb == BLOCK_SOLID) then
+         n14 = n14 + 1
+       else if((t_own == BLOCK_SOLID .and. t_nb == BLOCK_POROUS) .or. &
+               (t_own == BLOCK_POROUS .and. t_nb == BLOCK_SOLID)) then
+         n17 = n17 + 1
+       else if(t_own == BLOCK_POROUS .and. t_nb == BLOCK_POROUS) then
+         n18 = n18 + 1
+       else if((t_own == BLOCK_FLUID .and. t_nb == BLOCK_POROUS) .or. &
+               (t_own == BLOCK_POROUS .and. t_nb == BLOCK_FLUID)) then
+         n19 = n19 + 1
+       endif
+     enddo
+   enddo
+
+   if(n12+n14+n17+n18+n19 <= 0) return
+   msg = ' '
+   if(n12 > 0) msg = trim(msg)//' 12(compressible<->low-speed)'
+   if(n14 > 0) msg = trim(msg)//' 14(solid<->solid)'
+   if(n17 > 0) msg = trim(msg)//' 17(solid<->porous)'
+   if(n18 > 0) msg = trim(msg)//' 18(porous<->porous)'
+   if(n19 > 0) msg = trim(msg)//' 19(compressible<->porous)'
+   call abort_remote_uncoupled(n12+n14+n17+n18+n19, trim(msg))
+  end subroutine check_remote_coupling_support
+
+!==============================================================================
+! Sum the local count over all ranks and abort with MPI_Abort(2) if any rank
+! found an unsupported remote interface entry (see the header above).
+!==============================================================================
+  subroutine abort_remote_uncoupled(n_local, what)
+   use Global_Var
+   implicit none
+   integer,intent(in):: n_local
+   character(len=*),intent(in):: what
+   integer:: n_global, ierr
+   integer:: n_send
+
+   n_send   = n_local
+   n_global = n_local
+   if(Total_proc > 1) then
+     call MPI_Allreduce(n_send, n_global, 1, MPI_INTEGER, MPI_SUM, &
+                        MPI_COMM_WORLD, ierr)
+   endif
+   if(n_global <= 0) return
+
+   if(my_id == 0) then
+     print*, '=============================================================='
+     print*, ' ERROR: cross-process coupling is NOT implemented for'
+     print*, '        ', trim(what)
+     print*, '        remote interface entries (summed over all ranks) =', n_global
+     print*, ' The job would otherwise run physically UNCOUPLED on these'
+     print*, ' interfaces, so it is aborted on purpose.'
+     print*, ' Fix: (a) run with -np 1 (all blocks in one process), or'
+     print*, '      (b) put both sides of every coupled interface on the'
+     print*, '          same process in partation.dat.'
+     print*, '=============================================================='
+   endif
+   call MPI_Barrier(MPI_COMM_WORLD, ierr)
+   call MPI_Abort(MPI_COMM_WORLD, 2, ierr)
+  end subroutine abort_remote_uncoupled
+

@@ -611,3 +611,38 @@ module region_stat_mod          ! 常量 RES_PRINT_STEP = 100（硬编码显示�
 `Cannot open module file 'precision_ec.mod'` ⇒ **一律串行 `make`**。
 
 **下一步**：并行改造 P0（跨进程安全网）→ P1（`p` halo）→ … → P6，见 activeContext §0h。
+
+---
+
+## 🗓 2026-10-17 · P0 跨进程安全网（静默不耦合 → 立即 MPI_Abort）
+
+**问题**：接口 12（可压↔低速）、14（固↔固）、17（固↔多孔）、18（多孔↔多孔）、
+19（可压↔多孔）只有**同进程**耦合例程。当 `partation.dat` 把两侧分到不同进程时，
+`couple_*` 例程直接 `cycle` 跳过 ⇒ 作业“成功结束”但两侧物理上没耦合（最危险失败模式）。
+
+**实现**：`src/sub_multi_region.f90` 末尾新增
+- `check_remote_coupling_support(nMesh)`：遍历 `bc_msg2`，只统计
+  `B_proc(nb) /= my_id` 且组合无 MPI 版本的条目（12/14/17/18/19），
+  已支持的 11/13（`cht_mpi_fluid_solid_face`）、15（U 缓冲）、16（`ls_por_iface_mpi`）
+  和 Ts 缓冲交换不计入；`Total_proc<=1` 立即返回。
+- `abort_remote_uncoupled(n_local, what)`：`MPI_Allreduce(MPI_SUM)` → 0 号进程打印
+  清单 + 修复建议（`-np 1` 或把两侧放同一进程）→ `MPI_Barrier` + `MPI_Abort(2)`。
+调用点：`src/multiphysmixsolver.f90` 的 `Init_flow` 之后、`Start ......` 之前
+（一次遍历、毫秒级；放在耦合例程里要等第一步算完才报错，故未采用）。
+
+**验证**
+- `make` EXIT=0（串行）。
+- np=1 `channel_ac_2blk`（2 块 AC，5 步，`Kstep_save=5`）与 P0 前二进制：
+  `flow3d.dat` / `field_restart.dat` **逐字节相同** ⇒ np=1 零影响。
+- np=2 `cases/fluid_solid` 副本把 `material.in` 改 `0 2`（可压↔低速，界面跨进程）：
+  **EXIT=2**，日志
+  `ERROR: cross-process coupling is NOT implemented for 12(compressible<->low-speed)`
+  `remote interface entries (summed over all ranks) = 2`。
+- np=2 原 `cases/fluid_solid`（多孔 3 ↔ 低速 2，界面 16）越过自检、进入
+  `AC porous solver` 迭代 ⇒ 无误报。
+- 手册 `chap07` 新增《跨进程安全网（启动自检）》小节（含报错样例），
+  对照表“强制要求”行补注；`93_changelog.tex` 追加 1.5.1；`./build.sh` 重编译。
+
+**下一步**：P1 —— `p` 跨进程 halo（`p_send/_recv_mpi` 镜像 `Ts_*`）、
+`ac_have_pressure_bc` 的 `MPI_LOR`、`ac_zero_mean_p` 的全局均值。
+

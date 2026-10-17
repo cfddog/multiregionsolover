@@ -273,8 +273,12 @@
 
 ## 并行改造待办（P0→P6，均未开始）
 
-- [ ] **P0** 跨进程安全网：接口 12/19/14/18 的远端分支不再静默 `cycle`；
-      统计远端界面数 + `MPI_Allreduce`，`np>1` 时未实现即 `MPI_Abort(2)` 并打印提示。
+- [x] **P0 跨进程安全网**（2026-10-17 完成）：`check_remote_coupling_support`
+      （`src/sub_multi_region.f90` 末尾）在 `Init_flow` 后遍历界面，统计远端且无 MPI 版本的
+      组合（12/14/17/18/19），`MPI_Allreduce` 后 `MPI_Abort(2)` 并打印清单；np=1 直接返回。
+      验证：np=1 `channel_ac_2blk` 5 步 `flow3d.dat`/`field_restart.dat` 逐字节不变；
+      `fluid_solid` deck 改 `material.in=0 2` + np=2 → EXIT=2 且打印 `12(...)`；
+      原 `fluid_solid`（码 16）np=2 无假阳性。手册 chap07 + 1.5.1 记录。
 - [ ] **P1** 低速/多孔压力 `p` 的跨进程 halo（`p_send_mpi`/`p_recv_mpi`，镜像 `Ts_*`）；
       AC 判据 `ac_have_pressure_bc` 用 `MPI_LOR` 全局化；`ac_zero_mean_p` 用全局均值。
 - [ ] **P2** 驱动层伪时间步循环 A 方案：每伪步都做 halo（含 `p`），`AC_Max_Iter` 统一；

@@ -47,6 +47,30 @@ P3 固体扫描数统一 → P4 码 12 → P5 码 19 → P6 码 14/18 + 手册�
 每级都在 `cases/parallel/` 下用 np=1 vs np=2 的 `max|d|=0` 验收。详见 `workplan.md` 与
 `cases/parallel/`（待建）。
 
+### P0（2026-10-17，已完成）：跨进程安全网
+- 新增 `check_remote_coupling_support(nMesh)`（`src/sub_multi_region.f90`，文件末尾）：
+  遍历全部界面，统计**邻居在别的进程且该组合没有 MPI 版本**的条目
+  （12 可压↔低速、14 固↔固、17 固↔多孔、18 多孔↔多孔、19 可压↔多孔），
+  `MPI_Allreduce(MPI_SUM)` 后 `MPI_Abort(2)` 并打印清单 + 修复建议（改 `partation.dat` 或 `-np 1`）。
+  `Total_proc<=1` 直接返回 ⇒ np=1 零影响。
+- 调用点：`src/multiphysmixsolver.f90` 在 `Init_flow` 之后、时间推进之前
+  （顺序：`Init` → `set_control_para` → `check_mesh_quality` → `Init_flow` → **自检** → `Start`）。
+- 有意**不**在耦合例程里累加计数（那样要等第一步算完才报错），启动自检失败更快、
+  且不会在交错驱动里重复计数。
+- 验证：
+  * np=1 `channel_ac_2blk`（2 块 AC，5 步，`Kstep_save=5`）与 P0 前二进制
+    `flow3d.dat` / `field_restart.dat` **逐字节相同**；
+  * np=2 + `cases/fluid_solid` deck 把 `material.in` 改成 `0 2`（可压↔低速跨进程）
+    → **EXIT=2**，日志打印 `ERROR: cross-process coupling is NOT implemented for 12(...)`
+    `remote interface entries = 2`；
+  * np=2 + 原 `fluid_solid`（多孔 3 ↔ 低速 2，界面 16，`ls_por_iface_mpi`）
+    → 越过自检并进入 `AC porous solver` 迭代（无假阳性）。
+  * 手册 `chap07` 新增《跨进程安全网》小节 + 1.5.1 更新记录。
+
+**下一步：P1**（`p` 跨进程 halo：镜像 `Ts_send/_recv_mpi` 写 `p_send/p_recv_mpi`；
+`ac_have_pressure_bc` 用 `MPI_LOR` 全局化；`ac_zero_mean_p` 用全局均值），
+验收 `cases/parallel/t02_ac_2blk` np=1 vs np=2 `max|d|=0`。
+
 ## 0g. 最新（2026-10-17）：第四～七轮改动分组提交 + ε 极限“负结果”澄清 ✅
 
 **提交（HEAD 由 `ff7066a` → 三个提交）**：
