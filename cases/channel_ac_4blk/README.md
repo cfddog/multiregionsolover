@@ -32,7 +32,7 @@
 ```bash
 python3 gen_case.py
 # 同步调度（正确）：AC_Max_Iter=20, t_end=3000, Kstep_save=1000
-../../src/MultiPhysMixSolver     # 启动打印 "AC: shared same-class interfaces = 4"
+../../bin/MultiPhysMixSolver     # 启动打印 "AC: shared same-class interfaces = 4"
 ```
 
 ## 结果（2026-09-15）

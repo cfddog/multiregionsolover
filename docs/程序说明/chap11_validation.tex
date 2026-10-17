@@ -26,7 +26,7 @@
 
 \subsection{回归测试方法（改代码后必做）}
 \begin{enumerate}
-  \item \textbf{编译}：\code{cd src \&\& make}，确认 \code{EXIT=0}；
+  \item \textbf{编译}：仓库根目录 \code{make}，确认 \code{EXIT=0}，产物 \code{bin/MultiPhysMixSolver}；
   \item \textbf{参数等价性}：对至少一个算例跑短程，用
 \begin{lstlisting}
 diff <(grep -v "namelist groups found" old/output_para.out) \

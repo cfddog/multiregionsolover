@@ -119,5 +119,5 @@ dp/dx 一致、Darcy 平台与剖面趋势;界面滑移存在 AC 系统性偏高
 `run_coarse/validation_bj_coarse.png`(u_i 误差仅 1.6%)。
 
 复现:`cd run_ac && python3 ../gen_case.py --nx 81 --nyf 21 --nyp 25 --lx 8 &&
-(按上方 control.ec 改 LS_Algorithm/AC_*/t_end)&& mpirun -np 1 ../../../src/MultiPhysMixSolver
+(按上方 control.ec 改 LS_Algorithm/AC_*/t_end)&& mpirun -np 1 ../../../bin/MultiPhysMixSolver
 && python3 ../plot_validation/pv_bj.py --case .`。

@@ -1,0 +1,36 @@
+$(BUILDDIR)/multiphysmixsolver.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_Finite_Difference1.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_Finite_Difference2.o: $(BUILDDIR)/sub_modules.o $(BUILDDIR)/multiphysmixsolver.o
+$(BUILDDIR)/sub_IO.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_LU_SGS.o: $(BUILDDIR)/sub_modules.o $(BUILDDIR)/multiphysmixsolver.o
+$(BUILDDIR)/sub_Post.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_Post_timeAverage.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_Residual.o: $(BUILDDIR)/multiphysmixsolver.o $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_boundary.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_boundary_user.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_comput_dw.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_convert_inp.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_debug.o: $(BUILDDIR)/multiphysmixsolver.o $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_filtering.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_flux_split.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_geometry.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_init.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_interfaces.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_limitflow.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_lowspeed.o: $(BUILDDIR)/sub_debug.o $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_lowspeed_ac.o: $(BUILDDIR)/sub_debug.o $(BUILDDIR)/sub_lowspeed.o $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_multi_region.o: $(BUILDDIR)/sub_debug.o $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_partation_mpi.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_porous.o: $(BUILDDIR)/sub_modules.o $(BUILDDIR)/sub_debug.o
+$(BUILDDIR)/sub_porous_ac.o: $(BUILDDIR)/sub_porous.o $(BUILDDIR)/sub_lowspeed_ac.o $(BUILDDIR)/sub_modules.o $(BUILDDIR)/sub_debug.o
+$(BUILDDIR)/sub_read_parameter.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_restart.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_scheme.o: $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_time_acceleraction.o: $(BUILDDIR)/sub_modules.o $(BUILDDIR)/multiphysmixsolver.o
+$(BUILDDIR)/sub_time_advance.o: $(BUILDDIR)/sub_modules.o $(BUILDDIR)/sub_interfaces.o $(BUILDDIR)/multiphysmixsolver.o
+$(BUILDDIR)/sub_turbulence_BL.o: $(BUILDDIR)/sub_modules.o $(BUILDDIR)/multiphysmixsolver.o
+$(BUILDDIR)/sub_turbulence_NewSA.o: $(BUILDDIR)/multiphysmixsolver.o $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_turbulence_SA.o: $(BUILDDIR)/sub_modules.o $(BUILDDIR)/multiphysmixsolver.o
+$(BUILDDIR)/sub_turbulence_SST.o: $(BUILDDIR)/multiphysmixsolver.o $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_udate_Meshlink_mpi.o: $(BUILDDIR)/sub_interfaces.o $(BUILDDIR)/sub_modules.o
+$(BUILDDIR)/sub_update_buffer_mpi.o: $(BUILDDIR)/sub_interfaces.o $(BUILDDIR)/sub_modules.o

@@ -47,9 +47,12 @@
   方向/量纲错；本仓库算例改用等效速度入口 `LS_V_in=G/LS_rho`（见 activeContext 决策 3）。
 
 ## 3. 环境与运行约束
-- 编译：`cd src && make`（`mpif90`；`-freal-4-real-8` 等来自 `src/makefile`）；
-  产物 `src/MultiPhysMixSolver`，并自动建兼容软链 `src/opencfd-ec1.16a.out`。
-  改 `src/*.f90` 后必须重新 `make` 再验证。
+- 编译：仓库根目录 `make`（`mpif90`；`-freal-4-real-8` 等来自顶层 `makefile`）；
+  产物 `bin/MultiPhysMixSolver` + 兼容软链 `bin/opencfd-ec1.16a.out`；
+  中间文件在 `build/`（`*.o`/`*.mod`），源码 `src/` 保持干净。
+  `make -j4` 可用（依赖 `src/modules.dep`，由 `util/gen_moddep.sh` 生成；
+  **新增源文件或改 `use` 关系后要重跑该脚本**）。改 `src/*.f90` 后必须重新 `make` 再验证。
+  旧用法 `cd src && make` 仍可用（`src/makefile` 转发）。
 - **交错耦合（`Iflag_Couple_Scheme=1`）必须单进程**（`mpirun -np 1`，目录里不要放 `partation.dat`）：
   跨进程耦合目前只对码 11 实现（`cht_mpi_fluid_solid_face`），**12/19 未实现跨进程**。
 - **一个文件同时只能有一个连接（2026-09-25 教训，务必遵守）**：不得对**已打开的文件**用另一个

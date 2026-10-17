@@ -3,6 +3,25 @@
 > 更新：2026-10-17（第四～七轮改动已提交；ε 极限的**负结果**已写入手册/README）。**HEAD = `a29a6ee` 之后**（本轮 3 个提交）。
 > 更早的开发历史见 `docs/工作日志.md`、`docs/程序能力与算例考核总结.md`、`memory-bank/worklog.md`。
 
+## ✅ 已完成（2026-10-17）：构建布局重构（makefile + src/ + build/ + bin/ + cases/）
+- [x] 顶层 `makefile`：`make` / `make -j4` / `make clean` / `make info`；模式规则
+      `$(BUILDDIR)/%.o: $(SRCDIR)/%.f90`，`-Jbuild -Ibuild`，链接到 `bin/MultiPhysMixSolver`
+      并 `ln -sf` 建兼容软链 `bin/opencfd-ec1.16a.out`。
+- [x] `src/makefile` 改为转发入口（`cd src && make` 仍可用），`src/` 只剩 37 个 `*.f90` + makefile。
+- [x] 新增 `util/gen_moddep.sh` + 入库的 `src/modules.dep`（36 条文件级依赖）⇒ `make -j4`
+      **首次构建**即安全（此前必竞态失败）；不引入 `-cpp/-MMD`（会改变编译语义）。
+- [x] `.gitignore` 加 `/build/`、`/bin/`、`*.d`；`.vscode/{tasks,launch}.json` 指向新路径；
+      22 个 `cases/**` 的 README/脚本运行路径改为 `../../bin/MultiPhysMixSolver`。
+- [x] 清理：`src/` 下 44 个中间文件（`*.o`/`*.mod`/`*.log`/可执行/旧软链）、根目录 2 个
+      `*.mod`、`cases/**` 下 20+ 个旧 `opencfd-ec1.16a.out` 副本。
+- [x] 验证：`make clean && make -j4` → EXIT=0（89 s）；`channel_ac_2blk` 5 步
+      `flow3d.dat`/`field_restart.dat` 与重构前**逐字节相同**；P0 负例（np=2 码 12）仍 EXIT=2。
+- [x] 手册 v1.6：`chap01`/`chap09`/`chap10`/`chap11`/`93_changelog`（1.6）+ `main.tex` 版本号；
+      `./build.sh` 0 error；`docs/程序能力与算例考核总结.md` §7 同步。
+- [ ] 待办：P1/P2（AC 的 `p` 跨进程 halo + 伪步统一步数，必须合并做才能 np=1≡np=2）；
+      集群副本同步（现在还要带上顶层 `makefile` 与 `src/modules.dep`）。
+
+
 ## ✅ 已完成（2026-10-17）：分组提交 + ε 极限澄清 + 文档补全
 - [x] 提交 `c974e81` feat(output)：`flow3d_node.dat` 恢复 **3 条 PLOT3D 头**
       （块数 / 各块维数 / 变量数=6）；`check/compare_flow3d_node.py` 兼容过渡的 **2 条**写法；

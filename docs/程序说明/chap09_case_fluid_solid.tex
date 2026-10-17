@@ -158,7 +158,7 @@ porous chunk done, outer iter 1  max|dT_w|= ... K  coolant exit |v|_max= ... m/s
 \subsection{运行方式与时间预算（单进程实测）}
 \begin{lstlisting}
 cd cases/fluid_solid/run_case1_solid      # 或 run_case2_lowspeed / run_case3_porous
-mpirun -np 1 ./MultiPhysMixSolver        # 交错耦合必须单进程
+mpirun -np 1 ../../bin/MultiPhysMixSolver        # 交错耦合必须单进程
 \end{lstlisting}
 \begin{table}[htbp]\centering\small
 \caption{三个算例的成本参考（本机单进程，含输出）}\label{tab:casecost}

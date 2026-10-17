@@ -6,10 +6,12 @@
             "name": "Debug MultiPhysMixSolver (gdb, 单进程)",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/src/MultiPhysMixSolver",
+            // 可执行文件在 bin/；运行/调试的工作目录必须是含 control.ec 的算例目录，
+            // 这里默认指向一个 2 块 AC 算例，按需要改成自己的算例目录。
+            "program": "${workspaceFolder}/bin/MultiPhysMixSolver",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/src",
+            "cwd": "${workspaceFolder}/cases/channel_ac_2blk",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",

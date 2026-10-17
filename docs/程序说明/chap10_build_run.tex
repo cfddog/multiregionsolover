@@ -3,11 +3,16 @@
 
 \subsection{编译}
 \begin{lstlisting}
-cd src
-make                 # 默认编译器 mpif90；产物 MultiPhysMixSolver（并建兼容软链 opencfd-ec1.16a.out）
-make clean           # 清理 *.o *.mod *.out
+make                 # 在仓库根目录；产物 bin/MultiPhysMixSolver
+                     # （同时建兼容软链 bin/opencfd-ec1.16a.out）
+make -j4             # 并行编译（模块依赖见 src/modules.dep，首次构建同样安全）
+make clean           # 删除 build/（*.o *.mod）与 bin/
+make info            # 打印编译器 / 选项 / 目标
 \end{lstlisting}
-当前 \code{makefile} 的编译选项：
+源码与中间产物分离：\code{src/} 只放源码 \code{*.f90}（另有兼容入口 \code{src/makefile}）；
+\code{build/} 存放 \code{*.o}、\code{*.mod}（由 make 自动创建，可随时删除）；
+\code{bin/} 存放可执行文件。旧的 \code{cd src \&\& make} 仍然可用（转发到顶层 \code{makefile}）。
+当前编译选项（顶层 \code{makefile}）：
 \begin{lstlisting}
 f77 = mpif90
 opt = -g -std=legacy -ffree-line-length-none -freal-4-real-8 -O3
@@ -15,16 +20,20 @@ opt = -g -std=legacy -ffree-line-length-none -freal-4-real-8 -O3
 其中 \code{-freal-4-real-8} 把单精度提升为双精度（\code{real(PRE\_EC)}），
 \code{-std=legacy} 兼容旧代码风格。需要 OpenMP 时用 \code{-openmp} 并把 \code{NUM\_THREADS} 设为线程数。
 \textbf{改动任何 \code{src/*.f90} 后必须重新 \code{make} 再验证。}
+若新增源文件或改动了 \code{use}/\code{module} 关系，先运行
+\code{bash util/gen\_moddep.sh} 重新生成 \code{src/modules.dep}
+（顶层 makefile 据此确定编译顺序，\code{make -j} 才可靠）。
 
 \subsection{运行}
 \begin{lstlisting}
 cd cases/<case>
-mpirun -np 1 ./MultiPhysMixSolver          # 交错耦合（码 12/19）必须单进程
-mpirun -np 4 ./MultiPhysMixSolver          # 多进程：需块数 >= 进程数，自动分区
+mpirun -np 1 ../../bin/MultiPhysMixSolver   # 交错耦合（码 12/19）必须单进程
+mpirun -np 4 ../../bin/MultiPhysMixSolver   # 多进程：需块数 >= 进程数，自动分区
 \end{lstlisting}
 \begin{itemize}
-  \item \code{make} 会同时建立兼容软链 \code{src/opencfd-ec1.16a.out -> MultiPhysMixSolver}，
-        因此旧算例目录里已有的软链与作业脚本无需修改；
+  \item 可执行文件统一在 \code{bin/}，算例按相对路径调用 \code{../../bin/MultiPhysMixSolver}；
+        \code{bin/} 下同时有兼容软链 \code{opencfd-ec1.16a.out -> MultiPhysMixSolver}，
+        旧作业脚本若写 \code{./opencfd-ec1.16a.out}，把该软链拷到算例目录即可；
   \item 启动会依次做：读 \code{control.ec} $\to$ \code{prepare\_bc3d\_input}（校验/生成 \code{bc3d.inp}）
         $\to$ 网格质量检查 $\to$ \code{Init} $\to$ 读/生成 \code{wall\_dist.dat}
         $\to$ \code{Init\_flow}（有 \code{field\_restart.dat} 则续算）$\to$ 时间推进；
@@ -40,15 +49,17 @@ mpirun -np 4 ./MultiPhysMixSolver          # 多进程：需块数 >= 进程数�
         \code{File already opened in another unit}。本仓库已在 2026-09-25 修复
         \code{control.ec} 的该问题；换工具链后若报类似信息，优先按此思路排查
         （\code{open} 同一文件两次/两个 unit）。
-  \item \textbf{集群上通常是另一份源码副本}：改完要\textbf{同步 \code{src/} 并重新 \code{make}}，
-        再把 \code{MultiPhysMixSolver}（或兼容软链 \code{opencfd-ec1.16a.out}）拷到算例目录；不要只拷二进制而忘了源码版本一致。
+  \item \textbf{集群上通常是另一份源码副本}：改完要\textbf{同步 \code{src/}（必要时连同
+        \code{makefile}、\code{src/modules.dep}）并重新 \code{make}}，
+        再把 \code{bin/MultiPhysMixSolver}（或兼容软链 \code{opencfd-ec1.16a.out}）拷到算例目录；
+        不要只拷二进制而忘了源码版本一致。
   \item \textbf{保留 \code{field\_restart.dat}}：作业被时限杀死后可从最近保存点续算；
         建议把 \code{Kstep\_restart} 设小一些（如 100$\sim$500）以限制重算量。
   \item 作业脚本示例（PBS/Slurm 通用骨架）：
 \begin{lstlisting}
 cd $CASE_DIR
 module load mpi/...          # 与编译时一致的 MPI
-mpirun -np 1 ./MultiPhysMixSolver > run.log 2>&1
+mpirun -np 1 ../../bin/MultiPhysMixSolver > run.log 2>&1
 \end{lstlisting}
 \end{itemize}
 
@@ -71,6 +82,7 @@ mpirun -np 1 ./MultiPhysMixSolver > run.log 2>&1
         （新开关必须进 \code{bcast\_para}）。
 \end{itemize}
 
-\noindent\textbf{依据文件}：\code{src/makefile}、\code{src/opencfd\_ec3d\_v1.16a.f90}、
+\noindent\textbf{依据文件}：\code{makefile}、\code{src/multiphysmixsolver.f90}、
+\code{src/modules.dep}（由 \code{util/gen\_moddep.sh} 生成）、
 \code{src/sub\_partation\_mpi.f90}、\code{memory-bank/constraints.md}。
 %===EOF===

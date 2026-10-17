@@ -116,6 +116,16 @@
     \code{fluid\_solid} deck 把 \code{material.in} 改为 \code{0 2}（可压--低速跨进程）$+$ 2 进程
     $\Rightarrow$ EXIT=2 且打印 \code{12(...)}；原 \code{fluid\_solid}（多孔--低速，码 16）
     2 进程正常越过自检并进入迭代 \\
+2026-10-17 & 1.6 & \textbf{构建布局重构}：源码与中间产物彻底分离——顶层 \code{makefile}
+    统一构建，\code{src/} 只放 \code{*.f90}，\code{build/} 存 \code{*.o}/\code{*.mod}，
+    \code{bin/} 存可执行文件（含兼容软链 \code{opencfd-ec1.16a.out}）；
+    新增 \code{util/gen\_moddep.sh} 生成 \code{src/modules.dep} 提供文件级模块依赖，
+    \code{make -j} 首次构建即可并行；算例脚本/README 的运行路径统一为
+    \code{../../bin/MultiPhysMixSolver} &
+    \code{makefile}、\code{src/makefile}（转发入口）、\code{util/gen\_moddep.sh}、
+    \code{src/modules.dep}、\code{cases/**}、\code{.vscode/*} &
+    \code{make clean \&\& make -j4} EXIT=0（89 s）；\code{channel\_ac\_2blk} 5 步输出
+    与重构前逐字节相同；P0 安全网的 2 进程负例仍 EXIT=2 \\
 \bottomrule
 \end{longtable}
 

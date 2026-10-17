@@ -28,7 +28,7 @@
 
 ## 复现
 ```bash
-mpirun -np 1 ../../../../src/MultiPhysMixSolver   # 目录内
+mpirun -np 1 ../../../../bin/MultiPhysMixSolver   # 目录内
 python3 ../../porous_plug/plot_validation/pv_plug_compare.py \
     --simple ../../porous_plug/darcy --ac . --pin 0.25   # 与 SIMPLE 对比度量
 ```

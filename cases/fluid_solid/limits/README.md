@@ -40,7 +40,7 @@ cd cases/fluid_solid/limits
 bash run_limits.sh run_ref_case1 run_ref_case2 run_por_eps1 run_por_eps1m6 run_por_eps0
 ```
 
-`run_limits.sh` 默认使用仓库根目录下的 `src/MultiPhysMixSolver`（按脚本位置推导，
+`run_limits.sh` 默认使用仓库根目录下的 `bin/MultiPhysMixSolver`（按脚本位置推导，
 不依赖绝对路径），每个目录先清掉上一次的 `flow3d_node.dat / *.vtk / run.log` 等产物。
 2026-09-26 一轮的墙钟时间（`status.txt`）：case1 25 s、case2 3.7 min、
 ε=1 9.2 min、ε=1e-6 9.6 min、ε=0 1.0 min。

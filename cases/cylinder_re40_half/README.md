@@ -41,7 +41,7 @@ pressure was held constant*”。
 
 ```bash
 python3 gen_case.py            # 121x81x2 节点 = 120x80 单元, R_out=25D, beta=2.5
-../../src/MultiPhysMixSolver  # 单块 ⇒ AC_Max_Iter 大 + t_end=1（单块范式）
+../../bin/MultiPhysMixSolver  # 单块 ⇒ AC_Max_Iter 大 + t_end=1（单块范式）
 python3 postprocess.py . 40    # Cd（壁面积分 + 远场动量平衡两种口径）
 ```
 
@@ -109,7 +109,7 @@ u_θ(R,θ) = -2U sinθ ,      Cp(θ) = 1 - 4 sin²θ   (θ 自后驻点起)
 即可对**压力场/通量离散/壁面压力提取/远场 BC**做一次干净的验收：
 
 ```bash
-cd inviscid && ../../../src/MultiPhysMixSolver && python3 verify_cp_inviscid.py . 1.0
+cd inviscid && ../../../bin/MultiPhysMixSolver && python3 verify_cp_inviscid.py . 1.0
 ```
 
 > 出图需要 matplotlib：本机 `python3`（conda）没有，用 `/usr/bin/python3` 即可

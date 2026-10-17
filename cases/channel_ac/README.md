@@ -42,7 +42,7 @@
 ## 复现
 
 ```bash
-mpirun -np 1 ../../src/MultiPhysMixSolver   # 目录内运行
+mpirun -np 1 ../../bin/MultiPhysMixSolver   # 目录内运行
 python3 analyze_ac.py                         # 剖面 / 守恒 / Poiseuille 对比
 ```
 

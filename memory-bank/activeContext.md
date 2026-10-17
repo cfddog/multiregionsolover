@@ -6,12 +6,51 @@
 > 仅 `.vscode/settings.json`（主题设置）有意未提交。
 > 上一版（2026-09-18，fluid_solid 三算例）已归档为 `memory-bank/archive_activeContext_2026-09-18.md`。
 > **2026-10-17：程序已更名 `MultiPhysMixSolver`**（旧名 `opencfd-ec1.16a.out` 由 `make` 建兼容软链），
-> 详见下方 §0h；并行改造（P0–P6）尚未开始。
+> 详见 §0h；并行改造 P0（跨进程安全网）已完成并提交（§0h 末），P1 起未开始。
+> **2026-10-17（最新）：构建布局重构（§0i）** —— 顶层 `makefile` + `src/`（仅源码）+
+> `build/`（`*.o`/`*.mod`）+ `bin/`（可执行）+ `cases/`；`make -j4` 已可用。
+> 提交：`c8e423d`（更名）→ `c7537f1`（P0）→ `d92f720`（PDF 名引用）→ 本轮（构建布局，v1.6）。
 > **本轮（第四轮）改动尚未提交**：`src/sub_IO.f90`、`util/check_flow3d_node.py`、两份 docs、手册与记忆库。
 > **第五轮（2026-09-26）改动同样尚未提交**：`Iflag_Couple_Stop` 停机判据（6 个源文件 +
 > 2 个 util 工具 + 模板 + 4 份文档 + 记忆库）。
 > **第六轮（2026-09-26）改动尚未提交**：区域残差监视输出（`src/sub_debug.f90`、
 > `sub_multi_region.f90`、`sub_lowspeed(_ac).f90`、`sub_porous(_ac).f90` + 手册 4 处 + 总结文档 + 记忆库）。
+
+## 0i. 最新（2026-10-17）：构建布局重构 `makefile + src/ + build/ + bin/ + cases/` ✅
+
+**动机**：`src/` 里混着 44 个中间文件（`*.o`、`*.mod`、可执行、20 份编译日志、旧二进制备份），
+"源码目录"名不副实；编译产物/可执行文件也没有统一位置。
+
+**新布局**
+
+| 路径 | 内容 |
+|---|---|
+| `makefile`（顶层） | 唯一构建规则：`make` / `make -j4` / `make clean` / `make info` |
+| `src/` | **只放源码**：37 个 `*.f90` + `makefile`（转发入口，`cd src && make` 仍可用） |
+| `build/` | `*.o` / `*.mod`（`-Jbuild -Ibuild`），可随时 `rm -rf` |
+| `bin/` | `MultiPhysMixSolver` + 兼容软链 `opencfd-ec1.16a.out` |
+| `src/modules.dep` | 文件级模块依赖（36 条），由 `util/gen_moddep.sh` 扫描 `module`/`use` 生成 ⇒ **`make -j4` 首次构建即安全** |
+| `cases/` | 脚本/README 运行路径统一 `../../bin/MultiPhysMixSolver`；`run_limits.sh` 用 `$R/bin/...`；`.vscode` 的 build/run/debug 同步 |
+
+**关键实现**
+- 顶层 makefile 用 `$(BUILDDIR)/%.o: $(SRCDIR)/%.f90` 模式规则 + `-J$(BUILDDIR) -I$(BUILDDIR)`；
+  链接产物写 `bin/`，随后 `ln -sf` 建旧名软链。
+- 依赖**不用** gfortran 的 `-MMD`：其输出要求 `-cpp`（会改变编译语义），改用
+  `util/gen_moddep.sh`（awk 扫 `module`/`use`，排除自有模块/`iso_*`）生成 `src/modules.dep`，
+  该文件入库随源码一起维护。**改 `use` 关系或增删源文件后必须重跑该脚本。**
+
+**验证（本地）**
+- `make clean && make -j4` → **EXIT=0，89 s**（此前从干净树 `make -j4` 必失败）。
+- 数值惰性：`channel_ac_2blk`（2 块 + AC，5 步）`flow3d.dat`、`field_restart.dat`
+  与重构前二进制 **逐字节相同**。
+- P0 安全网负例（np=2 + 码 12 跨进程）仍 **EXIT=2**；np=1 正常 EXIT=0。
+- 手册 v1.6：`chap01`（目录树/上手流程）、`chap09`、`chap10`（编译/运行/集群注意）、
+  `chap11`、`93_changelog` 1.6；`./build.sh` 0 error。
+
+**顺带清理**：`src/` 下 44 个中间文件、根目录 2 个 `*.mod`、`cases/**` 里 20+ 个旧
+`opencfd-ec1.16a.out` 二进制副本（`*.out` 已在 `.gitignore`）。`.gitignore` 新增
+`/build/`、`/bin/`、`*.d`。
+
 
 ## 0h. 最新（2026-10-17）：程序更名 **MultiPhysMixSolver** ✅（后续并行改造从 P0 开始）
 
@@ -37,8 +76,9 @@
   `flow3d.dat`、`field_restart.dat`、`Residual.dat`、`force.log`、两块 `*.vtk`、`Step_mess.dat`
   **全部逐字节相同**；唯一差异是 `output_para.out` 第 1 行版本串（预期）。
 - `docs/程序说明/build.sh` 两遍通过，0 error / 0 undefined reference。
-- ⚠️ `make -j4` 会因 makefile 无模块依赖而竞态失败（本次实测 `Cannot open module file`），
-  **本仓库一律用串行 `make`**（或用 `make -j4` 前先单独 `make sub_modules.o`）。
+- ⚠️（**2026-10-17 已解决，见 §0i**）旧 `src/makefile` 无模块依赖声明，`make -j4` 会竞态失败
+  （`Cannot open module file`）；现由顶层 makefile + `src/modules.dep`（`util/gen_moddep.sh`）
+  提供文件级依赖，`make -j4` 从干净树也能通过。
 
 **下一步（并行改造，按 P0→P6 逐级验证）**
 P0 跨进程安全网（12/19/14/18 远端界面计数 + `MPI_Allreduce` + `MPI_Abort(2)`）→

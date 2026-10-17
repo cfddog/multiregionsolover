@@ -646,3 +646,36 @@ module region_stat_mod          ! 常量 RES_PRINT_STEP = 100（硬编码显示�
 **下一步**：P1 —— `p` 跨进程 halo（`p_send/_recv_mpi` 镜像 `Ts_*`）、
 `ac_have_pressure_bc` 的 `MPI_LOR`、`ac_zero_mean_p` 的全局均值。
 
+---
+
+## 2026-10-17 — 构建布局重构：`makefile + src/ + build/ + bin/ + cases/`
+
+**需求**（用户）：“将编译环境重新设置为：makefile+src+build+bin+cases，目前中间文件混在代码里面太乱了。”
+
+**改动**
+- 新增顶层 `makefile`：`make` / `make -j4` / `make clean` / `make info`；模式规则
+  `$(BUILDDIR)/%.o: $(SRCDIR)/%.f90`，`-Jbuild -Ibuild`；链接出 `bin/MultiPhysMixSolver`
+  并 `ln -sf` 建 `bin/opencfd-ec1.16a.out`（旧名兼容）。
+- `src/makefile` → 转发入口（`cd src && make` 保持可用）；`src/` 只留源码。
+- 新增 `util/gen_moddep.sh`：awk 扫 `module`/`use` 生成 **`src/modules.dep`**（36 条文件级依赖，入库）；
+  顶层 makefile `include` 它 ⇒ 从干净树 `make -j4` 也安全。
+  **不用** gfortran `-MMD`（要求 `-cpp`，会改变编译语义；实测 `-cpp -MMD` 可编译但放弃）。
+- `.gitignore`：`/build/`、`/bin/`、`*.d`；`.vscode/{tasks,launch}.json` 改到根目录 cwd + `bin/` 路径。
+- 22 个 `cases/**` 的 README/脚本运行路径 → `../../bin/MultiPhysMixSolver`
+  （`run_limits.sh` 用 `$R/bin/...`，`run_grid.sh` 用 `../../bin/...`）。
+- 清理：`src/` 44 个中间文件（`*.o`/`*.mod`/编译日志/可执行/旧软链）、根目录 2 个 `*.mod`
+  与 `snapf.log`、`cases/**` 20+ 个旧 `opencfd-ec1.16a.out` 二进制副本。
+
+**验证**
+- `make clean && make -j4` → **EXIT=0 / 89 s**（重构前从干净树的 `-j4` 必失败）。
+- `channel_ac_2blk`（2 块 + AC，5 步）`flow3d.dat`、`field_restart.dat` 与重构前**逐字节相同**。
+- P0 安全网负例（np=2，码 12 跨进程）仍 **EXIT=2**；np=1 正常 EXIT=0。
+- 手册升 **v1.6**（`chap01`/`chap09`/`chap10`/`chap11`/`93_changelog` 1.6，`main.tex` 版本号），
+  `./build.sh` **0 error**。
+
+**坑**：`find cases -maxdepth 6 -name opencfd-ec1.16a.out -delete` 会删掉算例目录里的旧二进制副本
+（本就是 `*.out` 忽略项，可随时从 `bin/` 重新拷贝）；如需保留请先备份。
+
+**下一步**：P1+P2 合并实施（AC 的 `p` halo + 伪步统一步数，见上一条的下一步）。
+
+

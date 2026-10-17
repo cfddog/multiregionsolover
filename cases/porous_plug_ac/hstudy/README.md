@@ -42,8 +42,8 @@ AC(β=500) 的 L_eff≡8.0 m、dp/dx 距理想 ≤0.06%，几乎与网格无关�
 
 ```bash
 # 每格跑 SIMPLE / AC（control.ec 已含对应设置，二进制为 src 编译所得）
-cd <h>/simple   && mpirun -np 1 ../../../../src/MultiPhysMixSolver
-cd <h>/ac_b500  && mpirun -np 1 ../../../../src/MultiPhysMixSolver
+cd <h>/simple   && mpirun -np 1 ../../../../bin/MultiPhysMixSolver
+cd <h>/ac_b500  && mpirun -np 1 ../../../../bin/MultiPhysMixSolver
 # 对比度量（统一窗口/口径，含端部诊断）
 python3 ../../porous_plug/plot_validation/pv_plug_compare.py \
     --simple h80/simple --ac h80/ac_b500 --pin 0.25

@@ -37,7 +37,7 @@
 
 ```bash
 cd re100   # 或 re1000 / re1000_str / re1000_tanh
-mpirun -np 1 ../../../../src/MultiPhysMixSolver
+mpirun -np 1 ../../../../bin/MultiPhysMixSolver
 cd ..
 python3 analyze_cavity.py re100 re1000 re1000_str re1000_tanh
 # re1000_tanh: 网格由本目录 gen_mesh.py --nx 81 --ny 81 --stretch_y --beta_y 3.2 生成

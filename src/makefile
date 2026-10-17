@@ -1,40 +1,20 @@
-#f77=ifort
-#f77=mpif90
-f77 =mpif90
-opt= -g -std=legacy -ffree-line-length-none -freal-4-real-8 -O3 
-#opt=-O3 -openmp
+# -----------------------------------------------------------------------------
+# 兼容入口：真正的构建规则在仓库根目录 makefile
+#   src/   只放源码（*.f90）
+#   build/ 编译中间文件（*.o / *.mod / *.d）
+#   bin/   可执行文件（MultiPhysMixSolver + 软链 opencfd-ec1.16a.out）
+# 旧的 `cd src && make` / `cd src && make clean` 仍然可用（转发到 ../makefile）。
+# -----------------------------------------------------------------------------
+.DEFAULT_GOAL := default
 
-srs=  sub_modules.f90 \
-      multiphysmixsolver.f90 \
-      sub_interfaces.f90 sub_init.f90 sub_Residual.f90 \
-      sub_flux_split.f90 sub_boundary.f90 sub_turbulence_BL.f90 \
-      sub_turbulence_SA.f90 sub_turbulence_NewSA.f90 sub_turbulence_SST.f90 \
-      sub_time_advance.f90  sub_update_buffer_mpi.f90 \
-      sub_Post.f90  sub_time_acceleraction.f90 \
-      sub_LU_SGS.f90  \
-      sub_IO.f90  sub_geometry.f90 \
-      sub_partation_mpi.f90 sub_convert_inp.f90 \
-      sub_read_parameter.f90 sub_scheme.f90 sub_comput_dw.f90 \
-	  sub_debug.f90 sub_filtering.f90 sub_boundary_user.f90  \
-	  sub_udate_Meshlink_mpi.f90  \
-	  sub_Finite_Difference1.f90  sub_Finite_Difference2.f90 \
-	  sub_restart.f90 \
-	  sub_Post_timeAverage.f90 sub_limitflow.f90 sub_multi_region.f90 \
-	  sub_lowspeed.f90 sub_porous.f90 sub_lowspeed_ac.f90 sub_porous_ac.f90
-
-
-OBJS=$(srs:.f90=.o)
-
-%.o:%.f90
-	$(f77) $(opt) -c $<
-
-
-EXE = MultiPhysMixSolver
-
-default: $(OBJS)
-	$(f77) $(opt)  -o $(EXE) $(OBJS)
-	ln -sf $(EXE) opencfd-ec1.16a.out   # 兼容旧算例脚本/软链（旧名 = 新二进制）
+default all:
+	@$(MAKE) --no-print-directory -C .. $@
 
 clean:
-	rm -f $(EXE) opencfd-ec1.16a.out *.out *.o work.* *.pc *.mod
+	@$(MAKE) --no-print-directory -C .. clean
+
+info:
+	@$(MAKE) --no-print-directory -C .. info
+
+.PHONY: default all clean info
 

@@ -1,10 +1,13 @@
-# 对象/编译产物
+# 对象/编译产物（新布局：build/ 中间文件、bin/ 可执行文件）
+/build/
+/bin/
 *.o
 *.mod
+*.d
 *.out
 work.*
 *.pc
-# 主程序产物（makefile 的 EXE；旧名 *.out 已覆盖）
+# 旧布局残留（src/ 下直接产出，已废弃）
 /src/MultiPhysMixSolver
 
 # 编辑器/IDE
