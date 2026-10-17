@@ -352,7 +352,9 @@
 !    isothermal : Ts_g = 2*Tw - Ts_int
 !    heat flux  : Ts_g = Ts_int + Qw*dx/kse  (linear ghost extrapolation)
 !    convective : kse*(Ts_int - Ts_g)/dx = htc*((Ts_int+Ts_g)/2 - Tinf)
-!  with kse = (1-eps)*k_s (effective skeleton conductivity).
+!  with kse = eps*k_f + (1-eps)*k_s (two-phase volume-weighted effective
+!  conductivity; the old (1-eps)*k_s collapsed to 0 for eps -> 1 and the
+!  flux ghost blew up -- see EPS_SOLID_POROUS in sub_modules.f90).
 !  (dx = distance between the interior and ghost cell centres).
    B%Ts(ig,jg,kg) = B%Ts(i2,j2,k2)
    if(found_bc) then
@@ -362,8 +364,9 @@
        dx_g = sqrt( (B%xc(ig,jg,kg)-B%xc(i2,j2,k2))**2 &
                   + (B%yc(ig,jg,kg)-B%yc(i2,j2,k2))**2 &
                   + (B%zc(ig,jg,kg)-B%zc(i2,j2,k2))**2 ) * Lscale
-       ! effective skeleton conductivity (Ts eq. is in total-volume units):
-       ks_eff = max((1.d0 - B%porous_eps)*B%solid_k, 1.d-30)
+       ! two-phase (volume-weighted) effective conductivity of the medium;
+       ! eps -> 1 (skeleton gone) must not collapse to 0
+       ks_eff = max(B%porous_eps*LS_k + (1.d0 - B%porous_eps)*B%solid_k, 1.d-12)
        B%Ts(ig,jg,kg) = ( (ks_eff - 0.5d0*htc_val*dx_g)*B%Ts(i2,j2,k2) &
                         + htc_val*dx_g*Tinf_val ) &
                       / max(ks_eff + 0.5d0*htc_val*dx_g, 1.d-30)
@@ -371,7 +374,8 @@
        dx_g = sqrt( (B%xc(ig,jg,kg)-B%xc(i2,j2,k2))**2 &
                   + (B%yc(ig,jg,kg)-B%yc(i2,j2,k2))**2 &
                   + (B%zc(ig,jg,kg)-B%zc(i2,j2,k2))**2 ) * Lscale
-       ks_eff = max((1.d0 - B%porous_eps)*B%solid_k, 1.d-30)
+       ! two-phase (volume-weighted) effective conductivity of the medium
+       ks_eff = max(B%porous_eps*LS_k + (1.d0 - B%porous_eps)*B%solid_k, 1.d-12)
        B%Ts(ig,jg,kg) = B%Ts(i2,j2,k2) + Qw_val*dx_g/ks_eff
      endif
    endif
@@ -851,7 +855,11 @@ integer,parameter:: INNER=3
 !        S_u = -(eps^2*mu/K)*u - (eps^3*F*rho*|V|/sqrt(K))*u
 !      Linearised with a negative slope added to a_p; du=Vol/ap and
 !      the Rhie-Chow / pressure-correction steps inherit the reduced d.
-        eps_p   = B%porous_eps
+        eps_p   = max(B%porous_eps, EPS_SOLID_POROUS)
+!       (eps <= EPS_SOLID_POROUS -> the impermeable-solid limit: using
+!        EPS_SOLID_POROUS instead of 0 keeps eps^2*mu/K finite (1.8e9 instead of
+!        the 0/1e-30 = 0 singularity); the exact freeze u = 0 is applied in
+!        porous_solver_one_block, so the results are unchanged for eps > 1e-8.)
         porK    = B%porous_dp**2 * eps_p**3 / max(150.d0*(1.d0-eps_p)**2, 1.d-30)
         Fcoef_p = 1.75d0 / max(sqrt(150.d0)*eps_p**1.5d0, 1.d-30)
         vm      = sqrt(B%U(2,i,j,k)**2 + B%U(3,i,j,k)**2 + B%U(4,i,j,k)**2)
@@ -1020,15 +1028,17 @@ integer,parameter:: INNER=3
 ! SOR (Successive Over-Relaxation) accelerates convergence on finer grids.
 ! Plain Gauss-Seidel spectral radius ~1-pi^2/(2N^2) is too slow for N>=80.
 !==============================================================================
-  subroutine porous_pressure_correction(nMesh, mBlock, res_p)
+  subroutine porous_pressure_correction(nMesh, mBlock, res_p, imax, jmax, kmax, res_p_rms)
    use Global_Var
    use const_var
    use porous_work
    implicit none
    integer:: nMesh, mBlock
-   real(PRE_EC):: res_p
+   real(PRE_EC):: res_p, res_p_rms
+   integer:: imax, jmax, kmax
    Type (Block_TYPE),pointer:: B
    integer:: i,j,k, nx,ny,nz, iter
+   real(PRE_EC):: rcell_r, rss_r
     real(PRE_EC):: rho, ap, aE,aW,aN,aS,aT,aB, src, pnew, gx
    real(PRE_EC):: Fe,Fw,Fn,Fs,Ft,Fb, dxe,dxw,dyn,dys,dzt,dzb
    real(PRE_EC):: dbe,dbw,dbn,dbs,dbt,dbb
@@ -1050,13 +1060,20 @@ integer,parameter:: INNER=3
 !  convergence monitor.  Do NOT use max|pp| for this: |pp| stays O(1) even at
 !  convergence (it is a pressure increment, not an imbalance).
    res_p = 0.d0
+   rss_r = 0.d0
+   imax  = 1; jmax = 1; kmax = 1
    do k=1,nz-1
    do j=1,ny-1
    do i=1,nx-1
-     res_p = max(res_p, abs(Fi(i+1,j,k)-Fi(i,j,k) &
-                           +Fj(i,j+1,k)-Fj(i,j,k) &
-                           +Fk(i,j,k+1)-Fk(i,j,k)))
+     rcell_r = abs(Fi(i+1,j,k)-Fi(i,j,k) &
+                  +Fj(i,j+1,k)-Fj(i,j,k) &
+                  +Fk(i,j,k+1)-Fk(i,j,k))
+     if(rcell_r > res_p) then       ! 记录最大质量不平衡的位置（region max 位置）
+       res_p = rcell_r; imax = i; jmax = j; kmax = k
+     endif
+     rss_r = rss_r + rcell_r*rcell_r
    enddo; enddo; enddo
+   res_p_rms = sqrt(rss_r/dble(max((nx-1)*(ny-1)*(nz-1), 1)))
 
 !  p' is solved fresh each outer sweep: pp holds only the current correction,
 !  and after p/u are updated below it must NOT carry over to the next sweep
@@ -1276,6 +1293,7 @@ integer,parameter:: INNER=3
 !==============================================================================
   subroutine porous_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
    use Global_Var
+   use region_stat_mod
    use const_var
    use porous_work
    implicit none
@@ -1283,7 +1301,9 @@ integer,parameter:: INNER=3
    real(PRE_EC):: Sfac, Sfac1
    Type (Block_TYPE),pointer:: B
    integer:: nx,ny,nz, iter, i,j,k
-   real(PRE_EC):: res_p, res0
+   integer:: imax, jmax, kmax
+   real(PRE_EC):: res_p, res0, res_p_rms
+   logical:: conv_ok
 
    B=>Mesh(nMesh)%Block(mBlock)
    nx=B%nx; ny=B%ny; nz=B%nz
@@ -1318,7 +1338,18 @@ integer,parameter:: INNER=3
      call porous_face_flux(nMesh, mBlock)
 
 !    pressure correction + velocity/pressure update
-     call porous_pressure_correction(nMesh, mBlock, res_p)
+     call porous_pressure_correction(nMesh, mBlock, res_p, imax, jmax, kmax, res_p_rms)
+
+!    eps <= EPS_SOLID_POROUS: impermeable-solid limit -- the momentum prediction
+!    and the pressure correction must leave u = 0; enforce it exactly (interior
+!    + ghost rows).  eps > 1e-8 is untouched.
+     if(B%porous_eps .le. EPS_SOLID_POROUS) then
+       do k = 1-LAP, nz+LAP-1
+       do j = 1-LAP, ny+LAP-1
+       do i = 1-LAP, nx+LAP-1
+         B%U(2,i,j,k) = 0.d0; B%U(3,i,j,k) = 0.d0; B%U(4,i,j,k) = 0.d0
+       enddo; enddo; enddo
+     endif
 
 !    energy (temperature)
      call porous_energy(nMesh, mBlock)
@@ -1340,34 +1371,25 @@ integer,parameter:: INNER=3
        endif
      enddo; enddo; enddo
 
-!    DEBUG: temperature convergence trend
-     if(my_id == 0 .and. mod(iter,50) == 0) then
-       print*, 'DEBUG T iter', iter, 'min', minval(B%U(5,1:nx-1,1:ny-1,1:nz-1)), &
-               'max', maxval(B%U(5,1:nx-1,1:ny-1,1:nz-1))
-     endif
-
+!    DEBUG: temperature trend + per-iteration DBG dumps + the old "SIMPLE iter"
+!    line were replaced (2026-09-26) by ONE monitoring line every RES_PRINT_STEP
+!    iterations (region max / mean-RMS / location of the max).
      if(iter == 1) res0 = res_p
-     if(my_id == 0 .and. iter <= 3) then
-       print*, '  DBG iter', iter, ' maxU2=', maxval(abs(B%U(2,1:nx,1:ny,1:nz))), &
-               ' maxFi=', maxval(abs(Fi(1:nx,1:ny,1:nz))), &
-               ' maxFj=', maxval(abs(Fj(1:nx,1:ny,1:nz))), &
-               ' Fi(21,1,1)=', Fi(21,1,1), ' Fi(21,21,1)=', Fi(21,21,1), &
-               ' Fi(41,21,1)=', Fi(41,21,1)
-       print*, '  DBG div max=', maxval(abs( Fi(2:nx,1:ny,1:nz)-Fi(1:nx-1,1:ny,1:nz) &
-             + Fj(1:nx,2:ny,1:nz)-Fj(1:nx,1:ny-1,1:nz) )), &
-               ' res_p=', res_p
-     endif
-     if(my_id == 0 .and. (iter <= 5 .or. mod(iter,100) == 0)) then
-       print*, "  SIMPLE iter", iter, " res_p=", res_p, &
-               " u(1,1,1)=", B%U(2,1,1,1), " p(1,1,1)=", B%p(1,1,1)
+!    收敛判据（每步都查：>10 次且残差达标）
+     conv_ok = (iter > 10 .and. res_p < Porous_Tol)
+!    过程监视行：每 RES_PRINT_STEP 次迭代 1 行（即将退出时跳过，避免与汇总行重复）
+     if(my_id == 0 .and. mod(iter, RES_PRINT_STEP) == 0 .and. .not. conv_ok) then
+       call region_res_stat(nMesh, mBlock, 5, iter, res_p, imax, jmax, kmax, &
+                            res_p_rms, res_p, 0.d0)
      endif
 !    minimum sweep count avoids premature exit from the quiescent start
 !    (initial u=0,p=0 gives an identically-zero mass residual on sweep 1)
-     if(iter > 10 .and. res_p < Porous_Tol) exit
+     if(conv_ok) exit
    enddo
 
    if(my_id == 0) then
-     print*, "Porous solver Block", B%Block_no, " SIMPLE iterations:", iter, &
-             " res_p:", res_p
+!    结束汇总行：区域 max / 平均 rms / max 位置（-iter: final=总迭代数）
+     call region_res_stat(nMesh, mBlock, 5, -iter, res_p, imax, jmax, kmax, &
+                          res_p_rms, res_p, 0.d0)
    endif
   end subroutine porous_solver_one_block

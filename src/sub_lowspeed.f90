@@ -931,15 +931,17 @@
 ! SOR (Successive Over-Relaxation) accelerates convergence on finer grids.
 ! Plain Gauss-Seidel spectral radius ~1-pi^2/(2N^2) is too slow for N>=80.
 !==============================================================================
-  subroutine lowspeed_pressure_correction(nMesh, mBlock, res_p)
+  subroutine lowspeed_pressure_correction(nMesh, mBlock, res_p, imax, jmax, kmax, res_p_rms)
    use Global_Var
    use const_var
    use lowspeed_work
    implicit none
    integer:: nMesh, mBlock
-   real(PRE_EC):: res_p
+   real(PRE_EC):: res_p, res_p_rms
+   integer:: imax, jmax, kmax
    Type (Block_TYPE),pointer:: B
    integer:: i,j,k, nx,ny,nz, iter
+   real(PRE_EC):: rcell_r, rss_r
     real(PRE_EC):: rho, ap, aE,aW,aN,aS,aT,aB, src, pnew, gx
    real(PRE_EC):: Fe,Fw,Fn,Fs,Ft,Fb, dxe,dxw,dyn,dys,dzt,dzb
    real(PRE_EC):: dbe,dbw,dbn,dbs,dbt,dbb
@@ -961,13 +963,20 @@
 !  convergence monitor.  Do NOT use max|pp| for this: |pp| stays O(1) even at
 !  convergence (it is a pressure increment, not an imbalance).
    res_p = 0.d0
+   rss_r = 0.d0
+   imax  = 1; jmax = 1; kmax = 1
    do k=1,nz-1
    do j=1,ny-1
    do i=1,nx-1
-     res_p = max(res_p, abs(Fi(i+1,j,k)-Fi(i,j,k) &
-                           +Fj(i,j+1,k)-Fj(i,j,k) &
-                           +Fk(i,j,k+1)-Fk(i,j,k)))
+     rcell_r = abs(Fi(i+1,j,k)-Fi(i,j,k) &
+                  +Fj(i,j+1,k)-Fj(i,j,k) &
+                  +Fk(i,j,k+1)-Fk(i,j,k))
+     if(rcell_r > res_p) then       ! 记录最大质量不平衡的位置（region max 位置）
+       res_p = rcell_r; imax = i; jmax = j; kmax = k
+     endif
+     rss_r = rss_r + rcell_r*rcell_r
    enddo; enddo; enddo
+   res_p_rms = sqrt(rss_r/dble(max((nx-1)*(ny-1)*(nz-1), 1)))
 
 !  p' is solved fresh each outer sweep: pp holds only the current correction,
 !  and after p/u are updated below it must NOT carry over to the next sweep
@@ -1126,6 +1135,7 @@
 !==============================================================================
   subroutine lowspeed_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
    use Global_Var
+   use region_stat_mod
    use const_var
    use lowspeed_work
    implicit none
@@ -1133,7 +1143,9 @@
    real(PRE_EC):: Sfac, Sfac1
    Type (Block_TYPE),pointer:: B
    integer:: nx,ny,nz, iter, i,j,k
-   real(PRE_EC):: res_p, res0
+   integer:: imax, jmax, kmax
+   real(PRE_EC):: res_p, res0, res_p_rms
+   logical:: conv_ok
 
    B=>Mesh(nMesh)%Block(mBlock)
    nx=B%nx; ny=B%ny; nz=B%nz
@@ -1168,7 +1180,7 @@
      call lowspeed_face_flux(nMesh, mBlock)
 
 !    pressure correction + velocity/pressure update
-     call lowspeed_pressure_correction(nMesh, mBlock, res_p)
+     call lowspeed_pressure_correction(nMesh, mBlock, res_p, imax, jmax, kmax, res_p_rms)
 
 !    energy (temperature)
      call lowspeed_energy(nMesh, mBlock)
@@ -1188,34 +1200,25 @@
        endif
      enddo; enddo; enddo
 
-!    DEBUG: temperature convergence trend
-     if(my_id == 0 .and. mod(iter,50) == 0) then
-       print*, 'DEBUG T iter', iter, 'min', minval(B%U(5,1:nx-1,1:ny-1,1:nz-1)), &
-               'max', maxval(B%U(5,1:nx-1,1:ny-1,1:nz-1))
-     endif
-
+!    DEBUG: temperature convergence trend, per-iteration DBG dumps and the old
+!    "SIMPLE iter" line were replaced (2026-09-26) by ONE monitoring line every
+!    RES_PRINT_STEP iterations (region max / mean-RMS / location of the max).
      if(iter == 1) res0 = res_p
-     if(my_id == 0 .and. iter <= 3) then
-       print*, '  DBG iter', iter, ' maxU2=', maxval(abs(B%U(2,1:nx,1:ny,1:nz))), &
-               ' maxFi=', maxval(abs(Fi(1:nx,1:ny,1:nz))), &
-               ' maxFj=', maxval(abs(Fj(1:nx,1:ny,1:nz))), &
-               ' Fi(21,1,1)=', Fi(21,1,1), ' Fi(21,21,1)=', Fi(21,21,1), &
-               ' Fi(41,21,1)=', Fi(41,21,1)
-       print*, '  DBG div max=', maxval(abs( Fi(2:nx,1:ny,1:nz)-Fi(1:nx-1,1:ny,1:nz) &
-             + Fj(1:nx,2:ny,1:nz)-Fj(1:nx,1:ny-1,1:nz) )), &
-               ' res_p=', res_p
-     endif
-     if(my_id == 0 .and. (iter <= 5 .or. mod(iter,100) == 0)) then
-       print*, "  SIMPLE iter", iter, " res_p=", res_p, &
-               " u(1,1,1)=", B%U(2,1,1,1), " p(1,1,1)=", B%p(1,1,1)
+!    收敛判据（每步都查：>10 次且残差达标）
+     conv_ok = (iter > 10 .and. res_p < LS_Tol)
+!    过程监视行：每 RES_PRINT_STEP 次迭代 1 行（即将退出时跳过，避免与汇总行重复）
+     if(my_id == 0 .and. mod(iter, RES_PRINT_STEP) == 0 .and. .not. conv_ok) then
+       call region_res_stat(nMesh, mBlock, 4, iter, res_p, imax, jmax, kmax, &
+                            res_p_rms, res_p, 0.d0)
      endif
 !    minimum sweep count avoids premature exit from the quiescent start
 !    (initial u=0,p=0 gives an identically-zero mass residual on sweep 1)
-     if(iter > 10 .and. res_p < LS_Tol) exit
+     if(conv_ok) exit
    enddo
 
    if(my_id == 0) then
-     print*, "Low-speed solver Block", B%Block_no, " SIMPLE iterations:", iter, &
-             " res_p:", res_p
+!    结束汇总行：区域 max / 平均 rms / max 位置（-iter: final=总迭代数）
+     call region_res_stat(nMesh, mBlock, 4, -iter, res_p, imax, jmax, kmax, &
+                          res_p_rms, res_p, 0.d0)
    endif
   end subroutine lowspeed_solver_one_block

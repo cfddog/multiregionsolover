@@ -182,6 +182,13 @@
                             !   0=auto (已满足 Tol_Couple_Tw -> 改用逐步强耦合续算)
                             !   1=强耦合  2=继续交错  -1=忽略重启里的耦合状态(旧行为)
     Iflag_Couple_WallFlux=0 ! 11/13 CHT split: 0=couple-based, 1=isothermal-Tw/qw wall-flux
+    Iflag_Couple_Stop=0     ! staggered-loop stop test (2026-09-26):
+                            !   0 = legacy: interface metric (Tol_Couple_Tw/p/u) or
+                            !       Niter_Couple_Outer only, t_end ignored
+                            !   1 = also stop when tt >= t_end OR when all global
+                            !       residuals are below their own standard
+                            !       (fluid RMS<=Res_Inner_Limit, AC<=AC_Tol,
+                            !        solid<=Solid_Tol)
 end
 
 !------read parameter (Namelist type)---------------- 
@@ -258,7 +265,7 @@ end
       Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
       Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
       Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, &
-      Iflag_Couple_WallFlux, Iflag_Couple_Restart
+      Iflag_Couple_WallFlux, Iflag_Couple_Restart, Iflag_Couple_Stop
 
 !---- legacy single group (variable list unchanged; Solid_* appended at the end)
   namelist /control_ec/ Ma, Re, AoA, AoS, p_outlet, t_end, &
@@ -289,7 +296,7 @@ end
 		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
 		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
 		Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux, &
-		Iflag_Couple_Restart, &
+		Iflag_Couple_Restart, Iflag_Couple_Stop, &
 		Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol, &
 		Iflag_restart, Kstep_restart, Iflag_flow_node
 
@@ -427,6 +434,10 @@ end
 	            " (file='", trim(RESTART_FILE), "')"
 	write(99,*) " couple restart state: Iflag_Couple_Restart=", Iflag_Couple_Restart, &
 	            "  Tol_Couple_Tw=", Tol_Couple_Tw
+	write(99,*) " couple stop test: Iflag_Couple_Stop=", Iflag_Couple_Stop, &
+	            " (0=legacy; 1=stop on t_end or all residuals<standard:", &
+	            " fluid RMS<=", Res_Inner_Limit, " AC<=", AC_Tol, &
+	            " solid<=", Solid_Tol, ")"
 
     write(99,*) "--------------------------------------------"
 
@@ -580,6 +591,7 @@ end
     Ipara(56)=Kstep_restart
     Ipara(57)=Iflag_flow_node
     Ipara(58)=Iflag_Couple_Restart
+    Ipara(59)=Iflag_Couple_Stop
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -714,6 +726,7 @@ end
     Kstep_restart=Ipara(56)
     Iflag_flow_node=Ipara(57)
     Iflag_Couple_Restart=Ipara(58)
+    Iflag_Couple_Stop=Ipara(59)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -845,9 +858,17 @@ end
         print*, "  porous.inp: block index out of range", m
         cycle
       endif
-      if(porous_eps_list(m) .le. 0.d0 .or. porous_eps_list(m) .gt. 1.d0) then
-        print*, "  porous.inp block", m, ": eps must be in (0,1], reset to 0.9"
+!    porosity range (2026-09-26): eps = 1 is the pure-fluid (no skeleton) limit
+!    and eps = 0 the impermeable-solid limit, so the whole closed interval [0,1]
+!    is accepted.  It used to be (0,1], which silently reset eps = 0 to 0.9 and
+!    made the eps -> 0 limit unreachable.
+      if(porous_eps_list(m) .lt. 0.d0 .or. porous_eps_list(m) .gt. 1.d0) then
+        print*, "  porous.inp block", m, ": eps must be in [0,1], reset to 0.9"
         porous_eps_list(m)=0.9d0
+      else if(porous_eps_list(m) .le. EPS_SOLID_POROUS) then
+        print*, "  porous.inp block", m, ": eps=", porous_eps_list(m), &
+                " <= EPS_SOLID_POROUS=", EPS_SOLID_POROUS, &
+                " -> impermeable-solid limit (velocity frozen at u=0)"
       endif
       if(porous_dp_list(m) .le. 0.d0) then
         print*, "  porous.inp block", m, ": dp must be > 0, reset to 1e-3"

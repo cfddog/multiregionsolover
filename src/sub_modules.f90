@@ -278,6 +278,19 @@
    real(PRE_EC),save:: Porous_T_ref, Porous_alpha_Ts, Porous_Tol    ! porous: initial/frame T ref, Ts relaxation, SIMPLE tolerance
    real(PRE_EC),save:: Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in  ! porous coolant inlet velocity [m/s] + T [K]
    integer,save:: Porous_Max_Iter                                   ! porous SIMPLE inner iterations per solver call
+ !---- porous-media limit guards (2026-09-26) ----------------------------------
+ ! eps <= EPS_SOLID_POROUS is treated as the impermeable-SOLID limit and
+ ! eps = 1 as the pure-FLUID limit (no skeleton):
+ !   * drag: the Ergun permeability K = dp^2*eps^3/(150*(1-eps)^2) is
+ !     renormalised with eps -> max(eps, EPS_SOLID_POROUS); the K floor of
+ !     1e-30 then no longer multiplies eps^2 = 0, which used to give ZERO
+ !     drag at exactly eps = 0 (= free fluid instead of solid), and the
+ !     velocity field is frozen at u = 0 exactly;
+ !   * interface ghost: the two-phase effective conductivity
+ !     k_eff = eps*k_f + (1-eps)*k_s is used instead of (1-eps)*k_s, which
+ !     collapses for eps -> 1 (see set_porous_Ts_flux in sub_multi_region.f90).
+ real(PRE_EC),parameter:: EPS_SOLID_POROUS=1.d-8
+
  !---- solid (conduction) GS controls, read from control.ec "$solid_ec" ---------
  ! These four used to be hard-coded inside solid_solver_one_block; the defaults
  ! below are exactly those former constants, so exposing them through control.ec
@@ -335,6 +348,33 @@
  !       decision nor the interface restore) -> exactly the old behaviour,
  !       kept as a regression-test switch.
    integer,save:: Iflag_Couple_Restart=0
+ !---- staggered-loop termination by t_end / global residual standards (2026-09-26)
+ ! Iflag_Couple_Stop (namelist $couple_ec):
+ !   0 = legacy (default): the staggered outer loop stops only on the interface
+ !       metric (Tol_Couple_Tw / Tol_Couple_p / Tol_Couple_u) or after
+ !       Niter_Couple_Outer rounds; t_end is ignored (pre-2026-09-26 behaviour,
+ !       kept as the regression-test switch).
+ !   1 = stop as soon as EITHER of the following holds:
+ !       (a) the accumulated physical time reaches t_end, or
+ !       (b) ALL global residuals are below their own solver's standard:
+ !             BLOCK_FLUID    : max over equations of the RMS residual (B%Res)
+ !                              <= Res_Inner_Limit      (default 1.d-10)
+ !             BLOCK_LOWSPEED : AC res_q and res_m <= AC_Tol  (LS_Algorithm=3)
+ !             BLOCK_POROUS   : AC res_q and res_m <= AC_Tol  (LS_Algorithm=3)
+ !             BLOCK_SOLID    : GS max|dTs| <= Solid_Tol       (default 1.d-9)
+ !       Niter_Couple_Outer stays in place as a safety cap, and the legacy
+ !       interface metric is still evaluated/reported every round (the two
+ !       criteria are independent: whichever fires first stops the run).
+   integer,save:: Iflag_Couple_Stop=0
+ ! Residuals of the CURRENT outer round, registered by the solvers themselves
+ ! (max over the blocks solved in this round) and consumed by couple_stop_test
+ ! (sub_multi_region.f90).  The staggered drivers reset them at the start of
+ ! every outer round; 0 means "nothing registered yet" -- both the AC and the
+ ! solid solver always register a value, and only BLOCK_FLUID residuals are
+ ! computed on the fly by couple_stop_test (their standard is Res_Inner_Limit).
+   real(PRE_EC),save:: Couple_Res_AC_q=0.d0   ! low-speed/porous AC res_q (dimensionless)
+   real(PRE_EC),save:: Couple_Res_AC_m=0.d0   ! low-speed/porous AC res_m (dimensionless)
+   real(PRE_EC),save:: Couple_Res_Solid=0.d0  ! solid GS max|dTs| of the last sweep [K]
  ! Coupling state persisted in field_restart.dat: filled by set_couple_state
  ! (called by the staggered drivers / the tight-coupling switch) and read back
  ! by read_restart.  Mode: -1 = unknown/none, 0 = tight (per-step), 1 = staggered.

@@ -16,6 +16,7 @@
 
   subroutine porous_ac_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
    use Global_var
+   use region_stat_mod
    use const_var
    use lows_ac_work
    implicit none
@@ -23,8 +24,10 @@
    real(PRE_EC) :: Sfac, Sfac1
    Type (Block_TYPE),pointer:: B
    integer :: nx,ny,nz, iter, i,j,k, isdual
+   integer :: imax_s, jmax_s, kmax_s
    real(PRE_EC) :: uin_x, uin_y, uin_z, Uref, beta, U2, L
    real(PRE_EC) :: rq, rm
+   real(PRE_EC) :: rmax_s, rrms_s, rq_s, rm_s
    logical :: have_pbc
 
    B => Mesh(nMesh)%Block(mBlock)
@@ -76,9 +79,7 @@
      if(isdual .eq. 1) call ac_dual_res(nMesh, mBlock, Sfac)
      call ac_compute_dt(nMesh, mBlock, beta)
      call ac_res_norm(nMesh, mBlock, beta, U2, L, rq, rm)
-     if(iter .eq. 1) then
-       if(my_id .eq. 0) print*, '  AC-porous iter', iter, ' res_q=', rq, ' res_m=', rm
-     endif
+!    (the separate iter==1 print was removed 2026-09-26; the line below covers it)
      call ac_lusgs_sweep(nMesh, mBlock, beta, isdual, Sfac1)
      do k = 1, nz-1
      do j = 1, ny-1
@@ -89,14 +90,36 @@
        B%U(4,i,j,k)  = XW(4,i,j,k)
        B%U(1,i,j,k)  = LS_rho
      enddo; enddo; enddo
+!    eps <= EPS_SOLID_POROUS: the impermeable-solid limit -- freeze the state at
+!    u = 0 (interior + ghost rows).  Together with dragc = 1e30 from
+!    ac_porous_drag_res this makes the block a pure conduction region, i.e. the
+!    flow field is independent of the drag model and equivalent to a
+!    BLOCK_SOLID for the LTNE frame temperature.
+     if(B%porous_eps .le. EPS_SOLID_POROUS) then
+       do k = 1-LAP, nz+LAP-1
+       do j = 1-LAP, ny+LAP-1
+       do i = 1-LAP, nx+LAP-1
+         B%U(2,i,j,k) = 0.d0; B%U(3,i,j,k) = 0.d0; B%U(4,i,j,k) = 0.d0
+       enddo; enddo; enddo
+     endif
+
      if(.not. have_pbc) call ac_zero_mean_p(nMesh, mBlock)
      if(iter .eq. 1 .or. mod(iter, AC_Print) .eq. 0) then
        if(my_id .eq. 0) print*, '  AC-porous iter', iter, ' res_q=', rq, ' res_m=', rm
      endif
      if(iter .ge. 20 .and. rq .lt. AC_Tol .and. rm .lt. AC_Tol) exit
    enddo
-   if(my_id .eq. 0) print*, ' AC porous solver block', mBlock, ': iterations =', iter, &
-       ' final res_q=', rq, ' res_m=', rm
+!  register the AC residual of this block for the staggered outer-loop stop
+!  test (Iflag_Couple_Stop=1); see sub_lowspeed_ac.f90 for the convention.
+   Couple_Res_AC_q = max(Couple_Res_AC_q, rq)
+   Couple_Res_AC_m = max(Couple_Res_AC_m, rm)
+!  区域汇总行：max / 平均 rms / max 位置（-iter: final=总伪时间步数）
+   if(my_id .eq. 0) then
+     call ac_res_stat(nMesh, mBlock, beta, U2, L, rmax_s, imax_s, jmax_s, kmax_s, &
+                      rrms_s, rq_s, rm_s)
+     call region_res_stat(nMesh, mBlock, 3, -iter, rmax_s, imax_s, jmax_s, kmax_s, &
+                          rrms_s, rq, rm)
+   endif
 
 !  LTNE two-temperature scalar pair (Tf / Ts) after the flow has converged.
    if(B%porous_hv .gt. 0.d0 .or. LS_k .gt. 0.d0) then
@@ -122,6 +145,16 @@
    do j = 1, B%ny-1
    do i = 1, B%nx-1
      epsp = B%porous_eps
+!    eps -> 0 (impermeable solid): the Ergun Darcy term eps^2*mu/K would
+!    formally give 0/1e-30 = 0, i.e. NO drag, and the block would behave like a
+!    free fluid.  Renormalise eps to EPS_SOLID_POROUS (K -> 1e-30, c_drag ->
+!    1.8e9 1/s) and mark the diagonal as drag-dominated; the caller freezes the
+!    state at u = 0, so eps = 0 is the exact solid limit and stays continuous
+!    with eps ~ 1e-8 (both give c_drag ~ 1e9 1/s).
+     if(epsp .le. EPS_SOLID_POROUS) then
+       dragc(i,j,k) = 1.d30
+       cycle
+     endif
      Kp = B%porous_dp**2 * epsp**3 / max(150.d0*(1.d0-epsp)**2, 1.d-30)
      Fc = 1.75d0 / max(sqrt(150.d0)*epsp**1.5d0, 1.d-30)
      vm = sqrt(B%U(2,i,j,k)**2 + B%U(3,i,j,k)**2 + B%U(4,i,j,k)**2)
@@ -149,13 +182,16 @@
 !===============================================================================
   subroutine ac_porous_ltne(nMesh, mBlock)
    use Global_var
+   use region_stat_mod
    use const_var
    use porous_work
    implicit none
    integer :: nMesh, mBlock
    Type (Block_TYPE),pointer:: B
    integer :: nx,ny,nz, i,j,k, iter
+   integer :: imax_f, jmax_f, kmax_f, imax_g, jmax_g, kmax_g, ncell_t
    real(PRE_EC) :: rho, dTf, dTs, Tfmin, Tfmax, Tsmin, Tsmax
+   real(PRE_EC) :: rss_f, rss_g, rcell_f, rcell_g, rrms_f, rrms_g
    real(PRE_EC), allocatable :: Tfold(:,:,:), Tsold(:,:,:)
 
    interface
@@ -209,6 +245,10 @@
 !  stop on the change of both temperatures over a 100-sweep window
    allocate(Tfold(nx,ny,nz), Tsold(nx,ny,nz))
    Tfold = 0.d0; Tsold = 0.d0
+   dTf = 0.d0; dTs = 0.d0
+   imax_f = 1; jmax_f = 1; kmax_f = 1
+   imax_g = 1; jmax_g = 1; kmax_g = 1
+   rrms_f = 0.d0; rrms_g = 0.d0
    do iter = 1, max(Porous_Max_Iter, 2000)
      if(mod(iter,100) .eq. 1) then
        do k = 1, nz-1; do j = 1, ny-1; do i = 1, nx-1
@@ -220,23 +260,34 @@
      call porous_energy_Ts(nMesh, mBlock)
      if(mod(iter,100) .eq. 0) then
        dTf = 0.d0; dTs = 0.d0
+       rss_f = 0.d0; rss_g = 0.d0
+       ncell_t = 0
        do k = 1, nz-1; do j = 1, ny-1; do i = 1, nx-1
-         dTf = max(dTf, abs(B%U(5,i,j,k)-Tfold(i,j,k)))
-         dTs = max(dTs, abs(B%Ts(i,j,k)-Tsold(i,j,k)))
+         rcell_f = abs(B%U(5,i,j,k)-Tfold(i,j,k))
+         rcell_g = abs(B%Ts(i,j,k)-Tsold(i,j,k))
+         if(rcell_f > dTf) then      ! 流体/骨架各自的最大变化位置
+           dTf = rcell_f; imax_f = i; jmax_f = j; kmax_f = k
+         endif
+         if(rcell_g > dTs) then
+           dTs = rcell_g; imax_g = i; jmax_g = j; kmax_g = k
+         endif
+         rss_f = rss_f + rcell_f*rcell_f
+         rss_g = rss_g + rcell_g*rcell_g
+         ncell_t = ncell_t + 1
        enddo; enddo; enddo
-       if(my_id .eq. 0 .and. mod(iter,2000) .eq. 0) then
-         Tfmin = minval(B%U(5,1:nx-1,1:ny-1,1:nz-1))
-         Tfmax = maxval(B%U(5,1:nx-1,1:ny-1,1:nz-1))
-         Tsmin = minval(B%Ts(1:nx-1,1:ny-1,1:nz-1))
-         Tsmax = maxval(B%Ts(1:nx-1,1:ny-1,1:nz-1))
-         print*, '  AC-porous LTNE iter', iter, ' dTf=', dTf, ' dTs=', dTs, &
-                 ' Tf[', Tfmin, ',', Tfmax, ']  Ts[', Tsmin, ',', Tsmax, ']'
-       endif
+       rrms_f = sqrt(rss_f/dble(max(ncell_t,1)))
+       rrms_g = sqrt(rss_g/dble(max(ncell_t,1)))
+!      (the periodic ' AC-porous LTNE iter ...' line was removed 2026-09-26)
        if(dTf .lt. 1.d-3 .and. dTs .lt. 1.d-3) exit
      endif
    enddo
    deallocate(Tfold, Tsold)
-   if(my_id .eq. 0) print*, ' AC-porous LTNE block', mBlock, ': sweeps =', iter, &
-       ' final dTf=', dTf, ' dTs=', dTs
+!  区域汇总行：100 步窗口变化的 max / 平均 rms / max 位置（-iter: final=总扫掠数）
+   if(my_id .eq. 0) then
+     call region_res_stat(nMesh, mBlock, 7, -iter, dTf, imax_f, jmax_f, kmax_f, &
+                          rrms_f, dTf, 0.d0)
+     call region_res_stat(nMesh, mBlock, 8, -iter, dTs, imax_g, jmax_g, kmax_g, &
+                          rrms_g, dTs, 0.d0)
+   endif
   end subroutine ac_porous_ltne
 

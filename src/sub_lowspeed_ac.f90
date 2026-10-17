@@ -81,6 +81,7 @@
 !===============================================================================
   subroutine lowspeed_ac_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
    use Global_var
+   use region_stat_mod
    use const_var
    use lows_ac_work
    implicit none
@@ -88,8 +89,10 @@
    real(PRE_EC) :: Sfac, Sfac1
    Type (Block_TYPE),pointer:: B
    integer :: nx,ny,nz, iter, i,j,k, isdual
+   integer :: imax_s, jmax_s, kmax_s
    real(PRE_EC) :: uin_x, uin_y, uin_z, Uref, beta, U2, L
    real(PRE_EC) :: rq, rm, rq0, rm0
+   real(PRE_EC) :: rmax_s, rrms_s, rq_s, rm_s
    logical :: have_pbc
    interface
      subroutine update_buffer_onemesh(nMesh)
@@ -151,10 +154,8 @@
      if(isdual .eq. 1) call ac_dual_res(nMesh, mBlock, Sfac)
      call ac_compute_dt(nMesh, mBlock, beta)
      call ac_res_norm(nMesh, mBlock, beta, U2, L, rq, rm)
-     if(iter .eq. 1) then
-       rq0 = max(rq, 1.d-30); rm0 = max(rm, 1.d-30)
-       if(my_id .eq. 0) print*, '  AC iter', iter, ' res_q=', rq, ' res_m=', rm
-     endif
+!    (the separate iter==1 print was removed 2026-09-26: the monitoring line
+!     below already covers iter=1, and the end-of-solve line reports the level)
      call ac_lusgs_sweep(nMesh, mBlock, beta, isdual, Sfac1)
 !    write back primitive state
      do k = 1, nz-1
@@ -172,8 +173,18 @@
      endif
      if(iter .ge. 20 .and. rq .lt. AC_Tol .and. rm .lt. AC_Tol) exit
    enddo
-   if(my_id .eq. 0) print*, ' AC solver block', mBlock, ': iterations =', iter, &
-       ' final res_q=', rq, ' res_m=', rm
+!  register the AC residual of this block for the staggered outer-loop stop
+!  test (Iflag_Couple_Stop=1).  The driver resets Couple_Res_AC_* at the start
+!  of every outer round, so this max() is "worst block of this round".
+   Couple_Res_AC_q = max(Couple_Res_AC_q, rq)
+   Couple_Res_AC_m = max(Couple_Res_AC_m, rm)
+!  区域汇总行：max / 平均 rms / max 位置（-iter: final=总伪时间步数）
+   if(my_id .eq. 0) then
+     call ac_res_stat(nMesh, mBlock, beta, U2, L, rmax_s, imax_s, jmax_s, kmax_s, &
+                      rrms_s, rq_s, rm_s)
+     call region_res_stat(nMesh, mBlock, 2, -iter, rmax_s, imax_s, jmax_s, kmax_s, &
+                          rrms_s, rq, rm)
+   endif
 !   Temperature (passive scalar / conjugate): after the flow converges, relax
 !   T (=U(5)) to steady state using the converged AC velocity field when the
 !   fluid conducts heat (LS_k > 0).  Same discretisation as SIMPLE.
@@ -1414,6 +1425,47 @@
   end subroutine ac_res_norm
 
 !===============================================================================
+! AC 流场残差的分量统计（2026-09-26）：区域 max / 平均 rms / max 位置。
+! 逐胞幅值与 ac_res_norm 完全一致（vq、vm、1.d-3*rr），只是额外返回
+!   rmax : max_cell max(vq, vm, 1.d-3*rr)（与 rq/rm 同量级、同量纲）
+!   rrms : sqrt( sum(rr^2) / N_cell )，即区域平均（均方根）水平
+!   (imax,jmax,kmax) : rmax 所在胞
+! 供每个块求解结束时打印区域监视/汇总行（sub_debug.f90 region_res_stat）。
+!===============================================================================
+  subroutine ac_res_stat(nMesh, mBlock, beta, U2, L, rmax, imax, jmax, kmax, rrms, rq, rm)
+   use Global_var
+   use lows_ac_work
+   implicit none
+   integer:: nMesh, mBlock, imax, jmax, kmax, i, j, k, ncell
+   real(PRE_EC):: beta, U2, L, rmax, rrms, rq, rm
+   real(PRE_EC):: vq, vm, rr, rss
+   Type (Block_TYPE),pointer:: B
+
+   B => Mesh(nMesh)%Block(mBlock)
+   rmax = 0.d0; rrms = 0.d0; rss = 0.d0
+   rq = 0.d0; rm = 0.d0
+   imax = 1; jmax = 1; kmax = 1
+   ncell = 0
+   do k = 1, B%nz-1
+   do j = 1, B%ny-1
+   do i = 1, B%nx-1
+     vq = abs(RAC(1,i,j,k))/(max(B%Vol(i,j,k),1.d-30)*beta) * L / sqrt(U2)
+     vm = sqrt(RAC(2,i,j,k)**2 + RAC(3,i,j,k)**2 + RAC(4,i,j,k)**2) &
+          /max(B%Vol(i,j,k),1.d-30) * L / U2
+     rr = abs(RAC(1,i,j,k))/max(B%Vol(i,j,k),1.d-30) * L / U2
+     rq = max(rq, vq, 1.d-3*rr)
+     rm = max(rm, vm)
+     rr = max(vq, vm, 1.d-3*rr)      ! 合并后的逐胞幅值
+     if(rr > rmax) then              ! 记录区域最大残差的位置
+       rmax = rr; imax = i; jmax = j; kmax = k
+     endif
+     rss = rss + rr*rr
+     ncell = ncell + 1
+   enddo; enddo; enddo
+   rrms = sqrt(rss/dble(max(ncell,1)))
+  end subroutine ac_res_stat
+
+!===============================================================================
 ! Dual-time physical source for momentum (BDF2, coefficients Sfac from main):
 !   RAC(2:4) -= (3u - 4*u^n + u^n-1) * Vol * Sfac      (u^n from B%Un)
 !===============================================================================
@@ -1852,13 +1904,16 @@
 !===============================================================================
   subroutine ac_lowspeed_energy(nMesh, mBlock)
    use Global_var
+   use region_stat_mod
    use const_var
    use lowspeed_work
    implicit none
    integer :: nMesh, mBlock
    Type (Block_TYPE),pointer:: B
    integer :: nx,ny,nz, i,j,k, iter
+   integer :: imax_t, jmax_t, kmax_t, ncell_t
    real(PRE_EC) :: rho, uin_x, uin_y, uin_z, dT, Told_v
+   real(PRE_EC) :: rss_t, rcell_t, rrms_t
    real(PRE_EC), allocatable :: Told(:,:,:)
    interface
      subroutine lowspeed_energy(nMesh, mBlock)
@@ -1910,6 +1965,7 @@
 !  as SIMPLE) until the change over a window is small
    allocate(Told(nx,ny,nz)); Told = 0.d0
    dT = 0.d0
+   imax_t = 1; jmax_t = 1; kmax_t = 1; rrms_t = 0.d0
    do iter = 1, max(LS_Max_Iter, 2000)
      if(mod(iter,50) .eq. 1) then
        do k = 1, nz-1; do j = 1, ny-1; do i = 1, nx-1
@@ -1920,19 +1976,26 @@
      call lowspeed_energy(nMesh, mBlock)
      if(mod(iter,50) .eq. 0) then
        dT = 0.d0
+       rss_t = 0.d0
+       ncell_t = 0
        do k = 1, nz-1; do j = 1, ny-1; do i = 1, nx-1
-         dT = max(dT, abs(B%U(5,i,j,k)-Told(i,j,k)))
+         rcell_t = abs(B%U(5,i,j,k)-Told(i,j,k))
+         if(rcell_t > dT) then      ! 记录窗口内最大变化的位置
+           dT = rcell_t; imax_t = i; jmax_t = j; kmax_t = k
+         endif
+         rss_t = rss_t + rcell_t*rcell_t
+         ncell_t = ncell_t + 1
        enddo; enddo; enddo
-       if(my_id .eq. 0 .and. mod(iter,1000) .eq. 0) then
-         print*, '  AC-lowspeed T iter', iter, ' max|dT|/50=', dT, &
-                 ' T[', minval(B%U(5,1:nx-1,1:ny-1,1:nz-1)), ',', &
-                       maxval(B%U(5,1:nx-1,1:ny-1,1:nz-1)), '] K'
-       endif
+       rrms_t = sqrt(rss_t/dble(max(ncell_t,1)))
+!      (the periodic ' AC-lowspeed T iter ...' line was removed 2026-09-26)
        if(dT .lt. 1.d-3) exit
      endif
    enddo
    deallocate(Told)
-   if(my_id .eq. 0) print*, ' AC-lowspeed T block', mBlock, ': sweeps =', iter, &
-       ' final max|dT|(50-window)=', dT
+!  区域汇总行：50 步窗口变化的 max / 平均 rms / max 位置（-iter: final=总扫掠数）
+   if(my_id .eq. 0) then
+     call region_res_stat(nMesh, mBlock, 6, -iter, dT, imax_t, jmax_t, kmax_t, &
+                          rrms_t, dT, 0.d0)
+   endif
   end subroutine ac_lowspeed_energy
 

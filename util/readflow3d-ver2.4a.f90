@@ -595,6 +595,7 @@ end module Const_Variables
        AC_Print, AC_Flux, AC_Recon, AC_Limiter, AC_WallRecon, AC_WallP, AC_MomDiss, &
        Porous_Max_Iter, Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
        Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, Iflag_Couple_WallFlux, &
+       Iflag_Couple_Restart, Iflag_Couple_Stop, &
        Solid_Max_Iter, Solid_Min_Iter
    
    real(PRE_EC)::  AoA, AoS, p_outlet, t_end, Lscale, &
@@ -665,7 +666,7 @@ end module Const_Variables
 		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
 		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
 		Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, &
-		Iflag_Couple_WallFlux
+		Iflag_Couple_WallFlux, Iflag_Couple_Restart, Iflag_Couple_Stop
 
 
 	

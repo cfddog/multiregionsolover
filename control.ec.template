@@ -164,6 +164,11 @@ $couple_ec
   Iflag_Couple_Restart=0 ! 重启后耦合状态处理（2026-09-25）:
                          !   0 自动(上次已满足 Tol_Couple_Tw -> 改用逐步强耦合续算)
                          !   1 强制强耦合  2 强制继续交错  -1 忽略重启里的耦合状态
+  Iflag_Couple_Stop=0    ! 交错外层停机判据（2026-09-26）:
+                         !   0 旧行为(只看界面量 Tol_Couple_Tw/p/u 与 Niter_Couple_Outer)
+                         !   1 满足 tt>=t_end 或 全局所有残差<各自标准 即停
+                         !     (流体 RMS<=Res_Inner_Limit, AC<=AC_Tol, 固体<=Solid_Tol;
+                         !      仍受 Niter_Couple_Outer 上限约束)
 !  Tol_Couple_p=1.d1     ! 12(流-流)外层 max|dp_w| [Pa]  (默认: 10.)
 !  Tol_Couple_u=1.d-2    ! 12(流-流)外层 max|du_w| [m/s] (默认: 1e-2)
 !  Porous_Chunk_Iter=10  ! 每轮多孔段求解器调用次数      (默认: 10)

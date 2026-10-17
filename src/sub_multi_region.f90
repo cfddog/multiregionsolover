@@ -295,12 +295,16 @@
 !----------------------------------------------------------------------
   subroutine solid_solver_one_block(nMesh, mBlock)
    use Global_Var
+   use region_stat_mod
    use const_var
    implicit none
    integer:: nMesh, mBlock
    Type (Block_TYPE),pointer:: B
    integer:: i,j,k,ii, nx,ny,nz
+   integer:: imax, jmax, kmax, ncell_r
    real(PRE_EC):: T_old, res, T_new
+   real(PRE_EC):: dTs_r, rss_r, res_rms
+   logical:: conv_ok
    real(PRE_EC):: dx_p, dx_m, dy_p, dy_m, dz_p, dz_m
    real(PRE_EC):: ax_p, ax_m, ay_p, ay_m, az_p, az_m
    real(PRE_EC):: coef_diff, coef_tr, T_neighbor_sum
@@ -313,6 +317,11 @@
 
    B=>Mesh(nMesh)%Block(mBlock)
    nx=B%nx; ny=B%ny; nz=B%nz
+
+!  region residual statistics (max / mean-RMS / location of the max): reset once
+   imax = 1; jmax = 1; kmax = 1
+   ncell_r = max((nx-1)*(ny-1)*(nz-1), 1)
+   res_rms = 0.d0
 
 !  Determine if unsteady: RK3 or Dual-time stepping
    is_unsteady = (Time_Method == Time_RK3 .or. Time_Method == Time_Dual_LU_SGS)
@@ -333,6 +342,7 @@
      call apply_solid_qw_override(nMesh, mBlock)   ! wall-flux split mode: re-impose interface q_w ghost
 
      res = 0.d0
+     rss_r = 0.d0
      do k = 1, nz-1
      do j = 1, ny-1
      do i = 1, nx-1
@@ -463,24 +473,35 @@
 !      SOR: Ts_new = (1-omega)*Ts_old + omega*T_new
        B%Ts(i,j,k) = (1.d0-Solid_GS_Omega)*T_old + Solid_GS_Omega*T_new
 
-       res = max(res, abs(B%Ts(i,j,k) - T_old))
+       dTs_r = abs(B%Ts(i,j,k) - T_old)
+       if(dTs_r > res) then           ! 记住最大变化的位置 (region max 位置)
+         res = dTs_r; imax = i; jmax = j; kmax = k
+       endif
+       rss_r = rss_r + dTs_r*dTs_r    ! 累加平方和 -> 区域平均 rms
      enddo; enddo; enddo
+     res_rms = sqrt(rss_r/dble(ncell_r))
 
-!    Debug: print progress for first few iterations
-     if(ii <= 5 .and. my_id == 0) then
-       print*, "  GS iter", ii, " res=", res, " Ts(1,1,1)=", B%Ts(1,1,1), &
-               " Ts(nx-1,ny-1,1)=", B%Ts(nx-1,ny-1,1)
+!    收敛判据（每 100 次扫掠检查一次）
+     conv_ok = (mod(ii,100) == 0 .and. ii >= Solid_Min_Iter .and. res < Solid_Tol)
+
+!    过程监视行：每 RES_PRINT_STEP 次扫掠 1 行（即将退出时跳过，避免与汇总行重复）
+     if(my_id == 0 .and. mod(ii, RES_PRINT_STEP) == 0 .and. .not. conv_ok) then
+       call region_res_stat(nMesh, mBlock, 1, ii, res, imax, jmax, kmax, res_rms, res, 0.d0)
      endif
 
-     if(mod(ii,100) == 0 .and. ii >= Solid_Min_Iter) then
-       if(res < Solid_Tol) exit
-     endif
+!    (per-sweep debug print removed 2026-09-26: superseded by the RES_PRINT_STEP
+!     monitoring line above + the end-of-solve region summary below)
+     if(conv_ok) exit
    enddo
 
-   if(my_id == 0 .or. B%Block_no == 3) then
-     print*, "Solid solver Block", B%Block_no, " GS iterations:", ii, " final res:", res
-     print*, "  DBG: Ts(1,1,1)=", B%Ts(1,1,1), " Ts(nx/2,ny/2,1)=", B%Ts(nx/2,ny/2,1), &
-             " Ts(nx-1,ny-1,1)=", B%Ts(nx-1,ny-1,1)
+!  register the GS residual of this block for the staggered outer-loop stop test
+!  (Iflag_Couple_Stop=1).  The driver resets Couple_Res_Solid at the start of
+!  every outer round, so this max() is "worst solid block of this round".
+   Couple_Res_Solid = max(Couple_Res_Solid, res)
+
+   if(my_id == 0) then
+!    结束汇总行：区域 max / 平均 rms / max 位置（-ii: final=总扫掠数）
+     call region_res_stat(nMesh, mBlock, 1, -ii, res, imax, jmax, kmax, res_rms, res, 0.d0)
    endif
   end subroutine solid_solver_one_block
 
@@ -2006,8 +2027,8 @@
    real(PRE_EC),parameter:: MU_SI0=1.716d-5, T_SI0=273.15d0, S_SI=110.4d0
    real(PRE_EC):: r1, u1s, v1s, p1n, T1_nd, T1_K, mu_SI, k_gas, dxp
    real(PRE_EC):: mu1c, dwc
-   logical:: found, converged, pair42
-   real(PRE_EC):: Utmp(7)
+   logical:: found, converged, pair42, tt_reached, res_ok, stop_time=.false.
+   real(PRE_EC):: Utmp(7), r_comp, r_ls, r_por, r_sol, nrem_r
 
 !  ---- locate compressible and porous blocks --------------------------------
    mf=0; mp=0
@@ -2143,6 +2164,11 @@
   converged = .false.
   outer: do it=1, Niter_Couple_Outer
     fp_Tw_old = fp_Tw
+!   Iflag_Couple_Stop=1: start a fresh residual record for this outer round
+    if(Iflag_Couple_Stop == 1) then
+      Couple_Res_AC_q = 0.d0; Couple_Res_AC_m = 0.d0; Couple_Res_Solid = 0.d0
+      stop_time = .false.
+    endif
 !   adaptive gas-chunk length: keep the full Kstep_Couple_Comp for the first
 !   Niter_Couple_Warm outer iterations (warm start), then halve it each outer
 !   iteration down to Kstep_Couple_Min for the final refinement stage.
@@ -2154,6 +2180,11 @@
       enddo
     endif
     nstep = max(1, nstep)
+!   Iflag_Couple_Stop=1: never overrun t_end -- truncate the current gas chunk
+    if(Iflag_Couple_Stop == 1 .and. dt_global > 0.d0) then
+      nrem_r = (t_end - Mesh(nMesh)%tt)/dt_global
+      if(nrem_r < dble(nstep)) nstep = max(1, int(nrem_r) + 1)
+    endif
     if(my_id == 0) print*, ' outer iter', it, ': gas chunk steps =', nstep
 
 !   ==================== (1) GAS CHUNK ===========================
@@ -2313,6 +2344,24 @@
 !    登记本轮耦合状态（pair 19；mode=1 交错）
     call set_couple_state(1, merge(1,0,twmax < Tol_Couple_Tw), 19, it, &
                           twmax, Tol_Couple_Tw)
+!   ---- Iflag_Couple_Stop=1: t_end / global-residual stop test -------------
+    if(Iflag_Couple_Stop == 1) then
+      call couple_stop_test(nMesh, tt_reached, res_ok, r_comp, r_ls, r_por, r_sol)
+      if(my_id == 0) print*, ' stop test: tt=', Mesh(nMesh)%tt, ' t_end=', t_end, &
+          ' tt_reached=', tt_reached, ' res comp=', r_comp, ' ls=', r_ls, &
+          ' por=', r_por, ' solid=', r_sol, ' all_res_ok=', res_ok
+      if(tt_reached .or. res_ok) then
+        converged = res_ok
+        stop_time = tt_reached
+        if(my_id == 0) then
+          if(tt_reached) print*, ' Staggered coupling stopped: physical time', &
+                ' reached t_end=', t_end
+          if(res_ok) print*, ' Staggered coupling stopped: all global residuals', &
+                ' below standard at outer iter', it
+        endif
+        exit outer
+      endif
+    endif
     if(it >= 2 .and. twmax < Tol_Couple_Tw) then
       converged = .true.
       if(my_id == 0) print*, ' Staggered coupling converged at outer iter', it, &
@@ -2322,8 +2371,13 @@
   enddo outer
 
   if(.not. converged) then
-    if(my_id == 0) print*, ' Staggered coupling reached Niter_Couple_Outer=', &
-                           Niter_Couple_Outer, ' (not fully converged)'
+    if(stop_time) then
+      if(my_id == 0) print*, ' Staggered coupling ended at tt=', Mesh(nMesh)%tt, &
+                             ' (t_end=', t_end, '), outer iterations=', it
+    else
+      if(my_id == 0) print*, ' Staggered coupling reached Niter_Couple_Outer=', &
+                             Niter_Couple_Outer, ' (not fully converged)'
+    endif
   endif
 
   call output_flow
@@ -2421,21 +2475,35 @@
    end function T_nd_from_U
 
 !   Solid-frame Ts ghost on the porous interface face from the incoming heat
-!   flux qw>0 (W/m2, heat entering the wall): Ts_g = Ts_i + qw*dx/ks_eff.
+!   flux qw>0 (W/m2, heat entering the wall): Ts_g = Ts_i + qw*dx/k_eff.
+!   k_eff is the two-phase (volume-weighted parallel) effective conductivity
+!       k_eff = eps*k_f + (1-eps)*k_s
+!   The previous (1-eps)*k_s collapsed to 0 for eps -> 1, so the extrapolation
+!   above produced ~1e32 K ghosts at eps = 1 (the pure-fluid limit).  When the
+!   skeleton is absent ((1-eps)*k_s ~ 0) the interface heat flux cannot be
+!   carried by the frame at all, so the frame ghost falls back to a
+!   zero-gradient (Neumann) condition: the wall temperature is then given by the
+!   fluid phase alone (eps = 1 limit; the code-19 interface model in which the
+!   frame carries the flux is not defined without a frame).
 !   sgn = +1 : ghost rows grow with +j (j+ face);  sgn = -1 : with -j (j- face)
    subroutine set_porous_Ts_flux(B, i, jint, jgh, k, sgn, qw)
      implicit none
      Type (Block_TYPE),pointer:: B
      integer:: i, jint, jgh, k, sgn
-     real(PRE_EC):: qw, dx_g, ks_eff
+     real(PRE_EC):: qw, dx_g, ks_eff, ks_frame
      integer:: n1, jg2
-     ks_eff = max((1.d0 - B%porous_eps)*B%solid_k, 1.d-30)
+     ks_frame = (1.d0 - B%porous_eps)*B%solid_k
+     ks_eff   = max(B%porous_eps*LS_k + ks_frame, 1.d-12)
      do n1 = 0, LAP-1
        jg2 = jgh + sgn*n1
        dx_g = sqrt( (B%xc(i,jint,k)-B%xc(i,jg2,k))**2 &
                   + (B%yc(i,jint,k)-B%yc(i,jg2,k))**2 &
                   + (B%zc(i,jint,k)-B%zc(i,jg2,k))**2 ) * Lscale
-       B%Ts(i,jg2,k) = B%Ts(i,jint,k) + qw*dx_g/ks_eff
+       if(ks_frame .le. 1.d-6) then
+         B%Ts(i,jg2,k) = B%Ts(i,jint,k)
+       else
+         B%Ts(i,jg2,k) = B%Ts(i,jint,k) + qw*dx_g/ks_eff
+       endif
      enddo
    end subroutine set_porous_Ts_flux
   end subroutine run_staggered_fluid_porous
@@ -2466,7 +2534,8 @@
    integer:: face_s, face1, ib,ie,jb,je,kb,ke, ib1,ie1,jb1,je1,kb1,ke1
    integer:: js, jg, nf, nk
    real(PRE_EC):: Sfac, Sfac1, twmax, T_i, qw, dx_s, tmpu
-   logical:: found, converged, wfmode
+   logical:: found, converged, wfmode, tt_reached, res_ok, stop_time=.false.
+   real(PRE_EC):: r_comp, r_ls, r_por, r_sol, nrem_r
    Type (Block_TYPE),pointer:: Bs, Bf, B, Bn
    TYPE (BC_MSG_TYPE),pointer:: Bc2
 
@@ -2587,6 +2656,11 @@
    converged = .false.
    outer: do it = 1, Niter_Couple_Outer
      fp_Tw_old = fp_Tw
+!    Iflag_Couple_Stop=1: start a fresh residual record for this outer round
+     if(Iflag_Couple_Stop == 1) then
+       Couple_Res_AC_q = 0.d0; Couple_Res_AC_m = 0.d0; Couple_Res_Solid = 0.d0
+       stop_time = .false.
+     endif
 !    adaptive chunk length: full Kstep_Couple_Comp for the first
 !    Niter_Couple_Warm outer iterations, then halve down to Kstep_Couple_Min
      nstep = Kstep_Couple_Comp
@@ -2601,6 +2675,11 @@
 !    convergence" per outer round (one solver_one_block call); the chunk-step
 !    schedule applies to the compressible case (11) only.
      if(paircode .eq. 13) nstep = 1
+!    Iflag_Couple_Stop=1: never overrun t_end -- truncate the current chunk
+     if(Iflag_Couple_Stop == 1 .and. dt_global > 0.d0) then
+       nrem_r = (t_end - Mesh(nMesh)%tt)/dt_global
+       if(nrem_r < dble(nstep)) nstep = max(1, int(nrem_r) + 1)
+     endif
      if(my_id == 0) print*, ' outer iter', it, ': flow chunk steps =', nstep
 
 !   ==================== (1) FLUID / LS CHUNK ========================
@@ -2698,6 +2777,24 @@
 !    把本轮耦合状态登记进重启文件的 trailer（mode=1 交错；conv=1 表示已满足判据）
      call set_couple_state(1, merge(1,0,twmax < Tol_Couple_Tw), paircode, it, &
                            twmax, Tol_Couple_Tw)
+!    ---- Iflag_Couple_Stop=1: t_end / global-residual stop test -------------
+     if(Iflag_Couple_Stop == 1) then
+       call couple_stop_test(nMesh, tt_reached, res_ok, r_comp, r_ls, r_por, r_sol)
+       if(my_id == 0) print*, ' stop test: tt=', Mesh(nMesh)%tt, ' t_end=', t_end, &
+           ' tt_reached=', tt_reached, ' res comp=', r_comp, ' ls=', r_ls, &
+           ' por=', r_por, ' solid=', r_sol, ' all_res_ok=', res_ok
+       if(tt_reached .or. res_ok) then
+         converged = res_ok
+         stop_time = tt_reached
+         if(my_id == 0) then
+           if(tt_reached) print*, ' Staggered coupling stopped: physical time', &
+                 ' reached t_end=', t_end
+           if(res_ok) print*, ' Staggered coupling stopped: all global residuals', &
+                 ' below standard at outer iter', it
+         endif
+         exit outer
+       endif
+     endif
      if(it >= 2 .and. twmax < Tol_Couple_Tw) then
        converged = .true.
        if(my_id == 0) print*, ' Staggered CHT coupling converged at outer iter', it, &
@@ -2707,8 +2804,13 @@
    enddo outer
 
    if(.not. converged) then
-     if(my_id == 0) print*, ' Staggered CHT coupling reached Niter_Couple_Outer=', &
-                            Niter_Couple_Outer, ' (not fully converged)'
+     if(stop_time) then
+       if(my_id == 0) print*, ' Staggered CHT coupling ended at tt=', Mesh(nMesh)%tt, &
+                              ' (t_end=', t_end, '), outer iterations=', it
+     else
+       if(my_id == 0) print*, ' Staggered CHT coupling reached Niter_Couple_Outer=', &
+                              Niter_Couple_Outer, ' (not fully converged)'
+     endif
    endif
 
    call output_flow
@@ -2839,7 +2941,8 @@
    integer:: nstep, nhalve, nf, nk, ia1, ia2, ka1, ka2, gi
    integer:: face_s, face1, ib,ie,jb,je,kb,ke, ib1,ie1,jb1,je1,kb1,ke1, jc_l
    real(PRE_EC):: Sfac, Sfac1, dtw, dpw, duw, xw, uu, vv
-   logical:: found, converged, pair42
+   logical:: found, converged, pair42, tt_reached, res_ok, stop_time=.false.
+   real(PRE_EC):: r_comp, r_ls, r_por, r_sol, nrem_r
    Type (Block_TYPE),pointer:: Bf, Bp, B, Bn
    TYPE (BC_MSG_TYPE),pointer:: Bc2
 
@@ -2956,6 +3059,11 @@
    converged = .false.
    outer: do it = 1, Niter_Couple_Outer
      fp_Tw_old = fp_Tw; fp_pw_old = fp_pw; fp_u_old = fp_u
+!    Iflag_Couple_Stop=1: start a fresh residual record for this outer round
+     if(Iflag_Couple_Stop == 1) then
+       Couple_Res_AC_q = 0.d0; Couple_Res_AC_m = 0.d0; Couple_Res_Solid = 0.d0
+       stop_time = .false.
+     endif
      nstep = Kstep_Couple_Comp
      if(it > Niter_Couple_Warm) then
        nhalve = it - Niter_Couple_Warm
@@ -2964,6 +3072,11 @@
        enddo
      endif
      nstep = max(1, nstep)
+!    Iflag_Couple_Stop=1: never overrun t_end -- truncate the current gas chunk
+     if(Iflag_Couple_Stop == 1 .and. dt_global > 0.d0) then
+       nrem_r = (t_end - Mesh(nMesh)%tt)/dt_global
+       if(nrem_r < dble(nstep)) nstep = max(1, int(nrem_r) + 1)
+     endif
      if(my_id == 0) print*, ' outer iter', it, ': gas chunk steps =', nstep
 
 !   ============ (1) GAS CHUNK: compressible only ==================
@@ -3051,6 +3164,24 @@
      call set_couple_state(1, &
         merge(1,0, dtw < Tol_Couple_Tw .and. dpw < Tol_Couple_p .and. &
                    duw < Tol_Couple_u), 12, it, dtw, Tol_Couple_Tw)
+!    ---- Iflag_Couple_Stop=1: t_end / global-residual stop test -------------
+     if(Iflag_Couple_Stop == 1) then
+       call couple_stop_test(nMesh, tt_reached, res_ok, r_comp, r_ls, r_por, r_sol)
+       if(my_id == 0) print*, ' stop test: tt=', Mesh(nMesh)%tt, ' t_end=', t_end, &
+           ' tt_reached=', tt_reached, ' res comp=', r_comp, ' ls=', r_ls, &
+           ' por=', r_por, ' solid=', r_sol, ' all_res_ok=', res_ok
+       if(tt_reached .or. res_ok) then
+         converged = res_ok
+         stop_time = tt_reached
+         if(my_id == 0) then
+           if(tt_reached) print*, ' Staggered coupling stopped: physical time', &
+                 ' reached t_end=', t_end
+           if(res_ok) print*, ' Staggered coupling stopped: all global residuals', &
+                 ' below standard at outer iter', it
+         endif
+         exit outer
+       endif
+     endif
      if(it >= 2 .and. dtw < Tol_Couple_Tw .and. dpw < Tol_Couple_p .and. &
         duw < Tol_Couple_u) then
        converged = .true.
@@ -3060,8 +3191,14 @@
    enddo outer
 
    if(.not. converged) then
-     if(my_id == 0) print*, ' Staggered highlow coupling reached Niter_Couple_Outer=', &
-                            Niter_Couple_Outer, ' (not fully converged)'
+     if(stop_time) then
+       if(my_id == 0) print*, ' Staggered highlow coupling ended at tt=', &
+                              Mesh(nMesh)%tt, ' (t_end=', t_end, &
+                              '), outer iterations=', it
+     else
+       if(my_id == 0) print*, ' Staggered highlow coupling reached Niter_Couple_Outer=', &
+                              Niter_Couple_Outer, ' (not fully converged)'
+     endif
    endif
 
    call output_flow
@@ -3070,6 +3207,106 @@
 !  final restart file so an interrupted run can be resumed from the end state
    call write_restart
   end subroutine run_staggered_highlow
+!==============================================================================
+! Staggered-loop stop test for Iflag_Couple_Stop=1 (2026-09-26).
+!
+!   stop_now = (accumulated physical time >= t_end) .OR. res_ok
+!
+! res_ok is .TRUE. only when EVERY block type present in the mesh has its
+! residual below its own solver standard:
+!   BLOCK_FLUID    : max over m=1..NVAR of the RMS of B%Res over the fluid cells
+!                    (globally reduced) <= Res_Inner_Limit
+!   BLOCK_LOWSPEED : Couple_Res_AC_q and Couple_Res_AC_m <= AC_Tol (LS_Algorithm=3)
+!   BLOCK_POROUS   : Couple_Res_AC_q and Couple_Res_AC_m <= AC_Tol (LS_Algorithm=3)
+!   BLOCK_SOLID    : Couple_Res_Solid <= Solid_Tol
+! A block type whose solver does NOT export a residual (low-speed / porous with
+! LS_Algorithm/=3, i.e. the SIMPLE path) forces res_ok=.FALSE.: convergence
+! cannot be certified, so such a run stops on t_end / Niter_Couple_Outer only.
+!
+! MUST be called by ALL ranks (the compressible part is MPI-reduced here); only
+! the rank-0 caller prints.  The returned r_* values are display diagnostics
+! (-1. = that block type is absent from the mesh).
+  subroutine couple_stop_test(nMesh, tt_reached, res_ok, r_comp, r_ls, r_por, r_sol)
+   use Global_Var
+   implicit none
+   integer:: nMesh
+   logical:: tt_reached, res_ok
+   real(PRE_EC):: r_comp, r_ls, r_por, r_sol
+   integer:: mBlock, i, j, k, m, ierr, ncell, ncell_g
+   real(PRE_EC):: r2(7), r2loc(7), rms, rc
+   logical:: haveC, haveL, haveP, haveS, ok
+   Type (Block_TYPE),pointer:: B
+
+   tt_reached = (Mesh(nMesh)%tt >= t_end)
+
+!  ---- block-type presence + compressible RMS residual (fluid blocks only) ----
+   haveC = .false.; haveL = .false.; haveP = .false.; haveS = .false.
+   r2(:) = 0.d0
+   ncell = 0
+   do mBlock = 1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     select case(B%Block_type)
+     case(BLOCK_FLUID)
+       haveC = .true.
+       ncell = ncell + (B%nx-1)*(B%ny-1)*(B%nz-1)
+       do k = 1, B%nz-1
+       do j = 1, B%ny-1
+       do i = 1, B%nx-1
+         do m = 1, Mesh(nMesh)%NVAR
+           r2(m) = r2(m) + B%Res(m,i,j,k)**2
+         enddo
+       enddo; enddo; enddo
+     case(BLOCK_LOWSPEED); haveL = .true.
+     case(BLOCK_POROUS)  ; haveP = .true.
+     case(BLOCK_SOLID)   ; haveS = .true.
+     end select
+   enddo
+   r2loc(:) = r2(:)
+   ncell_g  = ncell
+   call MPI_ALLREDUCE(r2loc, r2, Mesh(nMesh)%NVAR, OCFD_DATA_TYPE, MPI_SUM, &
+                      MPI_COMM_WORLD, ierr)
+   call MPI_ALLREDUCE(ncell, ncell_g, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+   r_comp = -1.d0
+   if(ncell_g > 0) then
+     rc = 0.d0
+     do m = 1, Mesh(nMesh)%NVAR
+       rms = sqrt(max(r2(m), 0.d0)/dble(ncell_g))
+       rc  = max(rc, rms)
+     enddo
+     r_comp = rc
+   endif
+
+!  ---- combine with the residuals registered by the AC / solid solvers ------
+   r_ls  = -1.d0
+   r_por = -1.d0
+   r_sol = -1.d0
+   ok = .true.
+   if(haveC) ok = ok .and. (r_comp <= Res_Inner_Limit)
+   if(haveL) then
+     r_ls = max(Couple_Res_AC_q, Couple_Res_AC_m)
+     if(LS_Algorithm .eq. 3) then
+       ok = ok .and. (Couple_Res_AC_q <= AC_Tol .and. Couple_Res_AC_m <= AC_Tol)
+     else
+       ok = .false.     ! SIMPLE path: no residual exported
+     endif
+   endif
+   if(haveP) then
+     r_por = max(Couple_Res_AC_q, Couple_Res_AC_m)
+     if(LS_Algorithm .eq. 3) then
+       ok = ok .and. (Couple_Res_AC_q <= AC_Tol .and. Couple_Res_AC_m <= AC_Tol)
+     else
+       ok = .false.     ! SIMPLE path: no residual exported
+     endif
+   endif
+   if(haveS) then
+     r_sol = Couple_Res_Solid
+     ok = ok .and. (r_sol <= Solid_Tol)
+   endif
+   if(.not. (haveC .or. haveL .or. haveP .or. haveS)) ok = .false.
+   res_ok = ok
+
+  end subroutine couple_stop_test
 !==============================================================================
 ! Staggered segmented coupling dispatcher.  Detects which cross-region pair
 ! exists in the mesh (single pair assumed) and routes to the matching driver:
