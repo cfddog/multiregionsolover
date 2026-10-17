@@ -126,6 +126,51 @@
     \code{src/modules.dep}、\code{cases/**}、\code{.vscode/*} &
     \code{make clean \&\& make -j4} EXIT=0（89 s）；\code{channel\_ac\_2blk} 5 步输出
     与重构前逐字节相同；P0 安全网的 2 进程负例仍 EXIT=2 \\
+2026-10-17 & 1.6.1 & \textbf{AC 的 \code{p} halo 统一 $+$ 缓冲区交换自检}：删除
+    \code{Umessage\_send\_mpi} 中“融合”的同进程 \code{p} 拷贝（过滤器仅
+    LOWSPEED$\leftrightarrow$LOWSPEED、且依附 \code{U} 的调用点，导致 np$>$1 时
+    \code{AC\_MPI\_Sync=0}（缺省）下 \code{p} 的 ghost 从不刷新），改由
+    \code{p\_send\_mpi}/\code{p\_recv\_mpi} 单一路径覆盖同进程（直写，无临时数组）与
+    跨进程（打包 $+$ \code{MPI\_Bsend}），两侧过滤条件一致；
+    低速/多孔 AC 驱动中 \code{U} 与 \code{p} 的刷新条件统一为
+    \code{AC\_MPI\_Sync==1 .or. Total\_proc==1}（多孔 np$=$1 此前完全不交换）；
+    新增 \code{IF\_Debug=3} $\Rightarrow$ \code{check\_buffer\_exchange}
+    （哨兵值逐 ghost 胞校验，非破坏性，跨进程用独立 tag 对侧比对）&
+    \code{src/sub\_update\_buffer\_mpi.f90}、\code{src/sub\_lowspeed\_ac.f90}、
+    \code{src/sub\_porous\_ac.f90}、\code{src/multiphysmixsolver.f90} &
+    三种分布全部 \code{PASS}：1 进程/2 块（2 子面同进程，320 胞）、2 进程/各 1 块
+    （2 子面跨进程，320 胞）、2 进程/各 2 块（4$+$4 子面，960 胞），
+    $\max|\Delta U|=\max|\Delta p|=0$；三例 \code{t\_end=20} 均 EXIT=0 \\
+2026-10-17 & 1.6.2 & \textbf{手册新增“多块离散一致性”一节}
+    （\S\ref{sec:ac-mblock}）：界面对流三件事（内面循环排除界面防双计、owner 单值通量
+    \code{FSH}、界面\textbf{刻意}一阶 Rusanov 的稳定理由）、跨进程 \code{id=0} 回退与
+    \code{AC\_MPI\_Sync=1} 前提、界面粘性“等值反号”的三条前提（共形 / 镜像 ghost /
+    ghost 新鲜）与非共形界面的守恒误差、二阶粘性\textbf{不需要} ghost 角点的依据
+    （无混合导数；应力张量形式只需 ghost-edge）与真正需要角点的五类格式、
+    曲面/非正交（O 型、极坐标贴体）网格的适用性（笛卡尔分量 $+$ 常黏度 $+$ 法向投影
+    $\Rightarrow$ 仍二阶；恒剪切网格降为一阶）&
+    \code{docs/程序说明/chap04\_lowspeed.tex}（仅文档，无源码改动）&
+    引用 \code{cases/cylinder\_re40\_half/README.md} 已有结果：$C_d$ 1.5706$\to$1.5536
+    vs Rogers \& Kwak 1.549（$+0.3\%$）、两套阻力口径互校；\code{xelatex} 两遍无错误 \\
+2026-10-17 & 1.6.3 & \textbf{修复 AC 多块跨进程界面通量的两个致命错误}
+    （3 块方腔由发散/错解变为与单块一致）：(a)
+    \code{ac\_face\_flux\_rus1\_own} 两侧都做 \code{RAC += FLX*A}，而两侧
+    面法向相同，Rusanov 耗散项在界面上\textbf{相互抵消} $\to$ 界面 checkerboard
+    无阻尼、指数发散；改为低侧 \code{RAC -= FLX*A}、高侧 \code{RAC += FLX*A}；
+    (b) \code{is\_high} 判据写反（“ghost 索引更大”被当成高侧），界面变成
+    \textbf{抽吸源}（$u\approx1.7$、界面整列错位 0.15）；判据改为按 own/ghost
+    索引关系 \code{iG>iO}/\code{jG>jO}/\code{kG>kO}，与块号、进程号无关；
+    并记 \code{AC\_Max\_Iter=1} 为多块 AC 算例的\textbf{要求}
+    （统一 np$=$1 与 np$\ge2$ 的 ghost 交换节奏）&
+    \code{src/sub\_lowspeed\_ac.f90}、
+    \code{docs/程序说明/chap04\_lowspeed.tex}（新增符号约定与实测表）、
+    \code{cases/lidcavity\_ac\_3blk/gen\_single42.py}（同网格单块对照）&
+    Re$=$100 方腔 42$\times$42 三块（np$=$1/2/3，$10^{4}$ 步）：三解互差
+    $\max|\Delta u|=1.16\times10^{-6}$、$\max|\Delta v|=2.4\times10^{-7}$、
+    $\max|\Delta p|=9.8\times10^{-7}$（np$=$2 与 np$=$3 逐位相同）；
+    $3\times10^{4}$ 步收敛（\code{res\_q}$\approx3\times10^{-14}$，
+    $u\in[-0.233,0.926]$）；vs Ghia RMS $u$ 0.02095 / $v$ 0.04365；同网格单块
+    42$\times$42 对照 $\max|\Delta u|=9.3\times10^{-3}$（界面刻意一阶的预期误差）\\
 \bottomrule
 \end{longtable}
 

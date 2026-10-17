@@ -92,6 +92,8 @@ $\sqrt{|\Delta p|/\rho}$ 依次兜底估计）。默认参数：
 \code{AC\_WallP} & 1 & 壁/对称面：压力二阶线性重构 \\
 \code{AC\_MomDiss} & 0 & 动量耗散：0 lumped（默认）；1 分裂混合；2 纯 $|u_n|$（\textbf{不稳定}）\\
 \code{AC\_MomFrac} & 0.2 & \code{AC\_MomDiss=1} 时保留的声速比例下限 \\
+\code{AC\_MPI\_Sync} & 0 & 0 旧行为（\code{np=1} 每伪步刷新 ghost；\code{np>1} 不刷新）；
+1 每伪步刷新 \code{U} 与 \code{p} 并定步推进（并行多块\textbf{必须}）\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -112,6 +114,309 @@ $\sqrt{|\Delta p|/\rho}$ 依次兜底估计）。默认参数：
 \bottomrule
 \end{tabular}
 \end{table}
+
+\subsection{多块/并行 AC 的 ghost 缓冲交换（\code{AC\_MPI\_Sync}）}
+\label{sec:ac-halo}
+AC 的状态是 \code{U(1:5)}（$\rho$, $u,v,w,T$）\textbf{加} \code{B\%p}（压力\textbf{不在} \code{U} 内），
+因此同块类接口（\code{BC\_Inner=-1}/周期）需要\textbf{两次}缓冲交换：
+\code{update\_buffer\_onemesh}（\code{U(1:5)}，所有块类型）与
+\code{update\_p\_buffer\_onemesh}（\code{p}，仅 LOWSPEED/POROUS 两侧）。
+跨类接口（码 11--19，如低速$\leftrightarrow$多孔 = 16）由耦合例程处理，不进入该交换。
+
+\begin{table}[htbp]\centering\small
+\caption{AC 同块类 ghost 交换的调度语义}\label{tab:achalo}
+\begin{tabular}{llp{8.4cm}}
+\toprule
+设置 & 谁刷新 & 说明 \\
+\midrule
+\code{AC\_MPI\_Sync=0}, \code{Total\_proc=1} & 每伪步，\code{U} 与 \code{p} &
+    多块顺序推进（块 1 走完 \code{AC\_Max\_Iter} 步再走块 2），块内界面量每步刷新 \\[2pt]
+\code{AC\_MPI\_Sync=0}, \code{Total\_proc>1} & 仅每外步（主循环）&
+    伪步内不刷新，启动时打印告警；\textbf{不推荐} \\[2pt]
+\code{AC\_MPI\_Sync=1}（任意 np） & 每伪步，\code{U} 与 \code{p} &
+    关闭 \code{AC\_Tol} 早退，所有块固定走 \code{AC\_Max\_Iter} 步
+    $\Rightarrow$ 各 rank 的 \code{MPI\_Bsend/Recv} 次数天然配对 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{实现要点（2026-10-17 修订）}
+\begin{itemize}
+  \item \code{p} 的交换\textbf{只有一条路径}：\code{p\_send\_mpi}/\code{p\_recv\_mpi}。
+        同进程目标块\textbf{直接写入}（无临时数组、无 MPI），跨进程才打包 $+$ \code{MPI\_Bsend}；
+        两侧使用同一过滤条件（\code{LOWSPEED|POROUS} $\times$ \code{LOWSPEED|POROUS}）。
+        旧版把同进程 \code{p} 拷贝“融合”在 \code{Umessage\_send\_mpi} 中，条件窄
+        （仅 LOWSPEED$\leftrightarrow$LOWSPEED）且依附于 \code{U} 的调用点，
+        造成 \code{np>1} + 缺省 \code{AC\_MPI\_Sync=0} 时 \code{p} 的 ghost \textbf{从不}刷新。
+  \item 低速/多孔 AC 驱动里 \code{U} 与 \code{p} 的刷新条件已\textbf{完全对齐}
+        （\code{AC\_MPI\_Sync==1 .or. Total\_proc==1}），不会再出现“\code{U} 新、\code{p} 旧”。
+        多孔驱动此前在 \code{np=1} 时完全不做交换，现已与低速驱动一致。
+\end{itemize}
+
+\subsection{缓冲区交换自检（\code{IF\_Debug=3}）}
+\label{sec:bufchk}
+\code{control.ec} 里设 \code{IF\_Debug=3}，程序在 \code{Init\_flow} 之后、时间推进之前调用
+\code{check\_buffer\_exchange}：把 \code{U(1:NVAR)} 与 \code{p}（\textbf{含} ghost 层）填成按
+(块号, $i,j,k$, 分量) 唯一的哨兵值
+$f=((\mathrm{blk}\cdot1000+i+16)\cdot1000+j+16)\cdot1000+k+16+m/8$，
+执行一次 \code{U}$+$\code{p} 交换，再逐 ghost 胞与“映射源胞的哨兵值”比较。
+同进程子面直接比较；跨进程子面因本 rank 上不存在邻居块，改为把“邻居 ghost 应有的内容”
+发给对侧再比较（单独 tag，\code{9xxxxx}）。测试前后保存/恢复状态，\textbf{不改变初场}；
+输出以 \code{[bufchk]} 开头，末行给出全局 $\max|\Delta U|$、$\max|\Delta p|$ 与 \code{PASS}/\code{FAIL}。
+
+\begin{table}[htbp]\centering\small
+\caption{缓冲区交换自检（2026-10-17，\code{t\_end=20}，\code{AC\_MPI\_Sync=1}）}\label{tab:bufchk}
+\begin{tabular}{llrrl}
+\toprule
+进程/块分布 & 算例 & 子面（同进程/跨进程） & ghost 胞数 & $\max|\Delta U|$ / $\max|\Delta p|$ \\
+\midrule
+1 进程，每进程 2 块 & \code{channel\_ac\_2blk} & 2 / 0 & 320 & $0$ / $0$ \ PASS \\
+2 进程，每进程 1 块 & \code{channel\_ac\_2blk} & 0 / 2 & 320 & $0$ / $0$ \ PASS \\
+2 进程，每进程 2 块 & \code{channel\_ac\_4blk} & 4 / 4 & 960 & $0$ / $0$ \ PASS \\
+\bottomrule
+\end{tabular}
+\end{table}
+表中 $0$ 表示逐胞\textbf{严格相等}（哨兵值为可精确表示的整数，允许逐位比较）。
+
+\subsection{多块离散一致性：界面模板与通量}\label{sec:ac-mblock}
+多块只改变\textbf{界面那一层}：块内模板与单块完全相同。本节说明 \code{ac\_face\_flux}
+（对流）与 \code{ac\_viscous\_res}（粘性）在块界面上的语义，并回答两个常被问到的问题：
+界面对流为什么“故意”只有一阶、为什么二阶粘性不需要 ghost 角点，以及这套粘性格式在
+\textbf{曲面/非正交}（O 型、极坐标贴体）网格上是否失效。多孔 AC
+（\code{sub\_porous\_ac.f90}）复用同一个粘性例程，结论相同。
+
+\begin{table}[htbp]\centering\small
+\caption{AC 离散对多块的依赖：只有对流项的界面通量需要特殊处理}\label{tab:acmblk}
+\begin{tabular}{llp{7.2cm}}
+\toprule
+项 & 模板 & 多块处理 \\
+\midrule
+对流 \code{ac\_face\_flux} & 法向 5 点（\code{iL-2} $\ldots$ \code{iR+1}）&
+  \textbf{需要}：内面循环排除界面（防双计）$+$ 同类界面取 owner 单值通量
+  （\code{FSH}），且界面\textbf{有意}用一阶 Rusanov \\[2pt]
+粘性 $\nu\nabla^2u$（\code{ac\_viscous\_res}）& 7 点（只取法向 $\pm1$ 面邻居）&
+  \textbf{不需要}：两侧各算一遍\textbf{恰好等值反号}，界面动量自动守恒 \\[2pt]
+ghost \textbf{角点} & —— & 两者\textbf{都不读取}（见本节末段）\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{对流项：每个面只沿面法向取 5 点}
+\code{ac\_face\_flux} 对某个 $i$ 面只取\textbf{同一条索引线}上的 5 个胞，切向索引固定为
+左右胞自身的 $(j,k)$：
+\begin{center}\small
+\code{a(iL-2)}\quad\code{b(iL-1)}\quad\code{c(iL)}\quad[面]\quad\code{d(iR)}\quad\code{e(iR+1)}
+\end{center}
+\code{AC\_Recon=1}（缺省 MUSCL2）只用 \code{b,c,d,e}，\textbf{1 层} ghost 足够；
+\code{AC\_Recon=3}（WENO3）同样只用 \code{b,c,d,e}；\code{AC\_Recon=2}（WENO5）才用到
+最外层的 \code{a}，需要 2 层。实现上统一把 5 点交给 \code{ac\_recon\_face}，由
+\code{AC\_Recon} 选支路；\code{XW} 带 \code{LAP=4} 层，故取 \code{iL-2}/\code{iR+1}
+也不会越界（只是 MUSCL/WENO3 不读 \code{a}）。
+模板里\textbf{没有}切向或对角耦合，所以角点天然不在 stencil 内。
+
+\paragraph{界面必须做的三件事}
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{防双计}：内面循环取 \code{ii=2..nx-1}（$j,k$ 同理），只算
+        “内胞$\leftrightarrow$内胞”的面；界面面（\code{f=1} 与 \code{f=nx}）由下面两项
+        单独处理。若写成 \code{ii=1..nx}，界面通量会被两块各算一次。
+  \item \textbf{单值通量}：\code{ac\_build\_ifc\_registry} 按\textbf{全局块号}定 owner
+        （小块号为 owner），owner 算通量存入 \code{FSH(1:4,i,j,k,id)} 并对本胞累加
+        \code{RAC -= F*A}；邻居\textbf{不重算}，直接读 \code{FSH} 后 \code{RAC += F*A}。
+        邻居侧的源胞由 \code{ac\_ifc\_src\_cell} 给出，它用与缓冲交换\textbf{同一套}
+        \code{L1/L2/L3} 映射把 ghost 点映回 owner 胞，故旋转/反向界面也一致。
+  \item \textbf{界面刻意一阶}：\code{ac\_ifc\_flux\_own} 直接以两侧胞心值作左右态
+        （不做 MUSCL/WENO），只调 \code{ac\_flux\_rusanov}（内部面则用
+        \code{ac\_face\_flux}）。原因见源码注释：界面 ghost 若只在每个外步刷新，
+        二阶重构会激发同位网格 AC 的奇偶（checkerboard）模态；一阶 Rusanov 的耗散
+        正是抑制该模态的手段。
+\end{enumerate}
+
+\paragraph{跨进程回退及其前提}
+\code{FSH} 是\textbf{本进程}数组。邻居块在别的 rank 上时注册表解不出配对（\code{id=0}），
+于是走 \code{ac\_face\_flux\_rus1\_own}：同一个一阶 Rusanov，但各侧用自己的胞 $+$ 自己的
+ghost 各算一份、只更新本胞。两侧数值\textbf{相同}的前提是 ghost 每个伪步都是新的，
+即 \code{AC\_MPI\_Sync=1}（见 \ref{sec:ac-halo}）；\code{Sync=0} 且 np$>$1 时两侧读到
+不同伪步的 ghost，界面通量不再等值反号，界面动量不守恒——这就是 \code{Sync=0} 在多块
+并行下只作调试用途的物理原因。
+
+\paragraph{两侧各算路径的符号约定（2026-10-17 修正，必读）}
+跨进程回退 \code{ac\_face\_flux\_rus1\_own} 里，两侧的\textbf{面法向相同}
+（$i$ 面恒为 $+x$），故两侧算出的 $\mathbf{F}\cdot\mathbf{n}$ 是同一个数；要守恒
+就必须一侧减、另一侧加：
+\begin{center}\small
+\begin{tabular}{p{6.0cm}p{2.8cm}p{2.3cm}}
+\toprule
+侧（判据）& 累积 & 备注 \\
+\midrule
+低侧：ghost 索引更大（\code{iG>iO}，\code{jG>jO}、\code{kG>kO} 同理）&
+  \code{RAC -= FLX*A} & \code{is\_high=0} \\
+高侧：ghost 索引更小（其余情形）& \code{RAC += FLX*A} & \code{is\_high=1} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\code{is\_high} 由“own 胞与 ghost 胞的索引关系”判定，而不是由块号或进程号判定，
+因此对旋转/反向界面同样成立（\code{Si}/\code{Sj}/\code{Sk} 与 \code{XW} 的
+索引约定见 \code{ac\_ifc\_face}）。这条路径曾在 3 块方腔算例上暴露过两个
+\textbf{致命}错误，一并记在此处以免复发：
+\begin{enumerate}[label=(\arabic*)]
+  \item 两侧都写 \code{RAC += FLX*A}：Rusanov 的耗散项
+        $-\tfrac12\lambda(q_R-q_L)$ 在界面上\textbf{相互抵消}，界面的棋盘模态完全
+        没有阻尼，界面胞指数发散（实测增长因子 $\approx1.3$/步，从块 1 的
+        \code{i=nx-1} 与块 3 的 \code{i=1} 逐层向腔内扩散）。
+  \item \code{is\_high} 判据写反（把“ghost 索引更大”当成了高侧）：两侧的中央通量
+        同时反向，界面由“耗散膜”变成\textbf{抽吸源}，收敛到 $u>1$（实测 1.68/1.83）、
+        界面整列错位约 0.15 的\textbf{非物理解}，且 np$=$1/2/3 结果\textbf{逐位相同}
+        ——这是离散错误而非竞争错误，也正是先用 np$=$1 做隔离验证的价值所在。
+\end{enumerate}
+
+\paragraph{3 块方腔实测（Re$=$100，42$\times$42，等分 $x$）}\label{par:ac3blk}
+\code{cases/lidcavity\_ac\_3blk}（三块 14$\times$42，界面在 $x=1/3$、$2/3$，
+\code{AC\_Max\_Iter=1}）给出下表。同网格单块对照由同目录的
+\code{gen\_single42.py} 生成（\code{cases/lidcavity\_ac\_3blk/}），用来区分
+“多块/并行错误”与“界面刻意一阶带来的离散误差”。
+\begin{table}[htbp]\centering\small
+\caption{3 块 AC 方腔：进程数无关性与同网格单块对照（$t_{\rm end}=10^{4}$ 步）}
+\label{tab:ac3blk}
+\begin{tabular}{lrrr}
+\toprule
+量 & np$=$1 & np$=$2 & np$=$3 \\
+\midrule
+$\max|\Delta u|$（相对 np$=$1）& —— & $1.16\times10^{-6}$ & $1.16\times10^{-6}$ \\
+$\max|\Delta v|$ & —— & $2.4\times10^{-7}$ & $2.4\times10^{-7}$ \\
+$\max|\Delta p|$ & —— & $9.8\times10^{-7}$ & $9.8\times10^{-7}$ \\
+交流残差 \code{res\_q} & $9.8\times10^{-6}$ & $1.2\times10^{-5}$ &
+  $1.9\times10^{-5}$ \\
+$u$ 值域（$t_{\rm end}=3\times10^{4}$ 步，
+  \code{res\_q}$\approx3\times10^{-14}$）
+  & \multicolumn{3}{c}{$[-0.233,\ 0.926]\subset[-1,1]$} \\
+\midrule
+与 Ghia(1982) 的 RMS：$u(x=0.5)$ & \multicolumn{3}{c}{0.02095} \\
+\quad $v(y=0.5)$ & \multicolumn{3}{c}{0.04365} \\
+同网格单块 42$\times$42 的 RMS vs Ghia &
+  \multicolumn{3}{c}{$u$ 0.02013，$v$ 0.04387} \\
+3 块 vs 单块 42$\times$42（两者均已收敛）&
+  \multicolumn{3}{c}{$\max|\Delta u|=9.3\times10^{-3}$，
+  rms $3.0\times10^{-3}$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+表中前三个数据行即“进程数无关性”：三组进程数在相同迭代步处的解互相之差只有
+$10^{-6}$ 量级（np$=$2 与 np$=$3 更是逐位相同），说明界面的两侧各算路径与单进程的
+owner 单值通量路径\textbf{等价}。表中最后一行则是\textbf{预期}的界面一阶误差
+而非缺陷：界面通量刻意一阶（见上），$h=1/42$、$\partial u/\partial x\sim0.4$
+时局部误差 $\sim\tfrac12h|\partial_xu|\approx5\times10^{-3}$，与实测同
+量级；离界面 3 个胞以外两者逐位一致。要压掉这一项只能给界面加二阶重构，代价是重新
+面对 checkerboard 模态（当前设计是一阶 + 每步刷新 ghost）。
+另需注意 \code{AC\_Max\_Iter=1} 是这类多块算例的\textbf{要求}：此时每个外步
+交换一次 ghost，np$=$1（在同一伪步内刷新）与 np$\ge2$（在外步末尾刷新）的耦合节奏
+完全一致；\code{AC\_Max\_Iter>1} 时两者节奏不同，界面会滞后于块内。
+
+\paragraph{物理面、混合面与壁面去偏}
+
+壁面/对称面走 \code{ac\_bc\_flux} 的压力型通量（无粘壁），剪切由粘性项与 ghost 提供。
+码 13/16（低速$\leftrightarrow$固体、低速$\leftrightarrow$多孔）也按\textbf{压力型}处理
+——否则界面胞只剩粘性拖曳，会出现假界面压差；码 12/19 等由耦合例程给界面条件
+（见 \ref{sec:coupling} 章）。\code{AC\_WallRecon=1} 把壁面侧的\textbf{切向}分量改为
+单侧线性延拓 $a_{\rm eff}=2c-d$（法向分量与压力仍用镜像 ghost），消除“限幅器零斜率”
+带来的一阶偏差。
+
+\paragraph{粘性项：三个一维二阶差分之和（7 点）}
+\code{ac\_viscous\_res} 对三个方向各跑一遍，每个面只用\textbf{相邻两个胞心}；
+循环为 \code{f=1..nx}（\textbf{不排除}界面面），由 \code{if(f-1>=1)} 与
+\code{if(f<=nx-1)} 保证只累加到真实存在的内胞上：
+\begin{equation}
+H_f=\nu\,\frac{u_f-u_{f-1}}{d_f},\qquad
+d_f=\tfrac12\left|\mathbf{x}_{f+1}-\mathbf{x}_{f-1}\right|,
+\end{equation}
+随后左胞累加 $+H_fA_f$、右胞累加 $-H_fA_f$（$A_f$ 为真实面面积）。这就是
+$\nu\left(\partial_{xx}+\partial_{yy}+\partial_{zz}\right)u$ 的\textbf{逐分量}
+7 点中心差分，$\nu=$\code{LS\_mu/LS\_rho} 为常数。斜网格上 $d$ 取投影到面法向的
+\code{dproj}（\code{if(dproj .gt. 0.2d) d = dproj}，否则退回索引线距离），
+正交网格上两者逐位相同。壁面处 $d=\Delta n=2d_{\rm wall}$，于是
+$H=-\nu u_1/d_{\rm wall}$：壁面剪切用的是\textbf{半个胞心距}，本身二阶。
+
+\paragraph{为什么界面粘性不需要 \code{FSH}}
+同一个界面面被两侧\textbf{各算一次}，而分子是\textbf{同一个数}（都来自 ghost 交换）：
+\begin{center}\small
+\begin{tabular}{llll}
+\toprule
+侧 & $H$ & 累积 & 效果 \\
+\midrule
+A 块（\code{f=nx}）& $\nu\,[u_B(1)-u_A(nx-1)]/d_A$ & \code{RAC\_A(nx-1) += H*A} & $+H A$ \\
+B 块（\code{f=1}） & $\nu\,[u_B(1)-u_A(nx-1)]/d_B$ & \code{RAC\_B(1)    -= H*A} & $-H A$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+$d_A=d_B$ 时两侧\textbf{恰好等值反号} $\Rightarrow$ 界面动量严格守恒，无需 \code{FSH}。
+成立的三条前提：
+\begin{enumerate}[label=(\arabic*)]
+  \item 界面\textbf{共形}（节点一一对应，两侧 $A$ 相同）；
+  \item ghost 胞心坐标由\textbf{镜像}外推给出（\code{sub\_geometry.f90} 中
+        \code{x(0)=2x(1)-x(2)} 一类关系），因此 $d_A=d_B$ 自然成立；
+  \item ghost 新鲜，即 \code{AC\_MPI\_Sync=1}（见 \ref{sec:ac-halo}）。
+\end{enumerate}
+界面两侧网格间距\textbf{跳变}（非共形、强拉伸）时 $d_A\neq d_B$，界面粘性通量出现
+$O(\Delta)$ 的守恒误差——这类网格需要“面法向严格单值”的处理，目前未实现。
+
+\paragraph{为什么二阶粘性不需要角点数据}
+常黏度不可压动量方程只含 $\nu\nabla^2\mathbf{u}$，而
+$\nabla^2u=\partial_{xx}u+\partial_{yy}u+\partial_{zz}u$ \textbf{没有混合导数}
+$\partial_{xy}u$：每个一维算子只读本方向的 $\pm1$ 邻居，三个方向拼起来就是
+“面邻居壳层”，天然闭合。即使改写成应力张量形式，$i$ 面上
+$\tau_{xy}=\mu(\partial_yu+\partial_xv)$ 也只需与该面\textbf{共边}的 4 个胞
+（ghost-\textbf{edge}），仍\textbf{不是} ghost-\textbf{corner}。只有下列情形才真的
+需要角点：二维 9 点/旋转不变 Laplacian（含 $\partial_{xy}$）、27 点高阶模板、
+4 阶紧致/Pad\'e、顶点型（cell-vertex）梯度、显式非正交 cross-diffusion 修正。
+注意当前缓冲交换只填\textbf{面 slab}，ghost 角点并不交换；将来若启用上述任一格式，
+必须先扩展交换，否则角点读到脏值。
+
+\paragraph{曲面/非正交网格（O 型、极坐标贴体）会不会失效？}
+\textbf{不会}，只要满足三条：
+\begin{enumerate}[label=(\arabic*)]
+  \item 速度存的是\textbf{笛卡尔分量}（\code{U(2..4)} 即 $x,y,z$ 分量，本代码如此）：
+        那么“逐分量标量 Laplacian”在\textbf{任意}坐标系下都正确，\textbf{不需要}
+        柱坐标的曲率项。若把速度改存为 $(u_r,u_\theta)$，矢量 Laplacian 才会出现
+        $-u_r/r^2$ 一类项，那时现形式就错了。
+  \item $\nu$ 为常数（\code{LS\_mu}）。若将来实现 $\mu(T)$，必须写成
+        $\nabla\cdot(\mu\nabla u)$，补 $\nabla\mu\cdot\nabla u$ 项。
+  \item 面法向导数取“索引线差分 $\div$ 法向投影”（过松弛/over-relaxed 法）：
+        \code{dproj}$=|\Delta\mathbf{x}\cdot\mathbf{n}|$。网格\textbf{正交}时
+        $d_{\rm proj}=d$，与单块完全相同；O 型网格中 $i$ 线是径向（与圆弧面法向一致）、
+        $j$ 线是周向（与径向半平面法向的夹角为 $O(\Delta\theta)=O(h)$），仍是\textbf{二阶}。
+        对流项同理：通量用\textbf{真实}面法向与笛卡尔分量点积，与网格是否横平竖直无关，
+        重构沿索引线带来的 $O(h)$ 偏差在 FV 对称面上抵消。
+\end{enumerate}
+FV 形式只用真实面积/体积、不含显式 $1/r$，所以\textbf{没有坐标奇点}
+（$r=0$ 处只是几何退化，不是离散公式的问题）。
+
+实测证据是 \code{cases/cylinder\_re40\_half}：单块 O 型极坐标贴体网格（$i$=径向、
+$j$=周向、120$\times$80 单元、$R_{\rm out}=25D$、Re$_D=40$、\code{If\_viscous=1}、
+\code{LS\_Algorithm=3}）：
+\begin{table}[htbp]\centering\small
+\caption{曲面（极坐标 O 型）网格上的粘性 AC 实测}\label{tab:accurve}
+\begin{tabular}{lrrrr}
+\toprule
+量 & 120$\times$80 & 160$\times$120 & Rogers \& Kwak & 偏差（加密后）\\
+\midrule
+$C_d$（壁面积分）& 1.5706 & 1.5536 & 1.549 & $+0.3\%$ \\
+$C_{d,p}$ & 1.0152 & 1.0086 & 1.011 & $-0.2\%$ \\
+$C_{d,f}$ & 0.5553 & 0.5451 & 0.538 & $+1.3\%$ \\
+$C_{p,\mathrm{front}}$ & 1.1544 & 1.1593 & 1.147 & $+1.1\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+壁面积分与远场动量平衡两套独立口径互校（$1.5706\leftrightarrow1.5708$），加密后单调
+趋近文献值 $\Rightarrow$ 7 点形式在极坐标贴体网格上\textbf{没有系统性偏差}。
+
+会\textbf{降阶或引入偏差}的几种情形（都不是“失效”，但选参时要清楚）：
+\begin{itemize}
+  \item 非正交度\textbf{不随加密消失}（恒剪切/强扭曲网格）：过松弛分母只修正
+        $1/\cos$ 的幅值，缺切向梯度修正项，粘性项降为\textbf{一阶}（仍守恒、仍收敛，
+        线性场仍精确）；
+  \item 界面非共形或两侧间距跳变：见上段三条前提；
+  \item 高 Re 的关键仍是\textbf{壁面法向加密}，与网格是否正交无关；圆柱壁面的
+        $\partial u_t/\partial r|_w$ 由径向镜像 ghost 给出，本身就是二阶。
+\end{itemize}
 
 \subsection{温度方程与共轭传热}
 低速块带温度方程（$U(5)=T$，物性 \code{LS\_k}/\code{LS\_Cp}）。与固体块（码 13）或
