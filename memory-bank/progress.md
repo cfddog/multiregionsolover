@@ -1,7 +1,73 @@
 # Progress — 已完成 / 待办
 
-> 更新：2026-09-25（新增“修复集群启动崩溃”）。**HEAD = `fe7f86b`**（09-25 修复改动**尚未提交**）。
+> 更新：2026-10-17（第四～七轮改动已提交；ε 极限的**负结果**已写入手册/README）。**HEAD = `a29a6ee` 之后**（本轮 3 个提交）。
 > 更早的开发历史见 `docs/工作日志.md`、`docs/程序能力与算例考核总结.md`、`memory-bank/worklog.md`。
+
+## ✅ 已完成（2026-10-17）：分组提交 + ε 极限澄清 + 文档补全
+- [x] 提交 `c974e81` feat(output)：`flow3d_node.dat` 恢复 **3 条 PLOT3D 头**
+      （块数 / 各块维数 / 变量数=6）；`check/compare_flow3d_node.py` 兼容过渡的 **2 条**写法；
+      `Iflag_restart<0` 时 `restarted` 未初始化 → 先置 `.false.`（冷启动确定性）。
+- [x] 提交 `ebe7053` feat(solver)：`region_stat_mod` 区域残差监视、`Iflag_Couple_Stop` 停机判据、
+      多孔 ε 极限（`[0,1]` 接受 / 阻力 `max(eps,1e-8)` + 速度冻结 / `k_eff` 界面导热），
+      模板与 `util/readflow3d-2.4a/2.5` 同步。
+- [x] 提交 `a29a6ee` cases(limits)：5 个短调度算例 + `run_limits.sh`（按脚本位置推导仓库根目录）+
+      README（实测表、负结果分析、后续方案）。
+- [x] 手册：`chap05`（ε 极限小节改为“回归快照 + 定量未通过”）、`chap09`（极限算例加注意段）、
+      `chap11` 新增 §11.4「多孔 ε 极限的实测」表 + §11.5「2026-10-17 验证记录」、
+      `93_changelog.tex` 追加 **1.4 / 1.4.1** 两行；`./build.sh` → **0 error / 0 undefined**。
+- [x] `docs/程序能力与算例考核总结.md`：§2.4 极限处理改为实测口径、§5 新增 ε 极限“部分通过”条目、
+      §6 新增第 15 条（负结果与下一步）。
+- [x] 验证：`make -j4` EXIT=0（无 warning）；`solid_1d`/`channel_ac_4blk` 节点文件 `STRUCTURE OK`；
+      `Iflag_restart=-1` 冷启动无 NaN；limits 5 例复查（`--blocks 1` 数字：17.64 / 28.02 / 96.34 / 498.6）。
+- [ ] 待办：集群副本同步 + `make`（双 unit / `-freal-4-real-8`）；三例 `cases/fluid_solid/*/README.md`；
+      ε 定量对照需同接口模型的新 deck（12↔12 或 19↔19）+ 更高外层/多孔预算。
+
+## ✅ 已完成（2026-09-26 第六轮）：区域残差监视输出（固体/低速/多孔输出精简）
+- [x] 需求：「固体、低速和多孔介质减少屏幕输出，输出区域最大 rms、平均 rms 以及最大 rms 的位置」；
+      用户选定**方案甲**（不加参数，硬编码「每 100 次迭代 1 行 + 结束汇总」）。
+- [x] `src/sub_debug.f90`：新模块 `region_stat_mod`（`RES_PRINT_STEP=100` + `region_res_stat`），
+      统一打印一行 `Region res [名] block n (块类型) step=/final= k : max= … rms= … at (i,j,k)= … xyz=[…] m`。
+- [x] 固体 GS（`sub_multi_region.f90`）、SIMPLE 低速/多孔（`sub_lowspeed.f90`/`sub_porous.f90`，
+      `*_pressure_correction` 追加返回 `imax/jmax/kmax/res_p_rms`）、AC 低速/多孔
+      （`sub_lowspeed_ac.f90::ac_res_stat`、`sub_porous_ac.f90`）、AC 能量与 LTNE（窗口统计）全部接入；
+      删除所有逐迭代 `DBG/DEBUG/GS iter/SIMPLE iter/AC-* iter` 调试行。
+- [x] 口径与可压块 `Res_max/Res_rms` 一致：`rms = sqrt(Σr²/N)`；`at (i,j,k)` + 胞心坐标 [m]。
+- [x] 验证（`mpirun -np 1`，EXIT=0）：`solid_1d`、`channel_ac_4blk`、`porous_ltne_1d`（SIMPLE 与 `run_ac`）、
+      `porous_plug_ac/eps06`、`fluid_solid` 码 11/12/19 短跑；`cd src && make` EXIT=0。
+- [x] 文档：手册 `chap04/05/06` 新增/改写“残差监视输出/日志”小节、`92_appendix_codes.tex` 日志关键字表、
+      `93_changelog.tex` 新增 **1.3**；`./build.sh` 重编译 **45 页 0 error**；
+      `docs/程序能力与算例考核总结.md` 新增 §2.9。
+- [ ] 待办：提交第四～六轮改动；同步集群副本（`src/sub_debug.f90` 等 5 个源文件）并 `make`。
+
+## ✅ 已完成（2026-09-26 第五轮）：交错外层停机判据 `Iflag_Couple_Stop`
+- [x] 需求：交错耦合需要「以 `t_end` 为结束标志，或以全局所有残差 < 残差标准为结束标志」。
+- [x] `src/sub_modules.f90`：新 `Iflag_Couple_Stop`（默认 0 旧行为 / 1 新判据）+
+      `Couple_Res_AC_q/AC_m/Solid`（每轮残差登记量）。
+- [x] `src/sub_multi_region.f90`：新 `couple_stop_test`（可压块 `B%Res` RMS + `MPI_ALLREDUCE`；
+      按存在块型比对 `Res_Inner_Limit`/`AC_Tol`/`Solid_Tol`）；三个驱动（11/13、12、19）轮末调用、
+      轮首清零、气体段按剩余时间截断、退出提示区分 `t_end`/残差；固体 GS 登记末次 `res`。
+- [x] `src/sub_lowspeed_ac.f90`、`src/sub_porous_ac.f90`：AC `res_q/res_m` 登记（本轮 `max`）。
+- [x] `src/sub_read_parameter.f90` 6 步流程（`Ipara(59)` + `$couple_ec` + 旧组 + 回显）；
+      `control.ec.template`、`util/readflow3d-ver2.4a/2.5.f90`（旧组 namelist 补 2 个变量）同步。
+- [x] 验证（`mpirun -np 1`，EXIT=0）：码 19 `t_end=25` ⇒ 第 3 轮截断 10→6、`tt=26` 停机；
+      放宽容差 ⇒ 第 1 轮残差判据停机；码 11 固体残差 `7.1e-10` 正确登记；`Iflag_Couple_Stop=0`
+      输出与旧版一致。
+- [x] 文档：手册 `chap07` §7.2 + 附录 A（12→13）+ `93_changelog.tex`；`./build.sh` 通过；
+      `docs/control.ec-说明.md §9`、`docs/程序能力与算例考核总结.md`。
+- [ ] 待办：提交本轮（含第四轮未提交内容）；同步集群副本并 `make`。
+
+## ✅ 已完成（2026-09-25 第四轮）：`flow3d_node.dat` 增加 PLOT3D 解(Q)/函数型文件头
+- [x] 起因：用户报「`flow3d_node.dat` 函数型格式错误，应补充维度和变量数」——
+      文件原先**无任何头信息**，只有逐块 `6·ni·nj·nk` 裸数据，PLOT3D Q/函数型读法无法识别。
+- [x] `src/sub_IO.f90::output_flow_node`：新增 3 条头记录
+      `Total_block` / `(bNi,bNj,bNk, m=1,Total_block)` / `NVAR_NODE(=6)`（新 `integer,parameter`），
+      仅 0 号进程写；数据段写法不变（变量序与 PLOT3D Q 一致）。
+- [x] `util/check_flow3d_node.py`：识别「有头/无头」两种布局，校验头记录 + 记录长度。
+- [x] 验证：`solid_1d`（1 块）与 `channel_ac_4blk`（4 块）跑通、`STRUCTURE OK`；
+      旧无头文件仍 `STRUCTURE OK`；与 HEAD 版旧二进制 A/B **数据段逐字节一致**。
+- [x] 文档：`docs/重启与节点流场输出说明.md §3`、`docs/程序能力与算例考核总结.md §2.8`、
+      手册 `chap08` + `93_changelog.tex`；`./build.sh` 重编译 40 页 0 error/0 undefined。
+- [ ] 待办：把改动同步到集群副本（`src/sub_IO.f90` + `make`）；`cases/fluid_solid/*/README.md` 仍未写。
 
 ## ✅ 已完成（2026-09-25 第三轮）：LaTeX 程序说明手册 v1.0
 - [x] 新建 `docs/程序说明/`（`main.tex` + 12 章节 + `build.sh` + `README.md`），

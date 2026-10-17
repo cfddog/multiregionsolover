@@ -391,3 +391,202 @@ case1/2/3 逐项参数与预期日志、时间预算、续算实测 2995→5990�
 
 
 
+---
+
+## 2026-09-25（第四轮）— flow3d_node.dat 补 PLOT3D 解(Q)/函数型文件头（块数 + 维数 + 变量数）
+
+**问题（用户提出）**：`flow3d_node.dat` 按 PLOT3D 解(Q)/**函数型文件**读法加载时报格式错误 ——
+文件里**只有裸数据**（`write(99) ((((U(m1,i,j,k),i=1,nx),j=1,ny),k=1,nz),m1=1,6)`），
+既没有**块维数**也没有**变量数**，任何标准读端（Tecplot/ParaView）都无法识别，
+只能靠外部 `Mesh3d.x` 去猜。
+
+**方案（用户选定 A）**：加 PLOT3D 解/函数文件标准头 3 条记录，数据段保持原样。
+
+**改动（2 个文件）**：
+- `src/sub_IO.f90::output_flow_node`：
+  ① 新 `integer,parameter:: NVAR_NODE=6`；
+  ② 打开文件后（仅 0 号进程）依次 `write(99) Total_block` /
+     `write(99) (bNi(m),bNj(m),bNk(m), m=1,Total_block)` / `write(99) NVAR_NODE`；
+  ③ 上方注释块写明布局、变量含义与「旧文件无头」的兼容说明。
+  数据记录（变量序 `d,u,v,w,T,Ts`、i 最快→与 PLOT3D Q 顺序一致）**一字未改**。
+- `util/check_flow3d_node.py`：先按记录读入，自动判定「有头（记录1 为 4 字节整数 = 块数）/
+  无头」；有头时校验 dims 与 `Mesh3d.x` 一致、`nvars=6`，随后按 `nvars*ni*nj*nk` 校验每块长度；
+  两种布局都打印 `d/|u|/T/Ts` 范围与 `max|T-Ts|`。
+
+**验证（`mpirun -np 1`）**：
+- `cases/solid_1d`（1 块 51×9×9，`Iflag_flow_node=1, Kstep_save=1, t_end=0.3`）：EXIT=0；
+  `xxd` 确认头 = `01 00 00 00`(nblock) / `33,09,09`(dims) / `06`(nvars)，数据记录 198288 B；
+  checker：`format=PLOT3D-Q header (nblock=1, dims, nvars=6)` + `STRUCTURE OK`（T=Ts=294–353 K）。
+- `cases/channel_ac_4blk`（4 块）：EXIT=0；7 条记录 = 3 头 + 4 数据，维数记录 48 B（4×3 ints）；
+  checker `STRUCTURE OK`。
+- 旧格式兼容：把新文件的 3 条头记录去掉后 checker 判为 `legacy (no header)` 且 `STRUCTURE OK`。
+- **等价性 A/B**：用 `git show HEAD:src/sub_IO.f90` 在 `/tmp/old_src` 单独编译**改动前二进制**，
+  同一算例两跑：`cmp` 结果「旧二进制输出 == 新文件去掉 3 条头记录」**逐字节一致**
+  （solid_1d 198296 B、channel_ac_4blk 330656 B）⇒ 数据段零变化。
+
+**文档/手册**：`docs/重启与节点流场输出说明.md §3`（新布局 + 替换掉旧的 `5*ni*nj*nk` 示例为可用
+python 片段 + 指向 checker）；`docs/程序能力与算例考核总结.md §2.8`；手册 `chap08`（产物表 +
+节点小节新增 lstlisting 布局与兼容说明）、`93_changelog.tex` 追加一行；
+`cd docs/程序说明 && ./build.sh` → **40 页、0 error、0 undefined**。
+
+**注意（手手相传）**：集群副本要同步 `src/sub_IO.f90` 并 `make`；旧 `flow3d_node.dat` 不必删
+（checker 兼容），但要用 PLOT3D 读法直接加载必须**重跑一次**生成带头文件。
+本轮改动**尚未提交**。
+
+---
+
+## 2026-09-26 — 交错外层停机判据 `Iflag_Couple_Stop`（t_end 或全局残差达标）
+
+**需求（用户提出）**：「以 `t_end` 为结束标志，或者以全局所有的残差都小于残差标准」。
+交错耦合（`Iflag_Couple_Scheme=1`）原先只有两个出口：界面量判据（`Tol_Couple_Tw`，码 12 另加
+`p/u`）或跑满 `Niter_Couple_Outer`，`t_end` 完全无效（主程序调用驱动后直接 `stop`）。
+
+**方案（用户选定 A：新开关，默认 0 保留旧行为）**
+1. `src/sub_modules.f90`：`Iflag_Couple_Stop`（默认 0）+ 每轮残差登记量
+   `Couple_Res_AC_q / Couple_Res_AC_m / Couple_Res_Solid`（轮首由驱动清零，求解器取 `max`）。
+2. `src/sub_multi_region.f90`
+   - 新 `couple_stop_test(nMesh, tt_reached, res_ok, r_comp, r_ls, r_por, r_sol)`：
+     ① 统计 **BLOCK_FLUID** 胞心 `B%Res` 的 RMS（`m=1..NVAR` 取 max，`MPI_ALLREDUCE` SUM + 胞数）
+     ⇒ 与 `Res_Inner_Limit` 比；② 存在 BLOCK_LOWSPEED/POROUS 时用 AC 登记量 ⇒ 与 `AC_Tol` 比
+     （`LS_Algorithm≠3` 直接判为不收敛，不误判）；③ 存在 BLOCK_SOLID 时用 GS 登记量 ⇒ 与 `Solid_Tol` 比；
+     全类块都达标才 `res_ok=T`（`-1.` 表示该类块不存在，仅用于日志）；
+   - 三个交错驱动（`run_staggered_fluid_solid` 11/13、`run_staggered_highlow` 12、
+     `run_staggered_fluid_porous` 19）：轮首清零登记量；气体段按剩余时间截断
+     `nstep=min(nstep,⌊(t_end-tt)/dt_global⌋+1)`；轮末（`set_couple_state` 之后、原判据之前）调用停机测试，
+     满足 `tt_reached .or. res_ok` 即 `exit outer`；退出提示区分「到 `t_end`」/「残差达标」
+     （新增 `stop_time` 局部量，避免把“到点”误报成 not fully converged）；
+   - `solid_solver_one_block` 末尾登记 GS `res`。
+3. `src/sub_lowspeed_ac.f90` / `src/sub_porous_ac.f90`：AC 收敛后登记 `rq/rm`。
+4. `src/sub_read_parameter.f90`：6 步流程齐全（默认值注释 / `$couple_ec` / 旧 `$control_ec` /
+   `Ipara(59)` + 反解 / `output_para.out` 回显 print 残差标准）；`control.ec.template` 同步注释。
+5. `util/readflow3d-ver2.4a/2.5.f90`：旧组 namelist 补 `Iflag_Couple_Stop`（顺手补上历史遗漏的
+   `Iflag_Couple_Restart`），两者 `gfortran -c` 编译通过。
+
+**验证（`mpirun -np 1`，全部 EXIT=0；临时目录 `/tmp/stgA*/B/C/E/F`，日志已回存算例目录）**
+| 用例 | 配置 | 结果 |
+|---|---|---|
+| 码 19 `t_end` 停机 (`run_stoptest_tend.log`) | `t_end=25, Comp=10, Warm=99` | 第 3 轮气体段自动截断 **10→6**，`tt=26 ≥ 25` ⇒ `stopped: physical time reached t_end`；`ended at tt=26 ... outer iterations=3` |
+| 码 19 残差停机 (`run_stoptest_res.log`) | `t_end=1e6`、`AC_Tol=Res_Inner_Limit=1e30` | 第 1 轮 `all_res_ok= T` ⇒ `stopped: all global residuals below standard` |
+| 码 11 实测 (`run_stoptest_case1.log`) | `Solid_Max_Iter=2000` | `solid=7.09e-10`（与 GS 打印一致）、`comp=4.14` ⇒ `all_res_ok=F` ⇒ 跑满轮数（新判据不干扰旧行为） |
+| 旧行为 (`run_stoptest_legacy.log`) | `Iflag_Couple_Stop=0` | 日志**无** `stop test` 行，与旧版一致 |
+| 旧单组 `$control_ec` (`run_stoptest_legacy_group.log`) | 用 `control.ec.legacy` + 新增变量 | `legacy= T`、`Iflag_Couple_Stop=1` 生效、第 1 轮停机，EXIT=0 |
+| 编译 | `cd src && make` | EXIT=0 |
+
+**文档**：手册 `chap07` 新增 **§7.2 交错外层的停机判据**（两条件 + 残差口径表表 7.x + 示例 +
+“SIMPLE 路径恒不达标”说明）、`chap07` 模式表与参数表各加一行、`91_appendix_params.tex`（组计数
+12→13 + `Iflag_Couple_Stop` 行）、`93_changelog.tex`（2026-09-26 / 1.2）；`./build.sh` 重编译成功
+（`main.toc` 出现 `subsection.7.2`，0 error、0 undefined）；`docs/control.ec-说明.md` 新增 §9、
+组表改 13；`docs/程序能力与算例考核总结.md` §2.5 与 §4 组表同步。
+
+**注意（手手相传）**：① 交错耦合仍**必须单进程**；② 该模式下 `t_end` 只在
+`Iflag_Couple_Stop=1` 时生效，默认 0 与旧版逐字节同行为；③ 可压块的“残差标准”沿用
+`Res_Inner_Limit`（默认 1e-10，双时间步内迭代判据），若要真正实现“稳态收敛即停”，
+需按需放宽它或后续引入专用外层残差标准；④ 本轮与第四轮（`flow3d_node.dat` 文件头）
+改动**均未提交**。
+
+
+
+---
+
+## 2026-09-26（第六轮）— 区域残差监视输出：固体/低速/多孔输出精简 + max/平均 rms/位置
+
+**需求（用户提出）**：「固体，低速和多孔介质减少屏幕输出，输出区域最大 rms，平均 rms 以及
+最大 rms 的位置」。用户选定**方案甲**：**不新增 namelist 参数**，硬编码
+「每 100 次迭代/扫掠 1 行过程监视 + 1 行结束汇总」。默认输出即精简（删掉全部 DBG/DEBUG 行）。
+
+**设计**：把"残差"从单个 `max` 扩成三个量，口径与可压块既有的 `Mesh%Res_max/Res_rms`
+（`sub_time_advance.f90::comput_max_Res_onemesh`，`rms=sqrt(ΣR²/Num_Cell)`）保持一致：
+`max` = 区域内逐胞残差幅值最大值；`rms` = 区域平均（均方根）；`at (i,j,k)` = `max` 所在胞
++ 胞心物理坐标 `[m]`（`%xc/%yc/%zc × Lscale`）。实现放在 `src/sub_debug.f90`（诊断例程文件、
+已在 makefile 中 ⇒ 不改 makefile）里的新模块 `region_stat_mod`：
+
+```fortran
+module region_stat_mod          ! 常量 RES_PRINT_STEP = 100（硬编码显示常量）
+  subroutine region_res_stat(nMesh, mBlock, what, kk, res_max, imax, jmax, kmax, res_rms, a1, a2)
+```
+- 只由 0 号进程打印 1 行：
+  ` Region res [solid GS |dTs|] block 1 (BLOCK_SOLID) step= 1400 : max= … rms= … at (i,j,k)=(…) xyz=[…] m`
+- `kk>0` → 过程监视行 `step=`；`kk<0` → 结束汇总行 `final=`（`|kk|` = 总迭代/扫掠数）。
+- `what` 选残差名与行尾旧字段：1 固体 GS `|dTs|`；2/3 低速/多孔 AC 流场（附 `res_q/res_m`）；
+  4/5 低速/多孔 SIMPLE `div(F)`（附 `res_p`）；6 AC 能量 `|dT|`；7/8 LTNE 流体/骨架（附 `dT(window)`）。
+- 字符字段全部在例程内生成（调用方只传标量），因此**隐式接口也安全**。
+
+**改动（6 个源文件）**
+1. `src/sub_debug.f90`：如上新增模块（+ 说明注释）。
+2. `src/sub_multi_region.f90::solid_solver_one_block`：GS 内层循环同时累加 `rss_r += |ΔTs|²`
+   并跟踪 argmax（原来只有 `res=max(...)`）；每 100 扫掠 1 行、结束 1 行；**删除**
+   `GS iter`（前 5 次）与 `DBG: Ts(...)` 两处调试输出；`Couple_Res_Solid` 登记逻辑不变。
+3. `src/sub_lowspeed.f90` / `src/sub_porous.f90`：`lowspeed_/porous_pressure_correction` 追加
+   出参 `imax,jmax,kmax,res_p_rms`（在既有 `res_p` 的 `|div F|` 循环里顺带累加，无新增数组）；
+   驱动每 100 次外迭代 1 行 + 结束 1 行；**删除** `DBG iter/maxU2/div max`、每 50 步 `DEBUG T iter`、
+   `SIMPLE iter`（含前 5 次）与末尾 `SIMPLE iterations: res_p` 行；NaN 检测与 stop 保留。
+4. `src/sub_lowspeed_ac.f90`：新外部例程 `ac_res_stat`（与 `ac_res_norm` 同一套逐胞量
+   `vq/vm/1e-3*rr`，额外返回合并幅值的 max/位置/rms 与 `rq/rm`）；AC 结束打 1 行汇总，
+   删掉**重复的** `iter==1` 打印（合并后的 `mod(iter,AC_Print)` 行已覆盖 iter=1）；
+   `ac_lowspeed_energy`（AC 温度方程）在 50 步窗口统计 `|ΔT|` 的 max/rms/位置，删掉每 1000 步进度行，
+   结束打 1 行。
+5. `src/sub_porous_ac.f90`：AC 结束打 1 行汇总、删 `iter==1` 行；`ac_porous_ltne` 在 100 步窗口
+   同时统计流体/骨架两组量（argmax + Σr²），删掉每 2000 步进度行，结束各打 1 行。
+6. 各调用例程加 `use region_stat_mod`（**注意**：漏加会在链接期报 `undefined reference`，
+   本轮在 `ac_lowspeed_energy` 上踩过一次）。
+
+**验证（`mpirun -np 1`，临时目录 `/tmp/rt1/*`，全部 EXIT=0）**
+| 用例 | 覆盖路径 | 结果 |
+|---|---|---|
+| `cases/solid_1d`（t_end=0.3d0） | 固体 GS | 每 100 扫掠 1 行 + `final= 20001`；`max` 与旧 `final res` 一致（3.9e-7） |
+| `cases/channel_ac_4blk` | AC 低速 4 块 | 4 条 `low-speed AC flow`，行尾 `res_q/res_m` 与 `AC iter` 自洽 |
+| `cases/porous_ltne_1d`（Porous_Max_Iter↓） | 多孔 SIMPLE | `porous SIMPLE div(F)` 过程行 + `final=`（res_p 单调降至 1.8e-11） |
+| `cases/porous_ltne_1d/run_ac` | AC 多孔 + LTNE | `porous AC flow` + `LTNE fluid/frame` 三行，位置在末端/入口附近 |
+| `cases/porous_plug_ac/eps06`（AC_Max_Iter=3000） | AC 多孔（hv=0） | 仅有 `porous AC flow` 汇总行（无 LTNE，符合预期） |
+| `fluid_solid/run_case1_solid`（码 11，2 轮，Comp=5） | 耦合内固体 | 轮内固体汇总行正常；`solid chunk done`/退出信息不变 |
+| `fluid_solid/run_case2_lowspeed`（码 12，1 轮） | 耦合内 AC + AC 能量 | 低速汇总行 + `AC energy` 行 + `highlow interface metrics` 正常 |
+| `fluid_solid/run_case3_porous`（码 19，1 轮） | 耦合内多孔 AC + LTNE | `porous AC flow` + LTNE 两行；`porous chunk done … max|dT_w|=4.38 K` |
+| `cd src && make` | 编译 | EXIT=0（无告警） |
+
+**文档/手册**：`chap06`（固体日志小节改为统一格式，含 `lstlisting` 样例 + 三量说明）、
+`chap04`/`chap05` 各新增「残差监视输出（2026-09-26 起）」小节、`92_appendix_codes.tex`
+日志关键字表新增 `Region res ...` 行（并替换已删除的 `Solid solver Block ... GS iterations:` 行、
+补 `The Max/R.M.S Residuals are` 行）；`93_changelog.tex` 新增 **1.3** 行；
+`cd docs/程序说明 && ./build.sh` → **45 页、0 error**；`docs/程序能力与算例考核总结.md` 新增 §2.9。
+（首次编译报 `Missing $ inserted`：`\code{AC iter ... res_q= ...}` 内下划线未转义 ⇒ 已改为 `res\_q`。）
+
+**注意（手手相传）**：① 打印节奏只由 `region_stat_mod::RES_PRINT_STEP=100` 决定（硬编码，
+非 namelist；要更少输出改这一处，或改 decade 式）；② 长稳态算例会出现每 100 步 1 行的趋势表
+（`solid_1d` 20000 扫掠 ⇒ ~200 行）；③ **收敛判据与监视节奏重合时不重复打印**：
+固体/SIMPLE 驱动用局部 `conv_ok`，即将退出时跳过该 `step=` 行（实测 case1 第 2 轮
+只在 `final= 1400` 打一行，不再出现 `step= 1400` + `final= 1400` 两行）；
+④ 耦合场景不变：交错仍必须单进程；
+⑤ 本轮与第四、五轮改动**均未提交**。
+
+
+---
+
+## 2026-10-17 — 第四～七轮改动分组提交 + 多孔 ε 极限“负结果”澄清 + 文档补全
+
+**目标**：把第四～六轮（节点头、停机判据、区域残差）、第七轮（ε 极限 + limits 算例）的
+未提交内容分组提交，并**如实**记录哪些极限性质已验证、哪些没有。
+
+**提交**：`c974e81` feat(output)（3 条 PLOT3D 头 + 冷启动确定性 + 两个 util 脚本）、
+`ebe7053` feat(solver)（`region_stat_mod` + `Iflag_Couple_Stop` + ε 极限 + 模板/读参/util）、
+`a29a6ee` cases(limits)（5 算例 + `run_limits.sh` + README）。
+
+**关键事实**：① HEAD 的 `output_flow_node` 原本**无头**，工作树曾写**2 条**过渡布局
+（块数 + 每块 `ni,nj,nk,nvar`），现为**标准 3 条**；`check_flow3d_node.py` 自动判别两种布局
+（打印 `2-record variant` / `3-record PLOT3D-Q header`），2026-09-26 的 limits 文件仍可读。
+② `Iflag_restart<0` 时 `restarted` 未初始化（偶发从未初始化场起步/NaN），已先置 `.false.`。
+③ limits 实测（`--blocks 1`）：ε=1 vs 低速 max|Δu|=17.64、max|Δv|=28.02、max|ΔT|=96.34 K，
+**排除界面首层后指标不变**；ε=0 vs 固体 max|ΔT|=498.6 K；多孔块 T 停在 300 K、Ts 最多 +3 K
+⇒ ε 极限目前只是“分支不崩 + ε=0 速度逐点为 0”的**回归快照**，不是定量等价证据。
+
+**文档**：`chap05`/`chap09` 改写口径；`chap11` 新增 §11.4 实测表（负结果 + 原因 + 后续）、
+§11.5「2026-10-17 验证记录」；`93_changelog.tex` 追加 1.4 / 1.4.1；`docs/程序能力与算例考核总结.md`
+§2.4/§5/§6-15；`cases/fluid_solid/limits/README.md`（实测表、分析、后续）。`./build.sh` 两次通过
+（0 error、第二遍 0 undefined）。
+
+**验证**：`cd src && make -j4` EXIT=0（无 warning）；`solid_1d`（1 块）/`channel_ac_4blk`（4 块）
+`STRUCTURE OK`；`bash -n run_limits.sh`、`python3 -m py_compile` 两个脚本通过。
+
+**注意**：`workplan.md`（仓库根，**GBK 编码**的用户笔记）与 `.vscode/settings.json` 有意未提交；
+6 个新 `Mesh3d.x` 单独提交。集群副本（`/work/home/lijunyang/sundong/PorousTest/code/`）
+仍需同步 + `make`，旧 libgfortran 的双 unit 检查本地测不出来。
+
