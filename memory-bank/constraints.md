@@ -144,3 +144,22 @@
 - 逐步强耦合续算路径退出前会**补写一次重启文件**（`tight_continuation` 分支），
   否则 `t_end` 落在两次 `Kstep_save` 之间就没有文件可续。
 - 详细说明与验证记录见 `docs/重启与节点流场输出说明.md`。
+
+## 8. 本地 ↔ 集群同步（2026-10-18 起，强制）
+- 集群入口 `ssh wuzh02`（`lijunyang@wuzh02.hpccube.com:65091`）；项目目录固定
+  `/work/home/lijunyang/sundong/MultiPhysMixSolver/`。
+- 命令：`bash util/sync_cluster.sh push`（本地→集群，`rsync -az --delete` + 排除
+  `.git/ build/ bin/` 与 `*.vtk`、`flow3d*.dat`、`field_restart.dat`、`Mesh3d.dat`、
+  `partation.dat`、`Residual.dat`、`*.o/*.mod`、`*.log/*.pw`、`np[0-9]*/`）；
+  `bash util/sync_cluster.sh pull`（集群→本地，只取 `memory-bank/ docs/ cases/**/*.log
+  cases/**/Residual.dat cases/**/control.ec cases/**/output_para.out cases/**/analyze_*`
+  这类记录文件，**不**回传大产物与 `run_out.log`）。
+- 作业一律 `sbatch` 提到计算节点（不占登录节点）；测试放集群、后处理可回本地做；
+  **每次集群运行的现场控制参数（`np*/control.ec`、`output_para.out`）必须 pull 回本地留存**。
+- `pull` 用 `rsync --update`：本地更新的文件不会被集群旧版覆盖（仍建议先提交再 pull）。
+- **改 `src/*.f90` 后必须在集群 `make -j4`（gfortran 7.3.1）通过再提交**；
+  两边结果不一致先查同步（`diff -r` / 抽查 `md5sum`）。
+- 每次同步在 `memory-bank/worklog.md` 记一行（时间 / 方向 / 校验方式）。
+- 作业提交：模板集群 `~/sundong/run.slurm` → 拷到算例运行目录 → `sbatch run.slurm`；
+  `cases/lidcavity_ac_3blk/run.slurm` 是本项目版本（`-n` 必须等于 `partation.dat` 进程数）。
+

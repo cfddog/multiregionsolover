@@ -171,6 +171,19 @@
     $3\times10^{4}$ 步收敛（\code{res\_q}$\approx3\times10^{-14}$，
     $u\in[-0.233,0.926]$）；vs Ghia RMS $u$ 0.02095 / $v$ 0.04365；同网格单块
     42$\times$42 对照 $\max|\Delta u|=9.3\times10^{-3}$（界面刻意一阶的预期误差）\\
+2026-10-18 & 1.6.4 & \textbf{集群（Slurm）部署与本地/集群同步流程}：新增
+    \code{util/sync\_cluster.sh}（\code{push}/\code{pull}，排除 \code{.git}、编译产物、
+    VTK/重启文件与实测运行目录）；\code{cases/lidcavity\_ac\_3blk/prep.sh} 支持“总步数”参数
+    （\code{t\_end=Kstep\_save=步数}、\code{Kstep\_show=步数/5}，使 1e4 步长跑可复现）；
+    新增算例作业脚本 \code{run.slurm}（\code{sbatch -n} $=$ 该目录 \code{partation.dat} 的进程数，
+    自动定位三级之外的 \code{bin/}）&
+    \code{util/sync\_cluster.sh}、\code{cases/lidcavity\_ac\_3blk/prep.sh}、
+    \code{cases/lidcavity\_ac\_3blk/run.slurm}、\code{.clinerules}、
+    \code{memory-bank/constraints.md} &
+    wuzh02（gfortran 7.3.1 $+$ hpcx 2.11）clean 重编 38 目标、0 error、2 warning、68 s；
+    三块方腔 $10^{4}$ 步 np$=$1/2/3 墙钟 27/18/8 s，np$=$2、np$=$3 对 np$=$1 为
+    RMS$(u)=5.8\times10^{-7}$、$\max|\Delta u|=1.16\times10^{-6}$；集群 np$=$1 与本地
+    \code{q1\_10k} \textbf{逐位相同}（RMS$=0$）\\
 \bottomrule
 \end{longtable}
 

@@ -64,6 +64,30 @@ vs Ghia et al. (1982) RMS u=0.02095、v=0.04365（单块 42×42 为 0.02013 / 0.
 进程号无关）写 `RAC -= FLX*A`，高侧写 `RAC += FLX*A`。手册 §4.5 与 `tab:ac3blk`
 记录了同一内容。
 
+## 集群运行（wuzh02，Slurm）
+
+```bash
+# 1) 本地同步整仓（规则见 .clinerules「本地 ↔ 集群同步」）
+bash util/sync_cluster.sh push
+
+# 2) 集群端：编译 + 生成三个运行目录 + 提交
+ssh wuzh02
+cd ~/sundong/MultiPhysMixSolver && make -j4
+cd cases/lidcavity_ac_3blk && ./prep.sh 10000     # 10000 步 = 已验证基线；不带参数则软链 control.ec(1000 步)
+cd np1 && sbatch -n 1 ../run.slurm
+cd ../np2 && sbatch -n 2 ../run.slurm
+cd ../np3 && sbatch -n 3 ../run.slurm
+
+# 3) 结果比对（界面连续性 + np 无关性）
+python3 ../analyze_3blk.py np1
+python3 ../analyze_3blk.py np2 np1
+python3 ../analyze_3blk.py np3 np1
+```
+
+`-n` 必须等于该目录 `partation.dat` 的进程数（np2 = `{1,2}|{3}`，np3 = `1/1/1`）；
+日志 `np*/run_out.log`、`np*/run_err.log`。算例自带 `control.ec` 仍是 1000 步的冒烟配置，
+长跑请用 `./prep.sh 10000`。
+
 ## 现场目录（不入库）
 
 `np1/` `np2/` `np3/`（`prep.sh` 生成）、`s1/` `s42/` `m42/` `v1/` `v3/` `r1/` `r2/`

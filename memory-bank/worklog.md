@@ -838,3 +838,58 @@ h 减半收敛性表。
 **下一步**：清临时目录 → 输出含 `p` 的 VTK 后做 h 减半的界面误差表 → 视需要把 3 块算例
 接入 `util/` 的自检脚本。
 
+## 2026-10-18 — 集群 `wuzh02` 连接打通（首次成功登录）
+
+- 依据 `cases/ssh/集群信息.md`（GBK，已转 UTF-8）：`wuzh02.hpccube.com:65091`，用户 `lijunyang`。
+  本机 DNS 只给 IPv6（`2409:8728:4eff:2001::100`），65091 `TCP_OK`。
+- 私钥两份（`/mnt/c/Users/Administrator/.ssh/lijunyang_wuzh02_rsa` 与 Downloads 里的
+  `..._RsaKeyExpireTime_2026-11-12_14-15-23.txt`）**md5 相同**；`/mnt/c` 权限 777 ⇒ ssh 拒用，
+  故复制到 `~/.ssh/lijunyang_wuzh02_rsa` + `chmod 600`。
+- 本机**没有** `~/.ssh/config`（`ssh wuzh02` 解析失败）⇒ 新建 `Host wuzh02`（Port 65091、
+  IdentityFile、`IdentitiesOnly yes`、`StrictHostKeyChecking accept-new`）。
+- 验证：`ssh -o BatchMode=yes wuzh02 'hostname; whoami; pwd; uname -sr'` →
+  `login03` / `lijunyang` / `/work/home/lijunyang` / `Linux 3.10.0-957.nfs.5.x86_64`，EXIT=0。
+- 环境：`mpif90` = **gfortran 7.3.1**（hpcx v2.11.0，本地 13.x）；Slurm/GridView
+  （`sbatch/squeue/sinfo`，分区 `wzhcnormal`/`wzacnormal`）；`/work` 30 TB 用 93%（剩 2.3 TB）；
+  `rsync/scp/tar/md5sum/nproc` 齐全。旧副本 `~/sundong/PorousTest/code/` 仍是单文件老布局。
+- 未做：`git push`、源码 `rsync` 同步、提交 Slurm 作业。这些待用户确认后执行。
+- 补充：集群没装 `C.UTF-8`，登录脚本 `perl` 每次告警 ⇒ `~/.ssh/config` 加
+  `SetEnv LANG=C` / `SetEnv LC_ALL=C`，实测告警消失（`LANG=C`）。
+- 补充：`rsync -az -e 'ssh -o BatchMode=yes' <file> wuzh02:./` 上传成功、远端 md5 与本地一致
+  （探针文件已删）⇒ 整仓同步通道就绪。
+- 作业提交（用户提供 + 集群实读）：帮助页
+  <https://www.scnet.cn/help/docs/mainsite/hpc/cmd/slurm/>；模板 `~/sundong/run.slurm`
+  （`-p wzacnormal -N 1 -n 1 -J MixSolver -o/-e *_out|err.log` +
+  `mpirun -n 1 ../../bin/mixnsolver`）。用法：**拷到算例目录 → `sbatch run.slurm`**；
+  跑本仓库需改 `mixnsolver`→`../../bin/MultiPhysMixSolver`、`-n` 改成 np、`export PATH` 可删。
+- 核实：本地根目录**没有** `run.slurm`（`find` 全盘无、未被 `.gitignore` 忽略）；
+  `~/sundong/MixSolver/MixSolver/`（`mixnsolver`/`mixnsolver_mpi`）是**另一个项目**。
+  本仓库仍**没有集群副本**，首次同步要新建目录。
+
+
+
+## 2026-10-18 — 集群部署（wuzh02）+ gfortran 7.3.1 编译 + Slurm 复跑 np=1/2/3
+
+- 新规则：`.clinerules` 与 `memory-bank/constraints.md §8` 增加“本地 ↔ 集群同步”，
+  工具 `util/sync_cluster.sh {push|pull}`（push 排除 `.git/build/bin`、VTK、重启/网格大文件、`np*/`；
+  pull 只取 `memory-bank/`、`docs/`、`cases/**/*.log`、`analyze_*`）。
+- 部署：push **1943 文件 / 50 MB** → `/work/home/lijunyang/sundong/MultiPhysMixSolver/`；
+  集群 `make clean && make -j4` = **0 error / 2 warning / 68 s**（38 个目标），
+  `bin/MultiPhysMixSolver` 3.15 MB；源码 md5 与本地一致（`sub_lowspeed_ac.f90` 0ad488b7…）。
+- 复跑：`cases/lidcavity_ac_3blk` 1e4 步，Slurm 46812863/64/65 全部完成（墙钟 27/18/8 s）；
+  np2、np3 对 np1 = RMS(u) 5.77e-07 / max|Δu| 1.16e-06（两者数值相同）；
+  **集群 np1 与本地 `q1_10k` 逐位相同（RMS=0）**。
+- 工具链/脚本坑：`prep.sh` 旧写法 `> np*/control.ec` 截断了软链目标（仓库 `control.ec` 一度 0 字节，
+  已 `git checkout` 恢复），现改为 `rm -f` + `.tmp` + `mv`；`run.slurm` 的二进制路径修正为
+  `../../../bin/`（运行目录多一层），并加了可执行位检查。
+- 集群环境：`python3` 3.6.8 无 numpy，需 `module load apps/anaconda3/2023.09`（py3.11 + numpy1.24）；
+  程序日志是 `run_out.log`（无 `run.log`）；`sbatch -n` 必须等于该目录 `partation.dat` 的进程数。
+- 文档：`docs/程序说明/chap10_build_run.tex` 新增“集群（Slurm）作业与本地/集群同步”小节，
+  `93_changelog.tex` 追加 1.6.4 记录；`./build.sh` 重编 0 error。
+- 备注：`cases/lidcavity_ac_3blk/control.ec` 仍是 1000 步冒烟配置（此前记忆里的“已改 10000”与实际不符），
+  长跑一律 `./prep.sh 10000` 在 `np*/` 内生成独立 `control.ec`。
+- 规则补充（用户追加）：**作业测试放集群（`sbatch`，不占登录节点）、后处理可同步回本地、
+  每次集群运行的现场控制参数本地也要留存** ⇒ `pull` 增加 `np*/control.ec`、`output_para.out`，
+  并改用 `rsync --update`（本轮踩到一次：`pull` 把未推送的 `constraints.md`/`chap10` 覆盖回旧版后重做）。
+
+

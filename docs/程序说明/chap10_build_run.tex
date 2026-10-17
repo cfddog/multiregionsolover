@@ -63,6 +63,51 @@ mpirun -np 1 ../../bin/MultiPhysMixSolver > run.log 2>&1
 \end{lstlisting}
 \end{itemize}
 
+\subsection{集群（Slurm）作业与本地/集群同步}
+集群入口 \code{ssh wuzh02}，源码副本固定在
+\code{/work/home/lijunyang/sundong/MultiPhysMixSolver}。本地与集群用
+\code{util/sync\_cluster.sh} 保持一致：
+\begin{lstlisting}
+bash util/sync_cluster.sh push   # 本地 -> 集群：代码/输入/文档/记忆库（排除 .git、build/、bin/、
+                                 #  *.vtk、flow3d*.dat、field_restart.dat、Mesh3d.dat、np*/ 等）
+bash util/sync_cluster.sh pull   # 集群 -> 本地：只取 memory-bank/、docs/、日志、Residual.dat、
+                                 # control.ec、output_para.out 与分析输出（VTK/重启留在集群）
+\end{lstlisting}
+\textbf{作业一律 \code{sbatch} 提到计算节点}（不占登录节点）；测试优先在集群做，
+后处理（\code{analyze\_*.py}、画图）可同步回本地；\textbf{每次集群运行的现场控制参数
+（\code{np*/control.ec}、\code{output\_para.out}）必须 \code{pull} 回本地留存}。
+\textbf{改完 \code{src/*.f90} 必须在集群重新 \code{make -j4} 通过再提交}：
+集群工具链是 gfortran 7.3.1 $+$ hpcx 2.11，比本地新版编译器严格，容易出现本地不报、
+集群致命的标准违规（见上一节“双 unit”经验）。
+
+以 \code{cases/lidcavity\_ac\_3blk} 为例（Slurm 分区 \code{wzacnormal}）：
+\begin{lstlisting}
+cd cases/lidcavity_ac_3blk
+./prep.sh 10000                  # 生成 Mesh3d.x/bc3d.inp/partation_np{2,3}.dat -> np1 np2 np3
+                                 # 参数 = 总步数（t_end=Kstep_save=步数、Kstep_show=步数/5）；
+                                 # 不给参数则各目录软链算例自带 control.ec（1000 步冒烟）
+cd np1 && sbatch -n 1 ../run.slurm
+cd ../np2 && sbatch -n 2 ../run.slurm     # partation_np2 = {1,2}|{3}
+cd ../np3 && sbatch -n 3 ../run.slurm     # partation_np3 = 1/1/1
+\end{lstlisting}
+\begin{itemize}
+  \item \code{sbatch -n} 必须等于该运行目录 \code{partation.dat} 的进程数；\code{run.slurm}
+        用 \code{\$SLURM\_NTASKS} 调 \code{mpirun}，日志为 \code{run\_out.log}/\code{run\_err.log}；
+  \item 运行目录比算例目录多一层，二进制路径是 \code{../../../bin/MultiPhysMixSolver}
+        （\code{run.slurm} 内部 \code{cd ../../..} 定位并检查可执行位，路径写错会立刻
+        \code{mpirun ... could not access or execute an executable}）；
+  \item 登录节点 \code{python3}（3.6.8）没有 numpy：先
+        \code{module load apps/anaconda3/2023.09}（Python 3.11.5 $+$ numpy 1.24.3）再跑
+        \code{analyze\_*.py}；或把 \code{flow3d\_block\_*.vtk}（约 190 kB/块）拉回本地分析；
+  \item 作业被杀后目录里仍保留 \code{field\_restart.dat}，直接重提交即可续算。
+\end{itemize}
+
+\paragraph{实测（2026-10-18，wuzh02）}同一份源码在集群 clean 重编（38 个目标、0 error、
+2 warning、68 s）后，三块方腔 $10^{4}$ 步：墙钟 np$=$1/2/3 为 27/18/8 s；
+np$=$2、np$=$3 对 np$=$1 的差为 RMS$(u)=5.77\times10^{-7}$、$\max|\Delta u|=1.16\times10^{-6}$，
+且集群 np$=$1 的流场与本地 \code{q1\_10k} \textbf{逐位相同}（RMS$=0$），
+说明结果与编译器版本、进程数无关。
+
 \subsection{算例目录产物与清理}
 运行产物（可随时删除/重建）：\code{*.vtk}、\code{flow3d.dat}、\code{Residual.dat}、
 \code{force*.log}、\code{*.inc}、\code{mesh-quality.dat}、\code{field\_restart.dat}、

@@ -1,5 +1,6 @@
 # Cline 项目记忆规则
-# 保护电脑要求，最多每次发起2个并行作业，每个任务运行不超过10分钟。
+# 保护电脑要求，最多每次发起2个并行作业，每个任务运行不超过10分钟。在集群上运行调试，无此条限制，但必须采用sbatch发作业们不要占用主节点。
+# 后面除非特殊要求，作业测试在集群，后处理可以同步到本地进行，控制参数现场本地也需要留存。
 ## 每次新任务开始时，必须执行
 在分析代码、提出方案或修改文件之前，先按顺序读取：
 1. memory-bank/projectbrief.md
@@ -34,4 +35,27 @@
 3. 在 `93_changelog.tex` 追加一条记录（日期/版本/功能/涉及源码/验证）；
 4. 重新编译：`cd docs/程序说明 && ./build.sh`（xelatex 两遍，产物
    `docs/OpenCFD-EC-1.16a-程序说明.pdf`），确认无错误（`build.log`）后再提交。
+
+
+## 本地 ↔ 集群同步（2026-10-18 起，必须执行）
+**每完成一批代码或记录文件的改动（每次提交前后、或关键验证后），必须让本地与集群保持一致。**
+- 集群入口：`ssh wuzh02`（`lijunyang@wuzh02.hpccube.com:65091`，免密已配好）；
+  项目目录固定 `/work/home/lijunyang/sundong/MultiPhysMixSolver/`。
+- **正向（本地 → 集群）**：`bash util/sync_cluster.sh push`
+  = `rsync -az --delete` + 排除 `.git/ build/ bin/ __pycache__/`、
+  `*.vtk *.o *.mod *.log *.pw`、`flow3d.dat flow3d_node.dat field_restart.dat Mesh3d.dat partation.dat Residual.dat`、
+  `np[0-9]*/`（实测运行目录在集群用 `prep.sh` 重建，不参与同步）。
+- **反向（集群 → 本地）**：`bash util/sync_cluster.sh pull`，只取**必要记录**
+  （`memory-bank/`、`docs/`、`cases/**/*.log`、`cases/**/Residual.dat`、
+  `cases/**/control.ec`、`cases/**/output_para.out`、`cases/**/analyze_*` 等），
+  **不**回传 VTK / 重启文件 / 网格 / 体积巨大的 `run_out.log`。
+- **作业一律 `sbatch` 提交到计算节点**（不占登录节点）；测试/调试优先放集群，
+  后处理（`analyze_*.py`、画图）可同步回本地做；
+  **每次集群运行的现场控制参数（`np*/control.ec`、`output_para.out`）必须 `pull` 回本地留存**。
+- 改 `src/*.f90` 后**必须在集群 `make -j4`（gfortran 7.3.1）通过**再提交；
+  两边结果不一致时先查同步（`diff -r` 或抽查 `md5sum`）。
+- **每次同步在 `memory-bank/worklog.md` 记一行**（时间 / 方向 / 校验方式），
+  并保证 `memory-bank/`、`cases/ssh/集群信息.md`、`docs/` 两边同步。
+- 提交作业：模板在集群 `~/sundong/run.slurm`，拷到目标算例目录后 `sbatch run.slurm`
+  （细节见 `cases/ssh/集群信息.md`）；算例 `cases/lidcavity_ac_3blk/run.slurm` 已给好本项目版本。
 

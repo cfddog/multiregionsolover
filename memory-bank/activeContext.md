@@ -1,6 +1,8 @@
 # Active Context — 当前任务 / 最近决策 / 下一步
 
-> 更新时间：2026-10-17（**最新 §0m：3 块 AC 修复提交入库 + 冒烟复验**）。**HEAD = `5094fd8`**
+> 更新时间：2026-10-18（**最新 §0n：集群 `wuzh02` 连接打通 + 环境核对**；
+> 上一版 §0m：3 块 AC 修复提交入库 + 冒烟复验）。**HEAD = `d96c61d`**（`main` 领先
+> `origin/main` 15 个提交，尚未 push）
 >（本轮 `29eae92`→`10ee6e2`→`6a804fa`→`5094fd8` 四个提交；随后一个记忆库提交）。
 > 本次全部改动（control.ec 7 组拆分 + 重启/节点输出 + 三算例迁移 + 文档/记忆库）**已提交并推送**；
 > 仅 `.vscode/settings.json`（主题设置）有意未提交。
@@ -20,6 +22,45 @@
 > 2 个 util 工具 + 模板 + 4 份文档 + 记忆库）。
 > **第六轮（2026-09-26）改动尚未提交**：区域残差监视输出（`src/sub_debug.f90`、
 > `sub_multi_region.f90`、`sub_lowspeed(_ac).f90`、`sub_porous(_ac).f90` + 手册 4 处 + 总结文档 + 记忆库）。
+
+## 0n. 2026-10-18：集群 `wuzh02` 连接打通 + 环境核对 ✅
+
+**做了什么**
+- 按 `cases/ssh/集群信息.md`：DNS 只解析出 IPv6（`2409:8728:4eff:2001::100`），
+  65091 端口 TCP 可达；两份私钥（`/mnt/c/Users/Administrator/.ssh/lijunyang_wuzh02_rsa`
+  与 Downloads 里的 `..._RsaKeyExpireTime_2026-11-12_14-15-23.txt`，**md5 相同**、PEM RSA、
+  LF 行尾）⇒ 复制到 `~/.ssh/lijunyang_wuzh02_rsa` 并 `chmod 600`
+  （`/mnt/c` 下是 777，ssh 会以 `UNPROTECTED PRIVATE KEY FILE` 直接拒绝）。
+- **本机原先没有 `~/.ssh/config`**，`ssh wuzh02` 无法解析 ⇒ 新建 `Host wuzh02`
+  （HostName `wuzh02.hpccube.com`、Port 65091、User `lijunyang`、IdentityFile、
+  `IdentitiesOnly yes`、`StrictHostKeyChecking accept-new`）。
+- 实测：`ssh -o BatchMode=yes wuzh02` → 节点 **`login03`**（第二次落到 `login05`，登录节点不固定）、
+  家目录 `/work/home/lijunyang`、`EXIT=0`（免密可用）；首次连接把 ED25519 主机键写入 `known_hosts`。
+
+**集群环境（影响后续同步/编译/排队）**
+- `mpif90` = `/opt/hpc/software/mpi/hpcx/v2.11.0/gcc-7.3.1/bin/mpif90`，
+  即 **gfortran 7.3.1**（本地 13.x）⇒ 同步后必须重编；老编译器对标准违规更严格
+  （当年 `File already opened in another unit` 就是集群先暴露的）。
+- 排队 = **GridView + Slurm**（`sbatch/squeue/sinfo`，另有 `bsub/qsub` 兼容）；
+  分区 `wzhcnormal`（约 4005 空闲）/`wzacnormal`；`/work` 30 TB 用 93%（剩 2.3 TB）。
+- 旧副本 `/work/home/lijunyang/sundong/PorousTest/code/` 仍是**单文件老布局**
+  （`opencfd_ec3d_v1.16a.f90` + `*.mod`），没有新的 `makefile+src/+build/+bin/+cases/`
+  ⇒ 同步应**新建目录**（如 `~/sundong/MultiPhysMixSolver/`），不要覆盖旧副本。
+- `cases/ssh/集群信息.md` 已由 **GBK 转 UTF-8** 并补上上述实测结论。
+
+**作业提交（2026-10-18 记录）**
+- 帮助文档：<https://www.scnet.cn/help/docs/mainsite/hpc/cmd/slurm/>。
+- 模板在**集群** `~/sundong/run.slurm`（`/work/home/lijunyang/sundong/run.slurm`）：
+  `#SBATCH -p wzacnormal / -N 1 / -n 1 / -J MixSolver / -o|e *_out|err.log`，
+  末尾 `export PATH=.../MixSolver/bin` + `mpirun -n 1 ../../bin/mixnsolver`。
+  **用法：拷到哪个算例目录就在哪 `sbatch run.slurm`**；跑本仓库要把 `mixnsolver` 换成
+  `../../bin/MultiPhysMixSolver`、`-n` 改成目标 np，`export PATH` 可删。
+- ⚠️ **本仓库本地根目录没有 `run.slurm`**（`find` 全盘无、也不在 `.gitignore` 里），
+  模板只在集群侧；`~/sundong/MixSolver/MixSolver/`（`mixnsolver*`）是**另一个项目**，
+  `~/sundong/PorousTest/code/` 是单文件老布局 ⇒ 本仓库**尚无集群副本**。
+
+**未做（下一步候选）**：`git push`（15 个提交）、用 `rsync -az` 首次同步整仓 + 集群端
+`make -j4`、按 Slurm 提交 3 块 AC 算例的 np=1/2/3 复验作业。
 
 ## 0m. 2026-10-17（收尾提交）：3 块 AC 修复入库 + 冒烟复验 ✅
 
@@ -589,3 +630,21 @@ backtrace：`scan_control_ec_groups_ ← read_parameter_ec_ ← read_parameter_ 
 - 面编号 1..6；接口码 11..19；`cases/fluid_solid` 拓扑 = `gas i+ (4) ↔ 对侧 j- (2)`。
 - 未提交改动：`src/{sub_read_parameter,sub_modules,sub_multi_region,makefile,opencfd_ec3d_v1.16a}.f90`、
   `util/readflow3d-ver2.4a/2.5.f90`、`control.ec.template`、`docs/control.ec-说明.md`、`memory-bank/`。
+
+## 0n. 2026-10-18 集群部署与 Slurm 复跑（已完成，后续按此执行）
+
+- **集群副本已建立并验证**：`/work/home/lijunyang/sundong/MultiPhysMixSolver/`（`ssh wuzh02`）。
+  同步一律 `bash util/sync_cluster.sh push|pull`；规则见 `.clinerules` 与 `constraints.md §8`。
+- 集群 clean 重编（gfortran 7.3.1 + hpcx 2.11）：**0 error / 2 warning / 68 s / 38 个目标**；
+  `bin/MultiPhysMixSolver` 3.15 MB，源码 md5 与本地一致。
+- `cases/lidcavity_ac_3blk` 1e4 步 Slurm 复跑：np=1/2/3 墙钟 27/18/8 s；
+  np2、np3 对 np1 = RMS(u) 5.77e-07、max|Δu| 1.16e-06；**集群 np1 与本地 `q1_10k` 逐位相同**。
+- 用法：`cd cases/lidcavity_ac_3blk && ./prep.sh 10000`，然后 `cd np1 && sbatch -n 1 ../run.slurm`
+  （np2/np3 同理，`-n` 必须等于 `partation.dat` 进程数）；分析先
+  `module load apps/anaconda3/2023.09`（登录节点自带 python3 无 numpy），或拉回 VTK 本地分析。
+- 脚本约定：`prep.sh` 的“步数”参数在运行目录内生成**独立** `control.ec`；
+  **禁止** `sed ... > np*/control.ec`（会把软链目标截断成空文件）；`np*/` 到仓库根是三级
+  （`../../../bin/`）。
+- 待办不变：任务 5（L 形 90° 两块的 i↔j 界面）、任务 8（4/6 块 anchoring 灵敏性）、
+  任务 7（强扩展，现可直接在集群做）；另 `git push`（本地领先 origin/main 15+ 提交）。
+

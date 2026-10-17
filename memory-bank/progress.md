@@ -3,6 +3,28 @@
 > 更新：2026-10-17（第四～七轮改动已提交；ε 极限的**负结果**已写入手册/README）。**HEAD = `a29a6ee` 之后**（本轮 3 个提交）。
 > 更早的开发历史见 `docs/工作日志.md`、`docs/程序能力与算例考核总结.md`、`memory-bank/worklog.md`。
 
+## ✅ 已完成（2026-10-18）：集群 `wuzh02` 连接打通
+- [x] 私钥（`/mnt/c/Users/Administrator/.ssh/lijunyang_wuzh02_rsa`，与 Downloads 里
+      `..._2026-11-12_14-15-23.txt` md5 相同）复制到 `~/.ssh/lijunyang_wuzh02_rsa`（600）。
+- [x] 新建 `~/.ssh/config`（本机原先**没有**该文件）：`Host wuzh02` + HostName/Port 65091/
+      User `lijunyang`/IdentityFile/`IdentitiesOnly yes`/`accept-new`。
+- [x] 实测 `ssh -o BatchMode=yes wuzh02` 免密登录 `login03`，EXIT=0；`hostname/whoami/pwd` 均正确。
+- [x] 环境核对：`mpif90` = **gfortran 7.3.1**（hpcx v2.11.0）；Slurm（`sbatch/squeue/sinfo`），
+      分区 `wzhcnormal`/`wzacnormal`；`/work` 剩 2.3 TB；`rsync/scp/tar/md5sum` 齐全。
+- [x] 确认旧副本 `~/sundong/PorousTest/code/` 仍是**单文件老布局**（≠ 现在的 `src/` 布局）。
+- [x] 消掉集群 `perl: Setting locale failed` 噪声：`~/.ssh/config` 加 `SetEnv LANG=C/LC_ALL=C`。
+- [x] `rsync -az` 上传探针成功、远端 md5 一致（探针已删）⇒ 同步通道就绪。
+- [x] `cases/ssh/集群信息.md` GBK → UTF-8，并补进上述实测结论。
+- [x] 记录作业提交方式（2026-10-18 用户提供）：帮助页
+      <https://www.scnet.cn/help/docs/mainsite/hpc/cmd/slurm/>；模板在**集群**
+      `~/sundong/run.slurm`，拷到目标算例目录后 `sbatch run.slurm` 提交
+      （跑本仓库需把 `mixnsolver`→`../../bin/MultiPhysMixSolver`、`-n` 改成 np）。
+- [x] 核实：本地根目录**没有** `run.slurm`（模板只在集群侧）；`~/sundong/MixSolver/MixSolver/`
+      是另一个项目（`mixnsolver*`）；本仓库**尚无集群副本**。
+- [ ] 待办：`git push`（`main` 领先 `origin/main` 15 个提交）。
+- [ ] 待办：`rsync -az` 首次同步整仓到 `~/sundong/MultiPhysMixSolver/`，集群端 `make -j4` 验证。
+- [ ] 待办：写 Slurm 脚本，集群上复跑 `lidcavity_ac_3blk` 的 np=1/2/3（老编译器 + 真网络）。
+
 ## ✅ 已完成（2026-10-17，收尾）：提交 4 个 commit + 提交前冒烟复验
 - [x] `29eae92` fix(ac)：符号/is_high + `AC_MPI_Sync` + `p` halo + `IF_Debug=3` 自检
       + `init_ac_parallel_flags` + `read_solid_bc` 死锁（10 文件）。
@@ -386,4 +408,18 @@
       4 块/4 进程混合算例 `t07_mix4`。
 - [ ] `cases/parallel/`：`mkpart.py` 生成 `partation.dat`、`run_para_verify.sh` 跑 np=1 vs np=2
       并断言 `max|d|=0`；测试 t01–t07 随各级加入。
+
+
+## 已完成（2026-10-18：集群部署与 Slurm 复跑）
+
+- [x] 集群副本 `/work/home/lijunyang/sundong/MultiPhysMixSolver/`（rsync 1943 文件 / 50 MB，
+      排除了 `.git/build/bin`、VTK/重启/网格大文件与 `np*/`）。
+- [x] 集群 gfortran 7.3.1 clean 重编：**0 error / 2 warning / 68 s**（38 目标）。
+- [x] Slurm 复跑 `cases/lidcavity_ac_3blk` np=1/2/3（1e4 步）：墙钟 27/18/8 s；
+      np2/np3 对 np1 = RMS(u) 5.77e-07 / max|Δu| 1.16e-06；集群 np1 与本地 `q1_10k` 逐位相同。
+- [x] 同步规则入 `.clinerules` / `constraints.md §8`；工具 `util/sync_cluster.sh`
+      （push/pull）；`prep.sh` 支持步数参数；新增算例 `run.slurm`；
+      手册 chap10 新增“集群作业与同步”小节 + changelog 1.6.4，`./build.sh` 0 error。
+- [ ] 待办：任务 5（L 形 90° 两块的 i↔j 界面）、任务 8（4/6 块 anchoring 灵敏性）、
+      任务 7（强扩展，集群上做）；`git push`。
 
