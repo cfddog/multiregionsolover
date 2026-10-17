@@ -75,6 +75,8 @@ $flow_ec
 !  Step_Inner_Limit=20, Res_Inner_Limit=1.d-10     ! 双时间步内迭代控制
 !  Num_Mesh=1, Pre_Step_Mesh=0,0,0                 ! 多重网格
 !  NUM_THREADS=1, IF_Debug=0, Pdebug=1,1,1,1       ! 并行/调试
+!                        ! IF_Debug=3: 启动时做一次 ghost 缓冲交换自检([bufchk] 行,
+!                        !   非破坏性; 覆盖 U(1:NVAR)+p, 同进程/跨进程子面), 见手册 §bufchk
 !  Periodic_dX=0.d0, Periodic_dY=0.d0, Periodic_dZ=0.d0  ! 周期平移量
 !  IF_Innerflow=0        ! 内流模式(叶栅/叶轮)    (默认: 0)
 !  Iflag_savefile=0      ! 0: 覆盖写 flow3d.dat  1: 写 flow3d-<步数>.dat
@@ -128,6 +130,11 @@ $ac_ec
 !  AC_WenoBlend=0.d0     ! WENO 混入一阶 Rusanov 比例    (默认: 0.)
 !  AC_MomDiss=0          ! 动量耗散: 0 集中 1 分裂/混合 2 纯|un| (默认: 0)
 !  AC_MomFrac=0.2d0      ! AC_MomDiss=1 时保留 c 的比例   (默认: 0.2)
+!  AC_MPI_Sync=0         ! 0 旧行为(np=1 每伪步刷新 U 与 p; np>1 伪步内不刷新, 启动告警)
+!                        ! 1 并行安全: 每伪步交换 U(1:5)+p, 各块固定跑满
+!                        !   AC_Max_Iter 步(不做 AC_Tol 早退), np=1 与 np>1 一致
+!                        !   闭腔(全局无压力边界)且 np>1 时压力水平由全局 1 号块
+!                        !   锚定(只有 1 号块减自身均值, 无全局集合通信), 可正常算
 $end
 
 $solid_ec

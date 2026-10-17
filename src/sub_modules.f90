@@ -248,6 +248,26 @@
    integer,save:: AC_WallP=1     ! 1 = 2nd-order wall-face pressure (linear extrapolation, keeps dq/dn)
    integer,save:: AC_MomDiss=0   ! 0 = lumped Rusanov dissipation (default, validated); 1 = split (blend), 2 = pure |un| (unstable)
    real(PRE_EC),save:: AC_MomFrac=0.2d0 ! AC_MomDiss=1: fraction of c kept as the momentum-dissipation floor
+!  Parallel AC march.  0 = legacy behaviour, bit-reproducible with the pre-2026-10
+!  code: np=1 refreshes U(1:5) ghost layers on every pseudo step (early exit on
+!  AC_Tol), np>1 does not refresh them at all and the interface pressure `p` is
+!  never exchanged (frozen initial level).  1 = parallel-safe march: U(1:5) AND p
+!  halo refreshed on every pseudo step and the pseudo loop runs
+!  EXACTLY AC_Max_Iter steps on every block of every process, so both sides of an
+!  interface post the same number of MPI_Bsend/MPI_Recv pairs (no deadlock) and
+!  np=1 / np>1 march the same sequence of operations.
+   integer,save:: AC_MPI_Sync=0
+!  Set once at start-up (init_ac_parallel_flags): .true. when ANY low-speed or
+!  porous AC block of the WHOLE job has a pressure-anchoring BC.  ac_have_pressure_bc
+!  only sees the local blocks, which is wrong across processes.
+   integer,save:: AC_PBC_Global=0
+!  1 = 正在 AC 逐块伪时间步循环内（由 lowspeed_ac_solver_one_block 置位）。
+!  update_buffer_onemesh 里的全局 MPI_Barrier 在该标志为 1 时跳过：各进程拥有的
+!  AC 块数可能不等（np=2 时 rank0 有 2 块、rank1 有 1 块），逐块成批推进时同一
+!  外层步内的调用次数不同，屏障计数不匹配会直接死锁（实测 np=2 挂死）。U/p 鬼点
+!  交换本身是 MPI_Bsend 全部发送 + MPI_Recv 全部接收的点对点配对，同源同 tag 不会
+!  越序，不需要全局屏障；真正的时序同步仍由每个外层步末尾（循环外）的屏障提供。
+   integer,save:: AC_In_Pseudo_Loop=0
 
    integer,save:: FD_Flux,FD_scheme !
    integer,save:: KRK=0 !

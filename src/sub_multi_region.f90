@@ -3516,3 +3516,109 @@
    call MPI_Abort(MPI_COMM_WORLD, 2, ierr)
   end subroutine abort_remote_uncoupled
 
+!==============================================================================
+! Start-up flags / checks for the PARALLEL AC march (LS_Algorithm=3).
+! Called once, next to check_remote_coupling_support, before time marching.
+!
+!  AC_PBC_Global
+!    ac_have_pressure_bc() only sees the blocks of the local process, so on
+!    more than one process it cannot decide whether the mesh is pressure-anchored.
+!    The flag is therefore evaluated here over every local block and combined
+!    with one MPI_LOR.
+!
+!  AC_MPI_Sync=1 (parallel-safe march)
+!    Every AC block refreshes U(1:5) and p ghost layers on every pseudo step and
+!    runs exactly AC_Max_Iter steps, so all exchange rounds stay matched.
+!    Consequence: a closed domain (no pressure BC anywhere) would need a GLOBAL
+!    mean pressure in ac_zero_mean_p on every pseudo step.  That collective has
+!    no place in the per-block loop (the ranks own different numbers of AC
+!    blocks), so it is not implemented -- abort with a clear message instead of
+!    letting the pressure level drift per block.
+!
+!  AC_MPI_Sync=0 (legacy)
+!    Kept bit-reproducible with the pre-2026-10 code: np=1 refreshes the ghosts
+!    per pseudo step, np>1 does not.  A warning is printed when AC blocks are
+!    spread over several processes, because their interface is then frozen.
+!==============================================================================
+  subroutine init_ac_parallel_flags(nMesh)
+   use Global_Var
+   use const_var
+   implicit none
+   integer,intent(in):: nMesh
+   Type (Block_TYPE),pointer:: B
+   TYPE (BC_MSG_TYPE),pointer:: Bc
+   integer:: mBlock, ksub, nb
+   integer:: n_ac_l, n_ac_g, n_if_l, n_if_g, haspbc_l, haspbc_g, ierr
+
+   n_ac_l  = 0
+   n_if_l  = 0
+   haspbc_l= 0
+   AC_PBC_Global = 0
+   if(Num_Mesh < nMesh) return
+
+   do mBlock=1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(.not. (B%Block_type==BLOCK_LOWSPEED .or. B%Block_type==BLOCK_POROUS)) cycle
+     if(LS_Algorithm .ne. 3) cycle
+     n_ac_l = n_ac_l + 1
+     if(.not. associated(B%bc_msg)) cycle
+     do ksub=1, B%subface
+       Bc => B%bc_msg(ksub)
+       if(is_interface_bc(Bc%bc)) then
+!        same-class interface whose partner lives on another process: its
+!        ghost layers are exactly what update_p_buffer_onemesh has to carry
+         nb = Bc%nb1
+         if(nb > 0) then
+           if(B_proc(nb) .ne. my_id) n_if_l = n_if_l + 1
+         endif
+         cycle
+       endif
+       if(Bc%bc == BC_Outflow .or. Bc%bc == BC_LS_Outlet .or. &
+          Bc%bc == BC_Farfield) haspbc_l = 1
+       if((Bc%bc == BC_Inflow .or. Bc%bc == BC_LS_Inlet) .and. &
+          LS_Inlet_Type == 3) haspbc_l = 1
+     enddo
+   enddo
+
+   n_ac_g   = n_ac_l
+   n_if_g   = n_if_l
+   haspbc_g = haspbc_l
+   if(Total_proc > 1) then
+     call MPI_Allreduce(n_ac_l,   n_ac_g,   1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+     call MPI_Allreduce(n_if_l,   n_if_g,   1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+     call MPI_Allreduce(haspbc_l, haspbc_g, 1, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, ierr)
+   endif
+   AC_PBC_Global = haspbc_g
+
+   if(n_ac_g <= 0) return
+
+   if(my_id == 0) then
+     print*, ' AC parallel march: AC_MPI_Sync=', AC_MPI_Sync, &
+             '  AC blocks=', n_ac_g, '  remote AC interface entries=', n_if_g, &
+             '  pressure BC anywhere=', (haspbc_g > 0)
+   endif
+
+   if(Total_proc > 1 .and. AC_MPI_Sync == 0 .and. my_id == 0) then
+     print*, ' WARNING: the AC blocks are spread over', Total_proc, ' processes'
+     print*, '          but AC_MPI_Sync=0 (legacy mode): the interface ghost'
+     print*, '          layers (U(1:5) and p) are NOT refreshed inside the'
+     print*, '          pseudo loop, so the interface stays frozen at its'
+     print*, '          initial state and the result may be wrong.'
+     print*, '          Set  AC_MPI_Sync=1  in &ac_ec for a parallel-safe march.'
+   endif
+
+   if(Total_proc > 1 .and. AC_MPI_Sync == 1 .and. haspbc_g <= 0) then
+!    闭合域 + 多进程：原先在这里直接 MPI_Abort（"需要全局均值压力、未实现"）。
+!    现在改为"1 号块锚定"方案（见 lowspeed_ac_solver_one_block 里
+!    ac_zero_mean_p 的调用条件）：只有全局 1 号 AC 块减自身均值，其余块
+!    保留原压力水平，靠每个伪时间步刷新的 p 鬼点与 1 号块连通。
+!    这等价于全场的压力水平被 1 号块锚定，不需要任何集合通信，
+!    因此各进程块数不等也能跑（np=2 的 1+2 分配）。
+     if(my_id == 0) then
+       print*, ' AC closed domain (no pressure BC): pressure level is'
+       print*, '   anchored by global block 1 (per-block mean removal only'
+       print*, '   on block 1) -- no global mean collective on np>1.'
+     endif
+   endif
+  end subroutine init_ac_parallel_flags
+

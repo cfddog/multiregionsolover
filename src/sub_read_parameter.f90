@@ -143,6 +143,8 @@
     AC_WallP=1          ! wall/symmetry faces: 1=2nd-order wall pressure, 0=cell value
     AC_MomDiss=0        ! Rusanov dissipation: 1=split/blend (|un|+frac*c on momentum), 0=lumped max|un|+c (default), 2=pure |un|
     AC_MomFrac=0.2d0    ! AC_MomDiss=1: floor fraction of c kept in the momentum dissipation
+    AC_MPI_Sync=0       ! 0=legacy (np=1: per-pseudo-step U refresh; np>1: none, p never exchanged)
+                        ! 1=parallel-safe: per-pseudo-step U+p halo + fixed AC_Max_Iter steps
 
 !---- Porous-media solver parameters (SI units) --------------------------------
     Porous_T_ref=288.15d0   ! initial/reference solid-frame temperature [K]
@@ -253,7 +255,7 @@ end
   namelist /ac_ec/ &
       AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, &
       AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, AC_WallRecon, AC_WallP, &
-      AC_MomDiss, AC_MomFrac
+      AC_MomDiss, AC_MomFrac, AC_MPI_Sync
 
   namelist /solid_ec/ Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol
 
@@ -290,7 +292,7 @@ end
 		LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm, &
 		AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, &
          AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, AC_WallRecon, AC_WallP, AC_MomDiss, &
-         AC_MomFrac, &
+         AC_MomFrac, AC_MPI_Sync, &
 		Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, &
 		Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in, &
 		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
@@ -438,6 +440,9 @@ end
 	            " (0=legacy; 1=stop on t_end or all residuals<standard:", &
 	            " fluid RMS<=", Res_Inner_Limit, " AC<=", AC_Tol, &
 	            " solid<=", Solid_Tol, ")"
+    write(99,*) " AC parallel march: AC_MPI_Sync=", AC_MPI_Sync, &
+                " (0=legacy ghosts/early exit; 1=U+p halo per pseudo step + fixed", &
+                " AC_Max_Iter=", AC_Max_Iter, " steps)"
 
     write(99,*) "--------------------------------------------"
 
@@ -592,6 +597,7 @@ end
     Ipara(57)=Iflag_flow_node
     Ipara(58)=Iflag_Couple_Restart
     Ipara(59)=Iflag_Couple_Stop
+    Ipara(60)=AC_MPI_Sync
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -727,6 +733,7 @@ end
     Iflag_flow_node=Ipara(57)
     Iflag_Couple_Restart=Ipara(58)
     Iflag_Couple_Stop=Ipara(59)
+    AC_MPI_Sync=Ipara(60)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -903,7 +910,7 @@ end
    use Global_var
    use mod_type_def
    implicit none
-   integer:: m, n, i, j, nf, unit, ios
+   integer:: m, n, i, j, nf, unit, ios, have_file
    logical:: ex
    integer,allocatable:: nface_global(:)
    integer,allocatable:: face_global(:,:)
@@ -913,13 +920,14 @@ end
    character(len=256):: line
    Type (Block_TYPE),pointer:: B
 
+   have_file = 0
    if(my_id .eq. 0) then
      inquire(file="solid_bc.inp", exist=ex)
      if(.not. ex) then
        print*, "solid_bc.inp not found, no solid thermal BCs"
-       return
-     endif
-     open(newunit=unit, file="solid_bc.inp")
+     else
+       have_file = 1
+       open(newunit=unit, file="solid_bc.inp")
      read(unit,*) n
      allocate(nface_global(Total_block))
      nface_global = 0
@@ -944,9 +952,16 @@ end
          enddo
        endif
      enddo
-     close(unit)
-     print*, "Read solid_bc.inp OK"
+       close(unit)
+       print*, "Read solid_bc.inp OK"
+     endif
    endif
+
+!  The availability flag must be broadcast BEFORE the data: the old rank-0
+!  `return` on a missing file left every other process blocked in the six
+!  MPI_Bcast calls below (np>1 startup deadlock, found 2026-10-17).
+   call MPI_Bcast(have_file, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, i)
+   if(have_file .eq. 0) return
 
 !  Broadcast to all processes
    if(.not. allocated(nface_global)) allocate(nface_global(Total_block))

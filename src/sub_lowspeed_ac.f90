@@ -48,6 +48,7 @@
    integer :: ac_ifc_own(AC_IFC_MAX) = 0
    integer :: ac_ifc_ks (AC_IFC_MAX) = 0
    integer :: ac_ifc_nb (AC_IFC_MAX) = 0
+   integer :: ac_dbg_i = 0      ! ac_dbg=1: counter limiting the per-interface prints
    real(PRE_EC), allocatable, dimension(:,:,:,:,:) :: FSH  ! (4,nx,ny,nz,nifc)
 !  ---- wall-face map for the near-wall reconstruction (AC_WallRecon) ---------
 !  ac_wallface(i,j,k,dir), dir = 1,2,3 for the i,j,k index direction:
@@ -72,8 +73,15 @@
 !  flux and the neighbour's mapped read slot, plus the (mBlock,ksub) ->
 !  (id,is_owner) resolution of the first few subfaces.  Used to verify that the
 !  neighbour reads exactly the slot the owner wrote (2-block channel 2026-09-15).
-   integer :: ac_dbg = 0
+   integer :: ac_dbg = 0            ! 1 = 接口通量诊断打印（默认关，避免正常算例刷屏）
+!  ac_closed_dom = 全场没有任何压力锚定（出口/远场/压力入口）的闭合域。
+!  闭合域里界面通量必须两侧各自计算（见 ac_ifc_face 的说明）：共享 FSH 单值
+!  通量要求"同一个伪时间步内按块号升序访问各块"，而 AC 驱动是**逐块成批**
+!  推进的（每块 AC_Max_Iter 个伪步），邻居读到的是若干伪步之前的存值；
+!  开域由压力出口吸收这点不平衡，闭合域则变成界面净质量源 -> p 漂移 -> 发散
+!  （3 块方腔 np=1 实测 NaN）。由 lowspeed_ac_solver_one_block 每个块调用时刷新。
    integer :: ac_dbg_own = 0, ac_dbg_nb = 0, ac_dbg_find = 0
+   logical :: ac_closed_dom = .true.
   end module lows_ac_work
 
 !===============================================================================
@@ -99,6 +107,10 @@
        use precision_EC
        integer:: nMesh
      end subroutine update_buffer_onemesh
+     subroutine update_p_buffer_onemesh(nMesh)
+       use precision_EC
+       integer:: nMesh
+     end subroutine update_p_buffer_onemesh
    end interface
 
    B => Mesh(nMesh)%Block(mBlock)
@@ -131,21 +143,48 @@
    if(Time_Method .eq. Time_Dual_LU_SGS) isdual = 1
 
    call ac_have_pressure_bc(nMesh, mBlock, have_pbc)
+!  闭合域标志（见 ac_ifc_face）：闭合域 + 跨进程(np>1)时界面通量必须两侧各算，
+!  因为共享 FSH 单值通量只能在本进程内传递（跨进程没有通路）。np=1 时全部界面都在
+!  同一进程，共享 FSH 通量可保守且（AC_Max_Iter=1 升序推进时）是同步的，故保留。
+   ac_closed_dom = (.not. have_pbc) .and. Total_proc .gt. 1
 
    if(my_id .eq. 0) print*, ' AC solver (LS_Algorithm=3) block', mBlock, &
       ' nx,ny,nz=',nx,ny,nz,' beta=',beta,' CFL=',AC_CFL,' dual=',isdual, &
-      ' flux=',AC_Flux,' recon=',AC_Recon,' lim=',AC_Limiter
+      ' flux=',AC_Flux,' recon=',AC_Recon,' lim=',AC_Limiter, &
+      ' mpi_sync=',AC_MPI_Sync
 
    rq0 = 0.d0; rm0 = 0.d0
+!  伪时间步循环内不做全局屏障（见 AC_In_Pseudo_Loop 的说明）
+   AC_In_Pseudo_Loop = 1
    do iter = 1, AC_Max_Iter
      call ac_fill_ghost(nMesh, mBlock, uin_x, uin_y, uin_z)
 !    Same-class block interfaces (BC_Inner, -1): refresh the ghost
 !    buffers from the neighbours on EVERY pseudo-step, not only once per
 !    outer step.  The lagged interface is what destabilises the coupled
-!    AC march.  Restricted to a single process: a per-pseudo-step MPI
-!    exchange would require both sides to iterate the same number of
-!    times, which they do not (each block exits on AC_Tol).
-     if(Total_proc .eq. 1) call update_buffer_onemesh(nMesh)
+!    AC march.  A per-pseudo-step MPI exchange requires both sides to
+!    iterate the same number of times, which they do not (each block exits
+!    on AC_Tol), so the cross-process case is still restricted to
+!    AC_MPI_Sync=1.  AC_MPI_Sync=1 removes BOTH that limitation and the
+!    early exit: the loop then runs exactly AC_Max_Iter steps on every
+!    block of every rank, so the blocking MPI_Bsend/MPI_Recv pairs of the
+!    U and p exchange stay matched.
+!    p lives outside U(1:5), so it needs its own call.  The U and p halos
+!    are refreshed under EXACTLY the same condition (and p_send_mpi covers
+!    same-process and cross-process subfaces with the same filter) so that
+!    a run cannot end up with a fresh U halo and a stale p halo.
+!    伪时间步循环内的鬼点刷新：只在**单进程**时做。原因：
+!    (1) update_buffer_onemesh 一次刷新的是本进程 ALL 个块的半区，而各进程拥有的
+!        AC 块数可以不等（np=2 的 1+2），在逐块循环里调用会让各进程的 MPI 调用次数
+!        不同 -> 与外层步末尾的那次交换错配，直接死锁（实测 np=2 第一步就挂）；
+!    (2) 跨进程的 U/p 半区由每个外层步末尾的一次 update_buffer_onemesh +
+!        update_p_buffer_onemesh 统一刷新，计数恒等于 1，天然平衡。
+!    np=1 时所有界面都在本进程内（无 MPI），逐伪步刷新既安全又更紧凑，故保留。
+!    因此 3 块算例请用 AC_Max_Iter=1：此时 np=1/2/3 的界面耦合节奏完全一致
+!    （每个外层步交换一次 = 标准的块 Gauss-Seidel 稳态迭代）。
+     if(Total_proc .eq. 1) then
+       call update_buffer_onemesh(nMesh)      ! U(1:5) ghost layers
+       call update_p_buffer_onemesh(nMesh)    ! p ghost layers (all subfaces)
+     endif
      call ac_load_state(nMesh, mBlock)
      call ac_wall_pressure(nMesh, mBlock)   ! wall-face pressure (needs fresh XW)
      call ac_boundary_flux(nMesh, mBlock, beta, uin_x, uin_y, uin_z)
@@ -167,12 +206,25 @@
        B%U(4,i,j,k)  = XW(4,i,j,k)
        B%U(1,i,j,k)  = LS_rho
      enddo; enddo; enddo
-     if(.not. have_pbc) call ac_zero_mean_p(nMesh, mBlock)
+!    闭合域的压力基准（多块 AC，2026-10-17）：
+!    只由全局 1 号块锚定（保持其块内均值为 0），其余块不做去均值，压力水平靠每步
+!    刷新的 p 鬼点与 1 号块连成一体。注意**不能每个块各减自己的均值**：那样界面两侧
+!    的 p 鬼点与本块内压相差"两块均值之差"这个常数，等效于在界面上加一层压差膜（实测
+!    p 块和 31→131→324→704 后发散）；**也不能完全不锚定**：闭合域 AC 的压力水平是
+!    中性模态，数值上会随每步的界面通量不平衡缓慢漂移。
+!    整个过程不含集合通信（单块时即等于原来的 Total_block=1 行为），np=1/2/3 与进程
+!    块数不等（1+2、1+1+1）都成立。
+     if(.not. have_pbc .and. B%Block_no .eq. 1) call ac_zero_mean_p(nMesh, mBlock)
      if(iter .eq. 1 .or. mod(iter, AC_Print) .eq. 0) then
        if(my_id .eq. 0) print*, '  AC iter', iter, ' res_q=', rq, ' res_m=', rm
      endif
-     if(iter .ge. 20 .and. rq .lt. AC_Tol .and. rm .lt. AC_Tol) exit
+!    AC_MPI_Sync=1: fixed-length pseudo march (see the halo block above) --
+!    every block must execute the same number of exchange rounds.
+     if(AC_MPI_Sync .eq. 0) then
+       if(iter .ge. 20 .and. rq .lt. AC_Tol .and. rm .lt. AC_Tol) exit
+     endif
    enddo
+   AC_In_Pseudo_Loop = 0    ! 伪步循环结束，恢复外层步的全局屏障
 !  register the AC residual of this block for the staggered outer-loop stop
 !  test (Iflag_Couple_Stop=1).  The driver resets Couple_Res_AC_* at the start
 !  of every outer round, so this max() is "worst block of this round".
@@ -224,6 +276,13 @@
    logical :: flag
    B => Mesh(nMesh)%Block(mBlock)
    flag = .false.
+!  With AC_MPI_Sync=1 and more than one process, the local block list is only
+!  a slice of the mesh: use the whole-job flag computed once at start-up
+!  (init_ac_parallel_flags) instead of the local scan below.
+   if(Total_proc .gt. 1 .and. AC_MPI_Sync .eq. 1) then
+     flag = (AC_PBC_Global .ne. 0)
+     return
+   endif
    do ksub = 1, B%subface
      Bc => B%bc_msg(ksub)
      if(is_interface_bc(Bc%bc)) cycle
@@ -550,6 +609,7 @@
     integer,intent(in):: iL,jL,kL,iR,jR,kR,dir
     real(PRE_EC),intent(in):: beta
     real(PRE_EC) :: FLX(4), A, nx1,ny1,nz1
+    real(PRE_EC) :: rb
     real(PRE_EC) :: FLX1(4), sb
     real(PRE_EC) :: qL,uL,vL,wL, qR,uR,vR,wR
     real(PRE_EC) :: uLw,vLw,wLw, uRw,vRw,wRw, dummy
@@ -698,12 +758,19 @@
     integer,intent(in):: iL,jL,kL,iR,jR,kR,dir
     real(PRE_EC),intent(in):: beta
     real(PRE_EC) :: FLX(4), A, nx1,ny1,nz1
+    real(PRE_EC) :: rb
+    integer :: iF,jF,kF
+!   Si/Sj/Sk have NO ghost layers (allocated as (nx,ny,nz)), so the face
+!   plane index is max(iL,iR): on the low side of a block the ghost cell
+!   index is 0 and would read out of bounds (garbage area -> the interface
+!   flux is silently scaled by ~0).
+    iF=max(iL,iR); jF=max(jL,jR); kF=max(kL,kR)
     if(dir .eq. 1) then
-      A=B%Si(iR,jR,kR); nx1=B%ni1(iR,jR,kR); ny1=B%ni2(iR,jR,kR); nz1=B%ni3(iR,jR,kR)
+      A=B%Si(iF,jF,kF); nx1=B%ni1(iF,jF,kF); ny1=B%ni2(iF,jF,kF); nz1=B%ni3(iF,jF,kF)
     else if(dir .eq. 2) then
-      A=B%Sj(iR,jR,kR); nx1=B%nj1(iR,jR,kR); ny1=B%nj2(iR,jR,kR); nz1=B%nj3(iR,jR,kR)
+      A=B%Sj(iF,jF,kF); nx1=B%nj1(iF,jF,kF); ny1=B%nj2(iF,jF,kF); nz1=B%nj3(iF,jF,kF)
     else
-      A=B%Sk(iR,jR,kR); nx1=B%nk1(iR,jR,kR); ny1=B%nk2(iR,jR,kR); nz1=B%nk3(iR,jR,kR)
+      A=B%Sk(iF,jF,kF); nx1=B%nk1(iF,jF,kF); ny1=B%nk2(iF,jF,kF); nz1=B%nk3(iF,jF,kF)
     endif
     call ac_flux_rusanov(XW(1,iL,jL,kL),XW(2,iL,jL,kL),XW(3,iL,jL,kL),XW(4,iL,jL,kL), &
                          XW(1,iR,jR,kR),XW(2,iR,jR,kR),XW(3,iR,jR,kR),XW(4,iR,jR,kR), &
@@ -711,6 +778,82 @@
     RAC(1:4,iL,jL,kL) = RAC(1:4,iL,jL,kL) - FLX(1:4)*A
     RAC(1:4,iR,jR,kR) = RAC(1:4,iR,jR,kR) + FLX(1:4)*A
    end subroutine ac_face_flux_rus1
+
+!===============================================================================
+! Same flux, but ONLY the locally owned cell is updated.  Required when the
+! opposite side lives on another process: FSH is a per-process array, so the
+! shared interface registry cannot resolve the pair (id = 0) and the ghost
+! cell must NOT receive a residual contribution (RAC has no ghost layers).
+! The flux itself is identical to ac_face_flux_rus1 -> the two processes apply
+! the same |FLX| with opposite signs, which is exactly conservative.
+!===============================================================================
+   subroutine ac_face_flux_rus1_own(B, iO,jO,kO, iG,jG,kG, dir, beta)
+    use Global_var
+    use lows_ac_work
+    implicit none
+    Type(Block_TYPE),pointer:: B
+    integer,intent(in):: iO,jO,kO,iG,jG,kG,dir
+    real(PRE_EC),intent(in):: beta
+    real(PRE_EC) :: FLX(4), A, nx1,ny1,nz1
+    real(PRE_EC) :: rb
+    integer :: iF,jF,kF, is_high
+!   plane index (Si/Sj/Sk have no ghost layers; iG can be 0)
+    iF=max(iO,iG); jF=max(jO,jG); kF=max(kO,kG)
+    if(dir .eq. 1) then
+      A=B%Si(iF,jF,kF); nx1=B%ni1(iF,jF,kF); ny1=B%ni2(iF,jF,kF); nz1=B%ni3(iF,jF,kF)
+    else if(dir .eq. 2) then
+      A=B%Sj(iF,jF,kF); nx1=B%nj1(iF,jF,kF); ny1=B%nj2(iF,jF,kF); nz1=B%nj3(iF,jF,kF)
+    else
+      A=B%Sk(iF,jF,kF); nx1=B%nk1(iF,jF,kF); ny1=B%nk2(iF,jF,kF); nz1=B%nk3(iF,jF,kF)
+    endif
+!   统一约定（与 ac_face_flux_rus1 完全一致）：L = 低索引一侧单元，R = 高索引一侧
+!   单元，法向 n 取该界面面元（由低侧指向高侧）。本单元在界面哪一侧由鬼点的索引
+!   关系决定：
+!       低侧单元（鬼点在更高索引）：RAC -= FLX*A
+!       高侧单元（鬼点在更低索引）：RAC += FLX*A
+!   这样界面的两侧（各自只更新自己的单元）拿到的是严格相反的通量：界面既守恒
+!   （净通量为零），又保留 Rusanov 的耗散项 -0.5*lam*(qR-qL)。
+!   两侧各算路径修过两次错（2026-10-17，3 块方腔 np=2/3 实测）：
+!   (1) 两侧原本都写 += FLX*A（法向又相同），耗散项在界面上相互抵消，界面棋盘模态
+!       完全无阻尼 -> 界面单元指数发散（块 1 的 i=14、块 3 的 i=1 逐层往腔内扩散，
+!       增长因子约 1.3/步）-> 改为按本单元在界面的哪一侧取 +/- 号。
+!   (2) is_high 的判据一度写反（鬼点索引更大时应为低侧），两侧的中央通量同时反向，
+!       界面变成"抽吸"源：收敛到 u 超过 1（实测 1.68/1.83）、界面整列错位 ~0.15 的
+!       非物理解 -> 判据改为 iG>iO（jG>jO / kG>kO）即本单元在低侧。
+    is_high = 1
+    if(dir .eq. 1) then
+      if(iG .gt. iO) is_high = 0
+    else if(dir .eq. 2) then
+      if(jG .gt. jO) is_high = 0
+    else
+      if(kG .gt. kO) is_high = 0
+    endif
+    if(is_high .eq. 1) then      ! 本单元在高索引侧: L=鬼点(低侧), R=本单元
+      call ac_flux_rusanov(XW(1,iG,jG,kG),XW(2,iG,jG,kG),XW(3,iG,jG,kG),XW(4,iG,jG,kG), &
+                           XW(1,iO,jO,kO),XW(2,iO,jO,kO),XW(3,iO,jO,kO),XW(4,iO,jO,kO), &
+                           nx1,ny1,nz1, beta, FLX)
+      rb = RAC(1,iO,jO,kO)
+      RAC(1:4,iO,jO,kO) = RAC(1:4,iO,jO,kO) + FLX(1:4)*A
+    else                         ! 本单元在低索引侧: L=本单元, R=鬼点(高侧)
+      call ac_flux_rusanov(XW(1,iO,jO,kO),XW(2,iO,jO,kO),XW(3,iO,jO,kO),XW(4,iO,jO,kO), &
+                           XW(1,iG,jG,kG),XW(2,iG,jG,kG),XW(3,iG,jG,kG),XW(4,iG,jG,kG), &
+                           nx1,ny1,nz1, beta, FLX)
+      rb = RAC(1,iO,jO,kO)
+      RAC(1:4,iO,jO,kO) = RAC(1:4,iO,jO,kO) - FLX(1:4)*A
+    endif
+!IFC DIAG
+    if(ac_dbg .eq. 1 .and. iO .eq. 1 .and. jO .eq. 1 .and. kO .eq. 1 .and. &
+       ac_dbg_i .lt. 6) then
+      ac_dbg_i = ac_dbg_i + 1
+      write(*,'(A,I4,A,I2)') ' DBG rus1own blk=',B%Block_no,' dir=',dir
+      write(*,'(A,4ES24.15)') ' DBG rus1own FLX=',FLX
+      write(*,'(A,ES24.15,A,ES24.15)') ' DBG rus1own A=',A,' nrmag=',  &
+        sqrt(nx1*nx1+ny1*ny1+nz1*nz1)
+      write(*,'(A,ES24.15,A,ES24.15)') ' DBG rus1own RAC before=',rb, &
+        ' after=',RAC(1,iO,jO,kO)
+    endif
+!IFC DIAG END
+   end subroutine ac_face_flux_rus1_own
 
 !===============================================================================
 ! Same-class block-interface registry (owner = block with the smaller number).
@@ -726,6 +869,11 @@
     if(allocated(FSH)) deallocate(FSH)
     ac_ifc_n = 0
     mx = 1; my = 1; mz = 1
+!  NOTE (MPI): Mesh(nMesh)%Num_Block is the LOCAL number of blocks on this
+!  rank and Block(m) is the LOCAL block array, while Bc%nb1 is a GLOBAL block
+!  number -> the global total (Total_block) and B%Block_no must be used for
+!  every comparison.  The registry stores the LOCAL index of the owner (so it
+!  can be dereferenced directly) and the GLOBAL number of the neighbour.
     do mBlock = 1, Mesh(nMesh)%Num_Block
       B => Mesh(nMesh)%Block(mBlock)
       if(B%Block_type .ne. BLOCK_LOWSPEED) cycle
@@ -734,14 +882,14 @@
         Bc => B%bc_msg(ksub)
         if(.not. is_interface_bc(Bc%bc)) cycle
         nb = Bc%nb1
-        if(nb .le. 0 .or. nb .gt. Mesh(nMesh)%Num_Block) cycle
+        if(nb .le. 0 .or. nb .gt. Total_block) cycle
         if(Block_Type_List(nb) .ne. BLOCK_LOWSPEED) cycle
-        if(mBlock .ge. nb) cycle
+        if(B%Block_no .ge. nb) cycle        ! owner = smaller GLOBAL block no.
         ac_ifc_n = ac_ifc_n + 1
         if(ac_ifc_n .le. AC_IFC_MAX) then
-          ac_ifc_own(ac_ifc_n) = mBlock
+          ac_ifc_own(ac_ifc_n) = mBlock   ! LOCAL index of the owner block
           ac_ifc_ks (ac_ifc_n) = ksub
-          ac_ifc_nb (ac_ifc_n) = nb
+          ac_ifc_nb (ac_ifc_n) = nb       ! GLOBAL block number of the partner
         endif
         mx = max(mx, B%nx); my = max(my, B%ny); mz = max(mz, B%nz)
       enddo
@@ -770,20 +918,22 @@
     integer, intent(in) :: nMesh, mBlock, ksub
     integer, intent(out) :: id
     logical, intent(out) :: is_owner
-    integer :: k
+    integer :: k, mG
     Type (Block_TYPE),pointer:: Bo
     TYPE (BC_MSG_TYPE),pointer:: Bc, Bco
     id = 0; is_owner = .false.
+    if(mBlock .lt. 1 .or. mBlock .gt. Mesh(nMesh)%Num_Block) return
+    mG = Mesh(nMesh)%Block(mBlock)%Block_no   ! GLOBAL block number
     do k = 1, ac_ifc_n
-      if(ac_ifc_own(k) .eq. mBlock .and. ac_ifc_ks(k) .eq. ksub) then
+      if(Mesh(nMesh)%Block(ac_ifc_own(k))%Block_no .eq. mG &
+         .and. ac_ifc_ks(k) .eq. ksub) then
         id = k; is_owner = .true.; return
       endif
     enddo
-    if(mBlock .lt. 1 .or. mBlock .gt. Mesh(nMesh)%Num_Block) return
     if(.not. associated(Mesh(nMesh)%Block(mBlock)%bc_msg)) return
     Bc => Mesh(nMesh)%Block(mBlock)%bc_msg(ksub)
     do k = 1, ac_ifc_n
-      if(ac_ifc_nb(k) .ne. mBlock) cycle
+      if(ac_ifc_nb(k) .ne. mG) cycle
       Bo => Mesh(nMesh)%Block(ac_ifc_own(k))
       if(.not. associated(Bo%bc_msg)) cycle
       Bco => Bo%bc_msg(ac_ifc_ks(k))
@@ -847,6 +997,7 @@
     integer,intent(in):: id, iO,jO,kO, iG,jG,kG, dir
     real(PRE_EC),intent(in):: beta
     real(PRE_EC) :: FLX(4), A, nx1,ny1,nz1
+    real(PRE_EC) :: rb
     integer :: iF,jF,kF
     iF=max(iO,iG); jF=max(jO,jG); kF=max(kO,kG)          ! face plane index
     if(dir .eq. 1) then
@@ -912,6 +1063,7 @@
 ! ===============================================================================
    subroutine ac_ifc_face(nMesh, B, id, is_owner, iO,jO,kO, iG,jG,kG, dir, beta)
     use Global_var
+    use lows_ac_work
     use precision_EC
     implicit none
     integer,intent(in):: nMesh, id, iO,jO,kO, iG,jG,kG, dir
@@ -939,9 +1091,36 @@
         integer,intent(in):: iL,jL,kL,iR,jR,kR,dir
         real(PRE_EC),intent(in):: beta
       end subroutine ac_face_flux_rus1
+      subroutine ac_face_flux_rus1_own(B, iO,jO,kO, iG,jG,kG, dir, beta)
+        use Global_var
+        use precision_EC
+        Type (Block_TYPE),pointer:: B
+        integer,intent(in):: iO,jO,kO,iG,jG,kG,dir
+        real(PRE_EC),intent(in):: beta
+      end subroutine ac_face_flux_rus1_own
     end interface
-    if(id .le. 0) then
-      call ac_face_flux_rus1(B, iO,jO,kO, iG,jG,kG, dir, beta)
+    if(id .le. 0 .or. ac_closed_dom) then
+!    A pair that could not be resolved through the shared registry: locally this
+!    happens whenever the neighbour block is owned by ANOTHER process (FSH is a
+!    per-process array).  Only the owned cell may be updated -- RAC carries no
+!    ghost layers, so the two-sided variant would write out of bounds (memory
+!    corruption / SIGSEGV).  With one process the legacy call is kept bit-for-bit.
+!    闭合域（ac_closed_dom）另外把"本可走共享 FSH"的同一进程界面也降级为两侧
+!    各算：AC 驱动逐块成批推进，共享通量在闭合域会滞后成界面净质量源（方腔
+!    3 块 np=1 实测 NaN）；两侧各算与跨进程路径一致，np=1/2/3 结果可比。
+      if(Total_proc .eq. 1 .and. .not. ac_closed_dom) then
+        call ac_face_flux_rus1(B, iO,jO,kO, iG,jG,kG, dir, beta)
+      else
+        call ac_face_flux_rus1_own(B, iO,jO,kO, iG,jG,kG, dir, beta)
+      endif
+!IFC DIAG
+      if(ac_dbg .eq. 1 .and. jO .eq. 1 .and. ac_dbg_find .lt. 40) then
+        ac_dbg_find = ac_dbg_find + 1
+        write(*,*) ' DBG id0 blk=',B%Block_no,' cell=',iO,jO,kO,' ghost=',iG,jG,kG, &
+          ' dir=',dir,' u_own=',XW(2,iO,jO,kO),' u_gh=',XW(2,iG,jG,kG), &
+          ' A=',B%Si(max(iO,iG),max(jO,jG),max(kO,kG)),' RAC1=',RAC(1,iO,jO,kO)
+      endif
+!IFC DIAG END
     else if(is_owner) then
       call ac_ifc_flux_own(B, id, iO,jO,kO, iG,jG,kG, dir, beta)
     else
@@ -989,7 +1168,7 @@
     do ksub = 1, B%subface
       Bc => B%bc_msg(ksub)
       if(.not. is_interface_bc(Bc%bc)) cycle
-      if(Bc%nb1 .le. 0 .or. Bc%nb1 .gt. Mesh(nMesh)%Num_Block) cycle
+      if(Bc%nb1 .le. 0 .or. Bc%nb1 .gt. Total_block) cycle
       if(Block_Type_List(Bc%nb1) .ne. BLOCK_LOWSPEED) cycle
       face_s = Bc%face
       ib=Bc%ib; ie=Bc%ie; jb=Bc%jb; je=Bc%je; kb=Bc%kb; ke=Bc%ke

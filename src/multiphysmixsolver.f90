@@ -44,10 +44,23 @@
    call set_control_para                   ! ?څ????????????????????????????????????????????????????????
    call check_mesh_quality                 ! ???????????,?????????????????????????
    call Init_flow                          ! ????????? ???????
+!  Halo-exchange self test (IF_Debug = 3): fills U(1:NVAR) and the low-speed /
+!  porous pressure B%p with a unique per-(block,i,j,k) sentinel, runs the
+!  same-class buffer exchange and verifies EVERY ghost cell against the mapped
+!  neighbour value (same-process and cross-process subfaces alike).  The state
+!  is restored before the run continues, so this is non-destructive.
+!  Set IF_Debug=3 in control.ec and read the "[bufchk]" lines at start-up.
+   if(IF_Debug == 3) then
+     if(my_id == 0) print*, " Halo-exchange self test (IF_Debug=3) ......"
+     call check_buffer_exchange(1)
+   endif
 !  Cross-process safety net: abort automatically when this mesh mixes block
 !  types whose interface has no MPI version (12/14/17/18/19) and the two
 !  sides are on different processes.  np = 1 returns immediately.
    call check_remote_coupling_support(1)
+!  Parallel AC march: whole-job pressure-BC flag + AC_MPI_Sync safety checks
+!  (start-up only; np=1 and jobs without AC blocks are unaffected)
+   call init_ac_parallel_flags(1)
 
    if(my_id .eq. 0) print*, " Start ......"
 
@@ -143,6 +156,8 @@
            if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
            call Boundary_condition_onemesh(1)          ! ??????? (?څGhost Cell???)
            call update_buffer_onemesh(1)               ! ?????????????
+           call update_p_buffer_onemesh(1)             ! low-speed AC: p 鬼点(每外层步一次)
+
            call update_Ts_buffer_onemesh(1)            ! ???????????????
          enddo
 
@@ -159,6 +174,8 @@
            if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
            call Boundary_condition_onemesh(1)          ! ??????? (?څGhost Cell???)
            call update_buffer_onemesh(1)               ! ?????????????
+           call update_p_buffer_onemesh(1)             ! low-speed AC: p 鬼点(每外层步一次)
+
            call update_Ts_buffer_onemesh(1)            ! ???????????????
            call comput_max_Res_onemesh(1)              ! ???????/???????��?
            max_res=Mesh(1)%Res_rms(1)
@@ -192,6 +209,7 @@
          if( IFLAG_LIMIT_FLOW == 1) call limit_flow(1)
          call Boundary_condition_onemesh(1)            ! ??????? (?څGhost Cell???)
          call update_buffer_onemesh(1)                 ! ?????????????
+         call update_p_buffer_onemesh(1)               ! low-speed AC: p 鬼点(每外层步一次，各进程计数恒定)
          call update_Ts_buffer_onemesh(1)            ! ???????????????
        end select
 

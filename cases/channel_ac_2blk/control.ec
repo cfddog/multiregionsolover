@@ -90,4 +90,8 @@ AC_beta=1.d0
 AC_CFL=20.d0
 AC_Max_Iter=20
 AC_Print=2000
+!  parallel-safe AC march: U(1:5)+p ghost halo on every pseudo step and exactly
+!  AC_Max_Iter=20 steps per call (no AC_Tol early exit) -> np=1 and np=2 march
+!  the same sequence and agree bit for bit
+AC_MPI_Sync=1
 $end

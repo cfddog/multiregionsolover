@@ -25,7 +25,10 @@
     call Umessage_send_mpi(nMesh)   ! 使用MPI发送全部信息 ；如目标块也在本进程内，则不通过MPI,直接交换信息.
     call Umessage_recv_mpi(nMesh)   ! 接收全部信息
    
-    call MPI_Barrier(MPI_COMM_WORLD,ierr)
+!   AC 逐块伪时间步循环内不做全局屏障：各进程的 AC 块数可能不等（np=2 的 1+2），
+!   同一外层步内本子程序的调用次数就不同，MPI_Barrier 计数不匹配会直接死锁（实测
+!   np=2 挂死）。U/p 鬼点交换全是成对的 MPI_Bsend/MPI_Recv，不依赖屏障定序。
+    if(AC_In_Pseudo_Loop .eq. 0) call MPI_Barrier(MPI_COMM_WORLD,ierr)
     
 	if(If_TurboMachinary ==1) then
         call Umessage_Turbo_Periodic(nMesh)   !  处理周期边界条件 
@@ -138,24 +141,14 @@
 		  enddo
 		 enddo
 	  endif	
-	!  same-class low-speed pair: B%p lives outside U(1:5), so it is copied
-!  separately on the direct (same-process) path.
-  if(Send_to_ID .eq. my_id) then
-    if(B%Block_type == BLOCK_LOWSPEED .and. &
-       Block_Type_List(Bc%nb1) == BLOCK_LOWSPEED) then
-      mb=B_n(Bc%nb1)
-      B1 => Mesh(nMesh)%Block(mb)
-      do k=kb1(3),ke1(3)
-      do j=kb1(2),ke1(2)
-      do i=kb1(1),ke1(1)
-        ka(1)=i-kb1(1); ka(2)=j-kb1(2); ka(3)=k-kb1(3)
-        i1=ks(1)+ka(L1)*P(1)
-        j1=ks(2)+ka(L2)*P(2)
-        k1=ks(3)+ka(L3)*P(3)
-        B1%p(i,j,k) = B%p(i1,j1,k1)
-      enddo; enddo; enddo
-    endif
-  endif
+!  B%p (low-speed / porous) is NOT exchanged here any more: p lives outside
+!  U(1:5) and therefore cannot be packed into Usend.  Its halo is updated by
+!  p_send_mpi/p_recv_mpi (update_p_buffer_onemesh), which handles the
+!  same-process (direct write) and the cross-process (MPI_Bsend/Recv) cases in
+!  ONE code path with ONE block-type filter.  The old fused copy that lived
+!  here only covered same-process LOWSPEED<->LOWSPEED pairs, so the p halo
+!  coverage depended on who called update_buffer_onemesh and the porous pairs
+!  were silently skipped (see docs/程序说明 changelog).
   deallocate(Usend)
 
   enddo
@@ -834,3 +827,491 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
    enddo
  enddo
  end subroutine Ts_recv_mpi
+
+!----------------------------------------------------------------------
+! Same-class interface pressure halo for the AC low-speed / porous blocks
+!
+!   BLOCK_LOWSPEED / BLOCK_POROUS keep the primitive state in
+!   U(1:4) = (rho,u,v,w) and the pressure OUTSIDE U in B%p.  Umessage_send_mpi
+!   refreshes the U ghost layers of every same-class interface and already
+!   copies B%p on the SAME-PROCESS path (see its `Send_to_ID .eq. my_id`
+!   branch), which is why np=1 has always been consistent.  Across processes
+!   the p ghost layer was never sent: the AC flux reconstructs XW(1)=p/rho
+!   from the ghost cells, so a remote interface froze the interface pressure
+!   at its initial level.
+!
+!   These two routines cover exactly that missing path and use the same
+!   subface list, index orientation (L1..L3 / P) and tag scheme
+!   (nb1*1000+f_no1) as Umessage_send/recv_mpi, so a pair of processes
+!   matches link by link.  Only low-speed/porous pairs are exchanged here;
+!   cross-class coupling faces (11..19) belong to the couple_* routines.
+!
+!   Called from the AC pseudo loop right after update_buffer_onemesh, which
+!   means both sides must iterate that loop the same number of times -- that
+!   is guaranteed by AC_MPI_Sync=1 (fixed AC_Max_Iter steps on every rank).
+!----------------------------------------------------------------------
+     subroutine update_p_buffer_onemesh(nMesh)
+     use Global_Var
+     implicit none
+     integer:: nMesh
+     call p_send_mpi(nMesh)
+     call p_recv_mpi(nMesh)
+!    no MPI_Barrier: called inside the per-block AC pseudo loop
+     end subroutine update_p_buffer_onemesh
+
+!----------------------------------------------------------------------
+     subroutine p_send_mpi(nMesh)
+     use Global_Var
+     use const_var
+     implicit none
+     Type (Block_TYPE),pointer:: B,B1
+     Type (BC_MSG_TYPE),pointer:: Bc
+     integer:: i,j,k,m,i1,j1,k1,mb,mBlock,ksub,nMesh,Send_to_ID,Num_data,tag,ierr
+     integer:: kb(3),ke(3),kb1(3),ke1(3),ka(3),L1,L2,L3,P(3),Ks(3)
+     real(PRE_EC),allocatable,dimension(:,:,:):: psend
+
+ do mBlock=1,Mesh(nMesh)%Num_Block
+   B => Mesh(nMesh)%Block(mBlock)
+   if(.not. (B%Block_type==BLOCK_LOWSPEED .or. B%Block_type==BLOCK_POROUS)) cycle
+   if(.not. associated(B%p)) cycle      ! 非 AC 场（未分配 p）：本子程序现在每个外层步都被调用
+   do ksub=1,B%subface
+     Bc=> B%bc_msg(ksub)
+     if(Bc%bc .ge. 0) cycle                ! same-class (BC_Inner/periodic) only
+     if(.not. (Block_Type_List(Bc%nb1)==BLOCK_LOWSPEED .or. &
+               Block_Type_List(Bc%nb1)==BLOCK_POROUS)) cycle
+!    Source data: LAP interior layers next to the boundary
+     kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
+     k=mod(Bc%face-1,3)+1
+     if(Bc%face .gt. 3) kb(k)=kb(k)-LAP
+     ke(k)=kb(k)+LAP-1
+!    Target data: ghost layers
+     kb1(1)=Bc%ib1; ke1(1)=Bc%ie1-1; kb1(2)=Bc%jb1; ke1(2)=Bc%je1-1; kb1(3)=Bc%kb1; ke1(3)=Bc%ke1-1
+     k=mod(Bc%face1-1,3)+1
+     if(Bc%face1 .le. 3) kb1(k)=kb1(k)-LAP
+     ke1(k)=kb1(k)+LAP-1
+     L1=abs(Bc%L1); P(1)=sign(1,Bc%L1)
+     L2=abs(Bc%L2); P(2)=sign(1,Bc%L2)
+     L3=abs(Bc%L3); P(3)=sign(1,Bc%L3)
+     do k=1,3
+       if(P(k) .gt. 0) then
+         ks(k)=kb(k)
+       else
+         ks(k)=ke(k)
+       endif
+     enddo
+     Send_to_ID=B_proc(Bc%nb1)
+     if(Send_to_ID .eq. my_id) then
+!      Target block is local -> write the ghost layers directly (no temporary
+!      buffer, no MPI).  This is the ONLY same-process path for p: it used to
+!      be duplicated/fused inside Umessage_send_mpi, where the filter was
+!      LOWSPEED<->LOWSPEED only, so porous pairs never got a p halo and the
+!      refresh cadence followed the U-exchange call sites.
+       mb=B_n(Bc%nb1)
+       B1 => Mesh(nMesh)%Block(mb)
+       if(associated(B1%p)) then
+         do k=kb1(3),ke1(3)
+         do j=kb1(2),ke1(2)
+         do i=kb1(1),ke1(1)
+           ka(1)=i-kb1(1); ka(2)=j-kb1(2); ka(3)=k-kb1(3)
+           i1=ks(1)+ka(L1)*P(1)
+           j1=ks(2)+ka(L2)*P(2)
+           k1=ks(3)+ka(L3)*P(3)
+           B1%p(i,j,k)=B%p(i1,j1,k1)
+         enddo; enddo; enddo
+       endif
+     else
+       allocate(psend(kb1(1):ke1(1),kb1(2):ke1(2),kb1(3):ke1(3)))
+       do k=kb1(3),ke1(3)
+         do j=kb1(2),ke1(2)
+           do i=kb1(1),ke1(1)
+             ka(1)=i-kb1(1); ka(2)=j-kb1(2); ka(3)=k-kb1(3)
+             i1=ks(1)+ka(L1)*P(1)
+             j1=ks(2)+ka(L2)*P(2)
+             k1=ks(3)+ka(L3)*P(3)
+             psend(i,j,k)=B%p(i1,j1,k1)
+           enddo
+         enddo
+       enddo
+       Num_data=(ke1(1)-kb1(1)+1)*(ke1(2)-kb1(2)+1)*(ke1(3)-kb1(3)+1)
+       tag=Bc%nb1*1000+Bc%f_no1
+       call MPI_Bsend(psend,Num_data,OCFD_DATA_TYPE, Send_to_ID, tag, MPI_COMM_WORLD,ierr)
+       deallocate(psend)
+     endif
+   enddo
+ enddo
+ end subroutine p_send_mpi
+
+!----------------------------------------------------------------------
+ subroutine p_recv_mpi(nMesh)
+     use Global_Var
+     use const_var
+     implicit none
+     Type (Block_TYPE),pointer:: B
+     Type (BC_MSG_TYPE),pointer:: Bc
+     integer:: i,j,k,mBlock,ksub,nMesh,Recv_from_ID,kb(3),ke(3)
+     integer:: tag,Num_data,ierr,Status(MPI_Status_SIZE)
+     real(PRE_EC),allocatable,dimension(:,:,:):: precv
+
+ do mBlock=1,Mesh(nMesh)%Num_Block
+   B => Mesh(nMesh)%Block(mBlock)
+   if(.not. (B%Block_type==BLOCK_LOWSPEED .or. B%Block_type==BLOCK_POROUS)) cycle
+   if(.not. associated(B%p)) cycle      ! 非 AC 场（未分配 p）
+   do ksub=1,B%subface
+     Bc=> B%bc_msg(ksub)
+     if(Bc%bc .ge. 0) cycle
+     if(.not. (Block_Type_List(Bc%nb1)==BLOCK_LOWSPEED .or. &
+               Block_Type_List(Bc%nb1)==BLOCK_POROUS)) cycle
+     Recv_from_ID=B_proc(Bc%nb1)
+     if(Recv_from_ID .eq. my_id) cycle     ! same process: p_send_mpi already copied
+!    own ghost layers
+     kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
+     k=mod(Bc%face-1,3)+1
+     if(Bc%face .le. 3) kb(k)=kb(k)-LAP
+     ke(k)=kb(k)+LAP-1
+     allocate(precv(kb(1):ke(1),kb(2):ke(2),kb(3):ke(3)))
+     Num_data=(ke(1)-kb(1)+1)*(ke(2)-kb(2)+1)*(ke(3)-kb(3)+1)
+     tag=B%Block_no*1000+Bc%f_no
+     call MPI_Recv(precv,Num_data,OCFD_DATA_TYPE,Recv_from_ID,tag,MPI_COMM_WORLD,status,ierr)
+     do k=kb(3),ke(3)
+       do j=kb(2),ke(2)
+         do i=kb(1),ke(1)
+           B%p(i,j,k)=precv(i,j,k)
+         enddo
+       enddo
+     enddo
+     deallocate(precv)
+   enddo
+ enddo
+ end subroutine p_recv_mpi
+
+
+!===============================================================================
+! Halo-exchange self test -- called from main when IF_Debug = 3.
+!
+! Verifies that the same-class ghost buffer exchange REALLY transfers data, for
+! every vector component of U(1:NVAR) and for the low-speed/porous pressure p,
+! on every subface of every local block.
+!
+! Method: overwrite the whole array (interior + ghost) with a value that is
+! unique per (global block, i, j, k, component)
+!
+!     sent = ((blk*1000 + i+16)*1000 + j+16)*1000 + (k+16) + m/8
+!
+! run update_buffer_onemesh + update_p_buffer_onemesh, and compare every ghost
+! cell of target block nb1 with sent(blk_src, i1,j1,k1, m), where blk_src is
+! the block that OWNS the source cell (B%Block_no) and (i1,j1,k1) is obtained
+! with the SAME L1/L2/L3/P mapping that the packers use.  Both sides of an
+! interface know (B, nb1, i1,j1,k1), so the expected value can be computed
+! locally on each rank: no cross-rank memory access and no extra communication
+! is needed, which is exactly what lets this test also cover the cross-process
+! subfaces.
+!
+! The p check is applied only to LOWSPEED/POROUS pairs, i.e. exactly the
+! subfaces that p_send_mpi/p_recv_mpi are supposed to serve.
+!
+! The original state is saved before the test and restored afterwards, so the
+! initial condition is not perturbed.  Output: one line per subface (each rank,
+! its own subfaces -- "local = T/F" shows whether the subface was exchanged in
+! memory or through MPI) plus an MPI_Allreduce summary with the global maximum
+! error and a PASS/FAIL verdict on rank 0.
+!===============================================================================
+ subroutine check_buffer_exchange(nMesh)
+   use Global_Var
+   use const_var
+   implicit none
+   Type (Block_TYPE),pointer:: B,B1
+   Type (BC_MSG_TYPE),pointer:: Bc
+   integer,intent(in):: nMesh
+   integer:: mBlock,ksub,m,i,j,k,i1,j1,k1,mb
+   integer:: kb(3),ke(3),kb1(3),ke1(3),ka(3),L1,L2,L3,P(3),ks(3)
+   integer:: ncel,ncel_all,nface_l,nface_c,nface_l_all,nface_c_all
+   integer:: nbad,nbad_all,nfcel,ntot,ntotp,iu,ip,ierr
+   real(PRE_EC):: ex,uerr,perr,eu,ep,eu_all,ep_all
+   real(PRE_EC),allocatable:: Usave(:),psave(:)
+   real(PRE_EC),allocatable:: Uexp(:,:,:,:),pexp(:,:,:),Ugot(:,:,:,:),pgot(:,:,:)
+   integer:: status(MPI_STATUS_SIZE)
+   integer,parameter:: CK_TAG=900000      ! tag base of the verification messages
+   logical:: chkp
+   interface
+     subroutine update_buffer_onemesh(nMesh)
+       use precision_EC
+       integer:: nMesh
+     end subroutine update_buffer_onemesh
+     subroutine update_p_buffer_onemesh(nMesh)
+       use precision_EC
+       integer:: nMesh
+     end subroutine update_p_buffer_onemesh
+   end interface
+
+!---- pass 1: save the original state, then fill it with the sentinel --------
+   ntot=0; ntotp=0
+   do mBlock=1,Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(.not. associated(B%U)) cycle
+     ntot=ntot+size(B%U)
+     if(associated(B%p)) ntotp=ntotp+size(B%p)
+   enddo
+   allocate(Usave(max(ntot,1)),psave(max(ntotp,1)))
+   iu=0; ip=0
+   do mBlock=1,Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(.not. associated(B%U)) cycle
+     do k=lbound(B%U,4),ubound(B%U,4)
+     do j=lbound(B%U,3),ubound(B%U,3)
+     do i=lbound(B%U,2),ubound(B%U,2)
+       do m=1,NVAR
+         iu=iu+1; Usave(iu)=B%U(m,i,j,k)
+         B%U(m,i,j,k)=sent(B%Block_no,i,j,k,m)
+       enddo
+     enddo; enddo; enddo
+     if(associated(B%p)) then
+       do k=lbound(B%p,3),ubound(B%p,3)
+       do j=lbound(B%p,2),ubound(B%p,2)
+       do i=lbound(B%p,1),ubound(B%p,1)
+         ip=ip+1; psave(ip)=B%p(i,j,k)
+         B%p(i,j,k)=sent(B%Block_no,i,j,k,0)
+       enddo; enddo; enddo
+     endif
+   enddo
+
+!---- the exchange under test ------------------------------------------------
+   call update_buffer_onemesh(nMesh)
+   call update_p_buffer_onemesh(nMesh)
+
+
+!---- pass 2: verify every SAME-PROCESS subface directly --------------------
+!  (for a cross-process subface the neighbour block does not exist on this rank,
+!   so B1 cannot be dereferenced: those are verified in passes 3-4)
+   eu=0.d0; ep=0.d0; ncel=0; nbad=0; nface_l=0; nface_c=0
+   do mBlock=1,Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(.not. associated(B%U)) cycle
+     do ksub=1,B%subface
+       Bc => B%bc_msg(ksub)
+       if(Bc%bc .ge. 0) cycle                 ! physical BC, not a halo face
+       if(B_proc(Bc%nb1) .ne. my_id) cycle    ! cross-process: passes 3-4
+!      source range (identical to Umessage_send_mpi / p_send_mpi)
+       kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
+       k=mod(Bc%face-1,3)+1
+       if(Bc%face .gt. 3) kb(k)=kb(k)-LAP
+       ke(k)=kb(k)+LAP-1
+!      target (ghost) range
+       kb1(1)=Bc%ib1; ke1(1)=Bc%ie1-1; kb1(2)=Bc%jb1; ke1(2)=Bc%je1-1; kb1(3)=Bc%kb1; ke1(3)=Bc%ke1-1
+       k=mod(Bc%face1-1,3)+1
+       if(Bc%face1 .le. 3) kb1(k)=kb1(k)-LAP
+       ke1(k)=kb1(k)+LAP-1
+!      dimension mapping / order
+       L1=abs(Bc%L1); P(1)=sign(1,Bc%L1)
+       L2=abs(Bc%L2); P(2)=sign(1,Bc%L2)
+       L3=abs(Bc%L3); P(3)=sign(1,Bc%L3)
+       do k=1,3
+         if(P(k) .gt. 0) then
+           ks(k)=kb(k)
+         else
+           ks(k)=ke(k)
+         endif
+       enddo
+       mb=B_n(Bc%nb1)
+       B1 => Mesh(nMesh)%Block(mb)
+!      does this subface carry a pressure halo? (same filter as p_send_mpi)
+       chkp = associated(B1%p) .and. &
+              (B%Block_type==BLOCK_LOWSPEED .or. B%Block_type==BLOCK_POROUS) .and. &
+              (Block_Type_List(Bc%nb1)==BLOCK_LOWSPEED .or. &
+               Block_Type_List(Bc%nb1)==BLOCK_POROUS)
+       uerr=0.d0; perr=0.d0; nfcel=0
+       do k=kb1(3),ke1(3)
+       do j=kb1(2),ke1(2)
+       do i=kb1(1),ke1(1)
+         ka(1)=i-kb1(1); ka(2)=j-kb1(2); ka(3)=k-kb1(3)
+         i1=ks(1)+ka(L1)*P(1)
+         j1=ks(2)+ka(L2)*P(2)
+         k1=ks(3)+ka(L3)*P(3)
+         nfcel=nfcel+1
+         do m=1,NVAR
+           ex=sent(B%Block_no,i1,j1,k1,m)
+           uerr=max(uerr,abs(B1%U(m,i,j,k)-ex))
+         enddo
+         if(chkp) then
+           ex=sent(B%Block_no,i1,j1,k1,0)
+           perr=max(perr,abs(B1%p(i,j,k)-ex))
+         endif
+       enddo; enddo; enddo
+       ncel=ncel+nfcel
+       if(nfcel .gt. 0 .and. (uerr .gt. 0.d0 .or. perr .gt. 0.d0)) nbad=nbad+1
+       nface_l=nface_l+1
+       eu=max(eu,uerr); ep=max(ep,perr)
+       write(*,'(A,I3,A,I4,A,I2,A,I4,A,I2,A,I6,A,ES11.3,A,ES11.3,A)') &
+         ' [bufchk] rank',my_id,' blk',B%Block_no,' face',Bc%face, &
+         ' <-> blk',Bc%nb1,' face',Bc%face1,' cells=',nfcel, &
+         ' max|dU|=',uerr,' max|dp|=',perr,' local= T'
+     enddo
+   enddo
+
+
+
+!---- pass 3: cross-process subfaces -- send the neighbour a buffer that holds
+!     EXACTLY what its ghost layers should contain after the exchange ----------
+   do mBlock=1,Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(.not. associated(B%U)) cycle
+     do ksub=1,B%subface
+       Bc => B%bc_msg(ksub)
+       if(Bc%bc .ge. 0) cycle
+       if(B_proc(Bc%nb1) .eq. my_id) cycle
+!      source range (B) and target ghost range (neighbour), as in the packers
+       kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
+       k=mod(Bc%face-1,3)+1
+       if(Bc%face .gt. 3) kb(k)=kb(k)-LAP
+       ke(k)=kb(k)+LAP-1
+       kb1(1)=Bc%ib1; ke1(1)=Bc%ie1-1; kb1(2)=Bc%jb1; ke1(2)=Bc%je1-1; kb1(3)=Bc%kb1; ke1(3)=Bc%ke1-1
+       k=mod(Bc%face1-1,3)+1
+       if(Bc%face1 .le. 3) kb1(k)=kb1(k)-LAP
+       ke1(k)=kb1(k)+LAP-1
+       L1=abs(Bc%L1); P(1)=sign(1,Bc%L1)
+       L2=abs(Bc%L2); P(2)=sign(1,Bc%L2)
+       L3=abs(Bc%L3); P(3)=sign(1,Bc%L3)
+       do k=1,3
+         if(P(k) .gt. 0) then
+           ks(k)=kb(k)
+         else
+           ks(k)=ke(k)
+         endif
+       enddo
+       chkp = (B%Block_type==BLOCK_LOWSPEED .or. B%Block_type==BLOCK_POROUS) .and. &
+              (Block_Type_List(Bc%nb1)==BLOCK_LOWSPEED .or. &
+               Block_Type_List(Bc%nb1)==BLOCK_POROUS)
+       allocate(Uexp(NVAR,kb1(1):ke1(1),kb1(2):ke1(2),kb1(3):ke1(3)))
+       do k=kb1(3),ke1(3)
+       do j=kb1(2),ke1(2)
+       do i=kb1(1),ke1(1)
+         ka(1)=i-kb1(1); ka(2)=j-kb1(2); ka(3)=k-kb1(3)
+         i1=ks(1)+ka(L1)*P(1)
+         j1=ks(2)+ka(L2)*P(2)
+         k1=ks(3)+ka(L3)*P(3)
+         do m=1,NVAR
+           Uexp(m,i,j,k)=sent(B%Block_no,i1,j1,k1,m)
+         enddo
+       enddo; enddo; enddo
+       call MPI_Bsend(Uexp,size(Uexp),OCFD_DATA_TYPE,B_proc(Bc%nb1), &
+                      CK_TAG+Bc%nb1*1000+Bc%f_no1,MPI_COMM_WORLD,ierr)
+       deallocate(Uexp)
+       if(chkp) then
+         allocate(pexp(kb1(1):ke1(1),kb1(2):ke1(2),kb1(3):ke1(3)))
+         do k=kb1(3),ke1(3)
+         do j=kb1(2),ke1(2)
+         do i=kb1(1),ke1(1)
+           ka(1)=i-kb1(1); ka(2)=j-kb1(2); ka(3)=k-kb1(3)
+           i1=ks(1)+ka(L1)*P(1)
+           j1=ks(2)+ka(L2)*P(2)
+           k1=ks(3)+ka(L3)*P(3)
+           pexp(i,j,k)=sent(B%Block_no,i1,j1,k1,0)
+         enddo; enddo; enddo
+         call MPI_Bsend(pexp,size(pexp),OCFD_DATA_TYPE,B_proc(Bc%nb1), &
+                        CK_TAG+500000+Bc%nb1*1000+Bc%f_no1,MPI_COMM_WORLD,ierr)
+         deallocate(pexp)
+       endif
+     enddo
+   enddo
+
+!---- pass 4: cross-process subfaces -- receive the expected buffer and
+!     compare it with the ghost layers this rank actually holds ---------------
+   do mBlock=1,Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(.not. associated(B%U)) cycle
+     do ksub=1,B%subface
+       Bc => B%bc_msg(ksub)
+       if(Bc%bc .ge. 0) cycle
+       if(B_proc(Bc%nb1) .eq. my_id) cycle
+!      my own ghost range next to this face
+       kb(1)=Bc%ib; ke(1)=Bc%ie-1; kb(2)=Bc%jb; ke(2)=Bc%je-1; kb(3)=Bc%kb; ke(3)=Bc%ke-1
+       k=mod(Bc%face-1,3)+1
+       if(Bc%face .le. 3) kb(k)=kb(k)-LAP
+       ke(k)=kb(k)+LAP-1
+       chkp = (B%Block_type==BLOCK_LOWSPEED .or. B%Block_type==BLOCK_POROUS) .and. &
+              (Block_Type_List(Bc%nb1)==BLOCK_LOWSPEED .or. &
+               Block_Type_List(Bc%nb1)==BLOCK_POROUS)
+       allocate(Ugot(NVAR,kb(1):ke(1),kb(2):ke(2),kb(3):ke(3)))
+       call MPI_Recv(Ugot,size(Ugot),OCFD_DATA_TYPE,B_proc(Bc%nb1), &
+                     CK_TAG+B%Block_no*1000+Bc%f_no,MPI_COMM_WORLD,status,ierr)
+       uerr=0.d0; perr=0.d0; nfcel=0
+       do k=kb(3),ke(3)
+       do j=kb(2),ke(2)
+       do i=kb(1),ke(1)
+         nfcel=nfcel+1
+         do m=1,NVAR
+           uerr=max(uerr,abs(B%U(m,i,j,k)-Ugot(m,i,j,k)))
+         enddo
+       enddo; enddo; enddo
+       deallocate(Ugot)
+       if(chkp) then
+         allocate(pgot(kb(1):ke(1),kb(2):ke(2),kb(3):ke(3)))
+         call MPI_Recv(pgot,size(pgot),OCFD_DATA_TYPE,B_proc(Bc%nb1), &
+                       CK_TAG+500000+B%Block_no*1000+Bc%f_no,MPI_COMM_WORLD,status,ierr)
+         do k=kb(3),ke(3)
+         do j=kb(2),ke(2)
+         do i=kb(1),ke(1)
+           perr=max(perr,abs(B%p(i,j,k)-pgot(i,j,k)))
+         enddo; enddo; enddo
+         deallocate(pgot)
+       endif
+       ncel=ncel+nfcel
+       if(nfcel .gt. 0 .and. (uerr .gt. 0.d0 .or. perr .gt. 0.d0)) nbad=nbad+1
+       nface_c=nface_c+1
+       eu=max(eu,uerr); ep=max(ep,perr)
+       write(*,'(A,I3,A,I4,A,I2,A,I4,A,I2,A,I6,A,ES11.3,A,ES11.3,A)') &
+         ' [bufchk] rank',my_id,' blk',B%Block_no,' face',Bc%face, &
+         ' <- blk',Bc%nb1,' face',Bc%face1,' cells=',nfcel, &
+         ' max|dU|=',uerr,' max|dp|=',perr,' local= F'
+     enddo
+   enddo
+
+!---- pass 5: restore the original state ------------------------------------
+   iu=0; ip=0
+   do mBlock=1,Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(.not. associated(B%U)) cycle
+     do k=lbound(B%U,4),ubound(B%U,4)
+     do j=lbound(B%U,3),ubound(B%U,3)
+     do i=lbound(B%U,2),ubound(B%U,2)
+       do m=1,NVAR
+         iu=iu+1; B%U(m,i,j,k)=Usave(iu)
+       enddo
+     enddo; enddo; enddo
+     if(associated(B%p)) then
+       do k=lbound(B%p,3),ubound(B%p,3)
+       do j=lbound(B%p,2),ubound(B%p,2)
+       do i=lbound(B%p,1),ubound(B%p,1)
+         ip=ip+1; B%p(i,j,k)=psave(ip)
+       enddo; enddo; enddo
+     endif
+   enddo
+   deallocate(Usave,psave)
+
+!---- global summary --------------------------------------------------------
+   call MPI_Allreduce(eu,eu_all,1,OCFD_DATA_TYPE,MPI_MAX,MPI_COMM_WORLD,ierr)
+   call MPI_Allreduce(ep,ep_all,1,OCFD_DATA_TYPE,MPI_MAX,MPI_COMM_WORLD,ierr)
+   call MPI_Allreduce(ncel,ncel_all,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
+   call MPI_Allreduce(nbad,nbad_all,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
+   call MPI_Allreduce(nface_l,nface_l_all,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
+   call MPI_Allreduce(nface_c,nface_c_all,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
+   if(my_id .eq. 0) then
+     write(*,'(A)') ' [bufchk] ===== halo-exchange self test (IF_Debug=3) ====='
+     write(*,'(A,I4,A,I8)') ' [bufchk] np =',Total_proc,'  ghost cells checked =',ncel_all
+     write(*,'(A,I6,A,I6)') ' [bufchk] subfaces: same-process =',nface_l_all, &
+                            '  cross-process =',nface_c_all
+     write(*,'(A,ES12.3,A,ES12.3)') ' [bufchk] global max|dU| =',eu_all, &
+                                    '  global max|dp| =',ep_all
+     if(nbad_all .eq. 0 .and. ncel_all .gt. 0) then
+       write(*,'(A)') ' [bufchk] PASS: every ghost cell equals the mapped neighbour value'
+     else
+       write(*,'(A,I6)') ' [bufchk] FAIL: subfaces with a mismatch =',nbad_all
+     endif
+   endif
+
+   contains
+     real(PRE_EC) function sent(blk,ii,jj,kk,mm)
+       integer,intent(in):: blk,ii,jj,kk,mm
+       sent=( (dble(blk)*1000.d0+dble(ii+16))*1000.d0+dble(jj+16) )*1000.d0 &
+            +dble(kk+16)+dble(mm)*0.125d0
+     end function sent
+ end subroutine check_buffer_exchange

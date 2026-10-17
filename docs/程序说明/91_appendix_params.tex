@@ -84,7 +84,7 @@ set\_default\_parameter}）。只要算例里不写，就用默认值；写错�
 \code{Num\_Mesh} & 1 & --- & 网格层数（多网格）\\
 \code{Pre\_Step\_Mesh(1:3)} & 0 & --- & 各层预推进步数 \\
 \code{NUM\_THREADS} & 1 & --- & OpenMP 线程数 \\
-\code{IF\_Debug} & 0 & --- & 1 打印接口诊断 \\
+\code{IF\_Debug} & 0 & --- & 1 打印接口诊断；3 缓冲区交换自检（\code{[bufchk]}，见 \S\ref{sec:bufchk}）\\
 \code{Pdebug(1:4)} & 1 & --- & 调试打印级别 \\
 \code{Periodic\_dX/dY/dZ} & 0 & --- & 周期平移量 \\
 \code{IF\_Innerflow} & 0 & --- & 内流模式开关 \\
@@ -127,7 +127,7 @@ set\_default\_parameter}）。只要算例里不写，就用默认值；写错�
 \bottomrule
 \end{longtable}
 
-\subsection{\code{\$ac\_ec}（15）}
+\subsection{\code{\$ac\_ec}（16）}
 \begin{longtable}{p{3.5cm}llp{6.4cm}}
 \caption{人工压缩（AC）求解器}\\
 \toprule
@@ -149,6 +149,7 @@ set\_default\_parameter}）。只要算例里不写，就用默认值；写错�
 \code{AC\_WallP} & 1 & --- & 壁面压力二阶重构 \\
 \code{AC\_MomDiss} & 0 & --- & 0 lumped/1 分裂混合/2 纯 $|u_n|$ \\
 \code{AC\_MomFrac} & 0.2 & --- & 分裂混合保留声速比例 \\
+\code{AC\_MPI\_Sync} & 0 & --- & 0 旧行为（np$=$1 每伪步刷新 ghost；np$>$1 不刷新）；1 每伪步刷新 U 与 p 且定步推进 \\
 \bottomrule
 \end{longtable}
 

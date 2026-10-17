@@ -29,6 +29,16 @@
    real(PRE_EC) :: rq, rm
    real(PRE_EC) :: rmax_s, rrms_s, rq_s, rm_s
    logical :: have_pbc
+   interface
+     subroutine update_buffer_onemesh(nMesh)
+       use precision_EC
+       integer:: nMesh
+     end subroutine update_buffer_onemesh
+     subroutine update_p_buffer_onemesh(nMesh)
+       use precision_EC
+       integer:: nMesh
+     end subroutine update_p_buffer_onemesh
+   end interface
 
    B => Mesh(nMesh)%Block(mBlock)
    nx = B%nx; ny = B%ny; nz = B%nz
@@ -66,10 +76,24 @@
    if(my_id .eq. 0) print*, ' AC porous solver (LS_Algorithm=3) block', mBlock, &
       ' eps=', B%porous_eps, ' dp=', B%porous_dp, ' hv=', B%porous_hv, &
       ' beta=', beta, ' CFL=', AC_CFL, ' flux=', AC_Flux, ' recon=', AC_Recon, &
-      ' lim=', AC_Limiter
+      ' lim=', AC_Limiter, ' mpi_sync=', AC_MPI_Sync
 
    do iter = 1, AC_Max_Iter
      call ac_fill_ghost(nMesh, mBlock, uin_x, uin_y, uin_z)
+!    Same-class block interfaces (BC_Inner/periodic): U(1:5) and, for
+!    porous blocks, the pressure B%p live in ghost layers that only the
+!    buffer exchange refreshes.  AC_MPI_Sync=1 refreshes both on every
+!    pseudo step and disables the AC_Tol early exit, so every block of
+!    every rank marches exactly AC_Max_Iter steps -> the blocking
+!    MPI_Bsend/MPI_Recv pairs of both exchanges stay matched.
+!    np=1 follows the SAME path as the low-speed driver (the low-speed
+!    solver already did this): the blocks still exchange halos through the
+!    direct (same-process) branches, so a multi-block porous case no longer
+!    runs with a halo that is frozen for the whole pseudo march.
+     if(AC_MPI_Sync .eq. 1 .or. Total_proc .eq. 1) then
+       call update_buffer_onemesh(nMesh)      ! U(1:5) ghost layers
+       call update_p_buffer_onemesh(nMesh)    ! p ghost layers (all subfaces)
+     endif
      call ac_load_state(nMesh, mBlock)
      call ac_wall_pressure(nMesh, mBlock)   ! wall-face pressure (needs fresh XW)
      call ac_boundary_flux(nMesh, mBlock, beta, uin_x, uin_y, uin_z)
@@ -107,7 +131,9 @@
      if(iter .eq. 1 .or. mod(iter, AC_Print) .eq. 0) then
        if(my_id .eq. 0) print*, '  AC-porous iter', iter, ' res_q=', rq, ' res_m=', rm
      endif
-     if(iter .ge. 20 .and. rq .lt. AC_Tol .and. rm .lt. AC_Tol) exit
+     if(AC_MPI_Sync .eq. 0) then
+       if(iter .ge. 20 .and. rq .lt. AC_Tol .and. rm .lt. AC_Tol) exit
+     endif
    enddo
 !  register the AC residual of this block for the staggered outer-loop stop
 !  test (Iflag_Couple_Stop=1); see sub_lowspeed_ac.f90 for the convention.
