@@ -1064,3 +1064,28 @@ np=2 (`Chunk=100`) 全部 18700 且每步一行 `solid sync (parallel)`，无死
 
 **新发现（记账）**：码 14 固--固**局部**耦合界面温度不连续（np=1 收敛后两侧差 ~38 K）⇒
 待查 `couple_solid_solid_interfaces`；P3 验证算例因此改为互不耦合 4 块。
+
+## 2026-10-18 文档一致性核查 + GitHub push（P3 收尾）
+
+**核查**：`Solid_Sync_Chunk` 七处落点逐一对齐 —— 代码默认值
+（`sub_read_parameter.f90:169`）、`$solid_ec` namelist（265）、旧组 `$control_ec` 列表（307）、
+`bcast_para` 槽位 `Ipara(61)`（609/746，与 `Ipara(60)=AC_MPI_Sync` 不冲突）、
+`output_para.out` 回显（439）、`control.ec.template`（146–150，含 `<=0` 语义）、
+附录 A（167）+ `chap06` 参数表（25）与专节（41–66）。①–⑦ 均在 P3 提交中齐备。
+
+**补掉两处漏网**：
+- `docs/control.ec-说明.md`：`$solid_ec` 4→5 变量（补 `Solid_Sync_Chunk=100`）；
+  顺带补该表漏记的 `AC_MPI_Sync`（`$ac_ec` 15→16）与合计注释；§6 同步改动追加一行。
+- `util/readflow3d-ver2.4a.f90` / `ver2.5.f90`：各补「声明 + namelist」2 行
+  （旧组文件若写 `Solid_Sync_Chunk`，这两个后处理工具原本会
+  `Cannot match namelist object name` 失败）；`gfortran -c -ffree-line-length-none
+  -freal-4-real-8` 两文件 EXIT=0。
+- `93_changelog.tex` 1.6.7 的「涉及源码」列补两个 util 与 `control.ec-说明.md`；
+  `cd docs/程序说明 && ./build.sh` EXIT=0、0 warning/error，PDF 已更新。
+
+**记忆库修正**：上一轮插入 §0r 时把 §0q 标题与正文切开（§0q 标题孤立在 28 行）⇒ 已复原；
+头部 `HEAD` 由 `d96c61d` 更新为 `a9abd0a`。另：早前 worklog 记的 P3 提交 `c2d81b6`
+是 amend 前哈希，**最终哈希为 `a9abd0a`**。
+
+**GitHub**：`git push origin main`（`git@github.com:cfddog/multiregionsolover.git`）
+`5c83790..a9abd0a`，P1 `359b084` 与 P3 `a9abd0a` 已上远端；`origin/main` 与本地一致。

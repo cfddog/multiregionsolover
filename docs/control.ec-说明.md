@@ -25,13 +25,13 @@
 | `$freestream_ec` | 24 | 来流条件 / 参考态 / 气体物性 | `Ma, Re, AoA, AoS, p_outlet, gamma, PrL, PrT, T_inf, Twall, Lscale, Ref_S, Ref_L, Centroid, Cood_Y_UP, Kt_inf, Wt_inf, IF_TurboMachinary, Ref_medium_usrdef, Turbo_P0, Turbo_T0, Turbo_L0, Turbo_w, Turbo_Periodic_seta` |
 | `$flow_ec` | 49 (+3) | 流场控制：时间步/格式/模型/网格并行/限制器/输出/重启 | `t_end, Kstep_save, Kstep_show, Kstep_average, Kstep_smooth, Kstep_init_smooth, CFL, dt_global, dtmax, dtmin, Iflag_local_dt, Time_Method, Step_Inner_Limit, Res_Inner_Limit, w_LU, If_Residual_smoothing, If_dtime_mesh, Iflag_Scheme, Iflag_Flux, IFlag_Reconstruction, Bound_Scheme, IF_Scheme_Positivity, IFLAG_LIMIT_FLOW, Iflag_turbulence_model, If_viscous, Iflag_init, MUT_MAX, CP1_NSA, CP2_NSA, Ldmin, Ldmax, Lpmin, Lpmax, Lumax, LSAmax, Mesh_File_Format, Num_Mesh, Pre_Step_Mesh, NUM_THREADS, IF_Debug, Pdebug, Periodic_dX, Periodic_dY, Periodic_dZ, IF_Innerflow, Iflag_savefile, Iflag_vtk_onefile, Iflag_vtk_SI, Iflag_bc_check, **Iflag_restart, Kstep_restart, Iflag_flow_node**` |
 | `$lowspeed_ec` | 21 | 低速（不可压）块 | `LS_rho, LS_mu, LS_k, LS_Cp, LS_T_ref, LS_Inlet_Type, LS_U_in, LS_V_in, LS_W_in, LS_Mdot_in, LS_P_in, LS_P_out, LS_T_wall, LS_U_lid, LS_alpha_p, LS_alpha_u, LS_alpha_T, LS_Max_Iter, LS_Tol, LS_Scheme, LS_Algorithm` |
-| `$ac_ec` | 15 | 人工压缩(AC)求解器（低速与多孔共用） | `AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, AC_WallRecon, AC_WallP, AC_MomDiss, AC_MomFrac` |
-| `$solid_ec` | 4 | 固体导热块（**新增**：原为代码内硬编码） | `Solid_GS_Omega=1.7, Solid_Max_Iter=20000, Solid_Min_Iter=5, Solid_Tol=1e-9` |
+| `$ac_ec` | 16 | 人工压缩(AC)求解器（低速与多孔共用） | `AC_Max_Iter, AC_Print, AC_beta, AC_CFL, AC_CFLv, AC_Tol, AC_w, AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, AC_WallRecon, AC_WallP, AC_MomDiss, AC_MomFrac, **AC_MPI_Sync**` |
+| `$solid_ec` | 5 | 固体导热块（**新增**：原为代码内硬编码） | `Solid_GS_Omega=1.7, Solid_Max_Iter=20000, Solid_Min_Iter=5, Solid_Tol=1e-9, **Solid_Sync_Chunk=100**` |
 | `$porous_ec` | 8 | 多孔介质块 | `Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in` |
 | `$couple_ec` | 13 | 跨区域（分段交错）耦合调度 | `Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, Niter_Couple_Warm, Kstep_Couple_Min, Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux, Porous_Chunk_Iter, Iflag_Couple_Restart, **Iflag_Couple_Stop**` |
 | 旧组 `$control_ec` | 128(+4) | 历史单组，**完全保留** | 全部变量，`Solid_*` 追加在末尾 |
 
-合计：现有 128 个变量全部覆盖，另加 4 个固体控制量。
+合计：现有 128 个变量全部覆盖，另加 5 个固体控制量（`Solid_*`）。
 
 **不在 control.ec 里**（仍是独立文件，因为是逐块/逐面数据）：
 - `material.in`：块类型表 + 每块 `(rho, Cp, k)`
@@ -93,6 +93,7 @@ $end
 | `src/sub_read_parameter.f90` | 1 组 → 7 组 namelist；新增扫描/严格报错/组来源回显；新增 4 个固体默认值 |
 | `src/sub_multi_region.f90` | `solid_solver_one_block` 的硬编码常量改为读 `$solid_ec`（默认值与原值相同） |
 | `util/readflow3d-ver2.5.f90`、`util/readflow3d-ver2.4a.f90` | 同步双读；并补齐 `Lscale` 与 `LS_*/AC_*/Porous_*/couple` 声明（原先这两个后处理工具**读不了**含这些变量的算例文件，属历史遗留问题，现已修复） |
+| 同上（2026-10-18，P3） | 再补 `Solid_Sync_Chunk` 声明与 namelist 项（旧组 `$control_ec` 也接受该变量；旧组文件若写了它，工具必须认识，否则 `Cannot match namelist object name`） |
 
 ## 7. 验证记录（2026-09-23）
 

@@ -1,13 +1,11 @@
 # Active Context — 当前任务 / 最近决策 / 下一步
 
-> 更新时间：2026-10-18（**最新 §0r：P3 并行固体 GS 推进（`Solid_Sync_Chunk`）已收口**；
-> 上一版 §0q：P1 收口 + 并行验证框架 `cases/parallel` 实测全 PASS**；
-> 上一版 §0o：任务 5 旋转界面 + 任务 8 锚定回归 + 左手块保护）。
-> **HEAD = `d96c61d`**（`main` 领先
-> `origin/main` 15 个提交，尚未 push）
->（本轮 `29eae92`→`10ee6e2`→`6a804fa`→`5094fd8` 四个提交；随后一个记忆库提交）。
-> 本次全部改动（control.ec 7 组拆分 + 重启/节点输出 + 三算例迁移 + 文档/记忆库）**已提交并推送**；
-> 仅 `.vscode/settings.json`（主题设置）有意未提交。
+> 更新时间：2026-10-18（**最新：P3 收口 ＋ 文档一致性核查（§0r）**；
+> §0q：P1 收口 + 并行验证框架 `cases/parallel` 实测全 PASS；
+> §0o：任务 5 旋转界面 + 任务 8 锚定回归 + 左手块保护）。
+> **HEAD = `a9abd0a`**（P1 + P3 两个提交，已 push 到 wuzh02 与 GitHub `origin/main`）。
+> 并行改造：P0 ✅ / P1 ✅ / P3 ✅；**P2、P4–P6 待做**（见 `progress.md`）。
+> 仅 `.vscode/settings.json`、`workplan.md`、`cases/parallel/pverify_p1.log` 有意未提交。
 > 上一版（2026-09-18，fluid_solid 三算例）已归档为 `memory-bank/archive_activeContext_2026-09-18.md`。
 > **2026-10-17：程序已更名 `MultiPhysMixSolver`**（旧名 `opencfd-ec1.16a.out` 由 `make` 建兼容软链），
 > 详见 §0h；并行改造 P0（跨进程安全网）已完成并提交（§0h 末），P1 起未开始。
@@ -24,8 +22,6 @@
 > 2 个 util 工具 + 模板 + 4 份文档 + 记忆库）。
 > **第六轮（2026-09-26）改动尚未提交**：区域残差监视输出（`src/sub_debug.f90`、
 > `sub_multi_region.f90`、`sub_lowspeed(_ac).f90`、`sub_porous(_ac).f90` + 手册 4 处 + 总结文档 + 记忆库）。
-
-## 0q. 2026-10-18：P1 收口 —— 闭合域 AC 压力基准统一（低速 $+$ 多孔）✅
 
 ## 0r. 2026-10-18：P3 并行固体 GS 推进（`Solid_Sync_Chunk`）✅
 
@@ -80,6 +76,18 @@
 
 **文档**：手册 `93_changelog` 1.6.7；`chap06_solid.tex` + `91_appendix_params.tex` +
 `control.ec.template` 增 `Solid_Sync_Chunk`。
+
+**文档一致性核查（2026-10-18 补做，`Solid_Sync_Chunk` 七处落点）**：
+①代码默认值 `sub_read_parameter.f90:169`；②`$solid_ec` namelist；③旧组 `$control_ec` 列表；
+④`bcast_para` 槽位 `Ipara(61)`（`Ipara(60)=AC_MPI_Sync`，不冲突）；⑤`output_para.out` 回显；
+⑥`control.ec.template`；⑦附录 A $+$ `chap06` 参数表与专节 —— ①–⑦ 在 P3 提交里已齐。
+本轮补掉两处**漏网**：㈠ `docs/control.ec-说明.md` 仍写 `$solid_ec` **4** 个变量（顺带补
+`AC_MPI_Sync`，`$ac_ec` 15→16）；㈡ `util/readflow3d-ver2.4a/2.5.f90` 的 namelist 未含
+`Solid_Sync_Chunk`（旧组 `$control_ec` 文件若写了它，这两个后处理工具会报
+`Cannot match namelist object name`），两文件各补「声明 $+$ namelist」2 行，
+`gfortran -c -ffree-line-length-none -freal-4-real-8` EXIT=0。
+
+## 0q. 2026-10-18：P1 收口 —— 闭合域 AC 压力基准统一（低速 $+$ 多孔）✅
 
 **背景**：P1（`p` 跨进程 halo ＋ AC 全局判据）的三项代码在 2026-10-17 已落地，但①从未单独收口
 （`progress.md` 还写着“P1/P2 待做”）；②复核时发现多孔侧与低速侧规则**互相矛盾**。

@@ -35,6 +35,12 @@
       `flow3d.dat` md5 `2d0e4d22…`、`Ts_block_1.dat` md5 `77d54efb…`
       **与本地 gfortran 13 的结果逐位相同**（换机器/换编译器都不变）。
       现场参数 `np*/control.ec`（`Solid_Sync_Chunk=100`）+ `output_para.out` 已 pull 留存。
+- [x] **文档一致性核查**（`Solid_Sync_Chunk` 七处落点全部对齐：默认值 / `$solid_ec` /
+      旧组 `$control_ec` / `Ipara(61)` / `output_para.out` / 模板 / 附录 A + `chap06`），
+      补掉两处漏网：`docs/control.ec-说明.md`（4→5 变量，顺带补漏记的 `AC_MPI_Sync`）、
+      `util/readflow3d-ver2.4a/2.5.f90`（namelist 补 `Solid_Sync_Chunk`，否则旧组文件
+      含该变量时工具报 `Cannot match namelist object name`；`gfortran -c` EXIT=0）。
+      手册 `./build.sh` 重编译 EXIT=0。P1/P3 已 `git push` 到 GitHub `origin/main`。
 - [ ] 遗留（与 P3 无关，2026-10-18 新发现）：**码 14 固--固局部耦合界面温度不连续**
       （np=1 收敛后两侧差 ~38 K）⇒ 待查 `couple_solid_solid_interfaces`。
 

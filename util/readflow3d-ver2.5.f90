@@ -622,7 +622,7 @@ end module Const_Variables
        Porous_Max_Iter, Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
        Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, Iflag_Couple_WallFlux, &
        Iflag_Couple_Restart, Iflag_Couple_Stop, &
-       Solid_Max_Iter, Solid_Min_Iter
+       Solid_Max_Iter, Solid_Min_Iter, Solid_Sync_Chunk
    
    real(PRE_EC)::  AoA, AoS, p_outlet, t_end, Lscale, &
 	    PrL, PrT, &
@@ -688,7 +688,7 @@ end module Const_Variables
 		AC_MomDiss, AC_MomFrac, &
 		Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, &
 		Porous_U_in, Porous_V_in, Porous_W_in, Porous_T_in, &
-		Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol, &
+		Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol, Solid_Sync_Chunk, &
 		Iflag_Couple_Scheme, Kstep_Couple_Comp, Niter_Couple_Outer, &
 		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
 		Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, &
