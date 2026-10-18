@@ -127,7 +127,11 @@
        enddo; enddo; enddo
      endif
 
-     if(.not. have_pbc) call ac_zero_mean_p(nMesh, mBlock)
+!    闭合域压力基准：与低速 AC 走同一条规则（只由全局锚定块 AC_Anchor_Block 去均值）。
+!    2026-10-18 之前这里是 `if(.not.have_pbc)`，即**每个多孔块各减自己的均值** —— 那会把
+!    “两块均值之差”当成常数压差加到界面上（低速侧早就踩过这个坑），多孔/多孔或
+!    低速+多孔闭合域都会错。现有算例都有出口（have_pbc=.true.）故一直未暴露。
+     call ac_anchor_pressure(nMesh, mBlock, have_pbc)
      if(iter .eq. 1 .or. mod(iter, AC_Print) .eq. 0) then
        if(my_id .eq. 0) print*, '  AC-porous iter', iter, ' res_q=', rq, ' res_m=', rm
      endif

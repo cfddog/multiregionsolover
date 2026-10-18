@@ -24,6 +24,54 @@
 > **第六轮（2026-09-26）改动尚未提交**：区域残差监视输出（`src/sub_debug.f90`、
 > `sub_multi_region.f90`、`sub_lowspeed(_ac).f90`、`sub_porous(_ac).f90` + 手册 4 处 + 总结文档 + 记忆库）。
 
+## 0q. 2026-10-18：P1 收口 —— 闭合域 AC 压力基准统一（低速 $+$ 多孔）✅
+
+**背景**：P1（`p` 跨进程 halo ＋ AC 全局判据）的三项代码在 2026-10-17 已落地，但①从未单独收口
+（`progress.md` 还写着“P1/P2 待做”）；②复核时发现多孔侧与低速侧规则**互相矛盾**。
+
+**问题（真 bug）**：`sub_porous_ac.f90` 闭合域时是
+`if(.not. have_pbc) call ac_zero_mean_p(...)` ⇒ **每个多孔块各减自己的均值**；
+低速侧是“只让全局 1 号块锚定，其余块保留水平”。两者在多孔界面等价于加一层常数压差膜
+（低速侧 2026-10-17 实测 31→131→324→704 后发散的那条机理）。现有 66 个 `material.in`
+无一含 2 个以上多孔块、且多孔算例都有出口（`have_pbc=.true.`）⇒ 一直没暴露，
+但 P5（闭合域低速$+$多孔）一做就踩。
+
+**改法**（4 个源文件）：
+1. `sub_modules.f90` 新增 `AC_Anchor_Block`（默认 0）；
+2. `init_ac_parallel_flags`：在原有 `AC_PBC_Global`（MPI_MAX）之外，统计
+   `LS_Algorithm=3` 低速/多孔块中**全局块号最小**者，本进程无 AC 块时用哨兵
+   `ANCH_NONE` 参与一次 `MPI_MIN`（所以各进程块数不等也一致）；启动行加打印
+   `pressure anchor block=`；
+3. 新增 `ac_anchor_pressure(nMesh, mBlock, have_pbc)`（`sub_lowspeed_ac.f90`，紧跟
+   `ac_zero_mean_p`）：有压力边界 ⇒ 直接返回；闭合域 ⇒ **只有锚定块**去均值；
+   若 `AC_Anchor_Block` 未设置（驱动没调用过 init）则退回旧的“块 1 锚定”。**无集合通信**；
+4. 低速（`lowspeed_ac_solver_one_block`）与多孔（`sub_porous_ac.f90`）都改调它。
+
+**向后兼容**：block 1 是 AC 块时行为逐位不变（现有全部算例均属此类，或有出口）。
+
+**验证（本地，改前二进制由 `git archive HEAD` 在 `/tmp/p1old` 构建）**：
+| 检查 | 结果 |
+|---|---|
+| `lidcavity_ac_3blk`（闭合 3 块）np=1，5 步 | `flow3d.dat`/`field_restart.dat`/`Residual.dat`/`Step_mess.dat` **5 个文件 md5 相同** |
+| `beavers_joseph/run_ac`（低速$+$多孔，有进出口）np=1，5 步 | 同上 $+$ `Ts_block_2.dat`，**6 个文件 md5 相同** |
+| 闭合 3 多孔块对照（lid 网格 $+$ `material 3 3 3` $+$ `porous.inp`，200 步） | 旧版三块均值恒 $0$；新版仅 1 号块为 $0$（块 2 均值 $-1.68\times10^{-3}$）⇒ 规则只在“闭合 $+$ 多孔”上生效 |
+| 闭合 3 块低速 `np=1 vs np=2`，**1e4 步**（`analyze_para.py`） | **PASS**：$\max|\Delta u|=1.15\times10^{-6}$、RMS $7.3\times10^{-7}$、压力去常数 $3.4\times10^{-7}$；两侧打印 `anchor block= 1` |
+| 集群 `wuzh02` `make -j4`（gfortran 7.3.1） | EXIT=0（4 个改动文件重编 $+$ 链接） |
+
+**新发现（不属 P1，记给 P5）**：闭合域 3 个多孔块、np=2（1$+$2 分布）跑到约 22 个外步后**停滞**；
+新/旧二进制**完全一样**（都在 67 行 `Region res` 处停）⇒ 与本次改动无关，是“多孔 AC 在
+各进程块数不等 $+$ `AC_MPI_Sync=1`”的既有问题（低速侧 1$+$2 分布已验证可用）；np=1 正常。
+另外踩到：`porous.inp` **第一行是条目数**，漏写会让块号/参数整体错位（块退回默认
+`eps=0.9/dp=1e-3`）；在算例目录里直接跑会**重写 `bc3d.inp`**（由 `bc3d_interface.inp` 重新生成），
+本次已 `git checkout` 复原。
+
+**文档**：手册 `chap04` §sec:ac-halo 增「闭合域的压力基准：全局锚定块（2026-10-18）」，
+`93_changelog` 追加 **1.6.6**，`cases/parallel/README.md` 增「给 P3–P6 加测试」第 5 条，
+`./build.sh` 重新编译无错误。
+
+**下一步**：P2（`AC_Max_Iter` 跨进程统一步数 / 伪步语义）→ P3（固体块温度 halo）。
+
+
 ## 0p. 2026-10-18：并行验证框架 `cases/parallel`（P3–P6 的回归底座）✅
 
 **做了什么**：新增 `cases/parallel/`，把「np=1 与 np>1 是否同一个解」变成一条命令。

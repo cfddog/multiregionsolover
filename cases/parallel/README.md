@@ -129,6 +129,11 @@ t03_solid_ac | cases/<固体/混合算例目录> | Mesh3d_m4a.x | bc3d_m4a.inp |
    里加一行），并确认 `Iflag_bc_check` 打印的界面计数与 np 无关。
 4. 新测试先 `STEPS=2000` 冒烟（阈值放宽），确认 `np>1` 之间逐位相同后再跑 10000 步定基线；
    结果写进本文件「结果」表并同步 `memory-bank/worklog.md`。
+5. **闭合域（无压力边界）**：AC 的压力水平只由**全局块号最小的低速/多孔块**锚定
+   （`AC_Anchor_Block`，`init_ac_parallel_flags` 用一次 `MPI_MIN` 定好，启动行打印
+   `pressure anchor block=`）。加多孔块测试时注意：`porous.inp` **第一行是条目数**，
+   漏掉会让块号/参数整体错位（块会退回默认 `eps=0.9/dp=1e-3`，结果看着正常但物性不对）。
+   闭合域 + 多块时压力只差一个常数是允许的，`analyze_para.py` 已按“去常数”比较。
 
 ## 已知限制
 

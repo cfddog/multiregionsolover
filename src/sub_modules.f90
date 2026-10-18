@@ -261,6 +261,12 @@
 !  porous AC block of the WHOLE job has a pressure-anchoring BC.  ac_have_pressure_bc
 !  only sees the local blocks, which is wrong across processes.
    integer,save:: AC_PBC_Global=0
+!  闭合域 AC 的压力基准锚定块（全局块号最小、且 LS_Algorithm=3 的低速/多孔块），
+!  同样在 init_ac_parallel_flags 里用一次 MPI_MIN 定好。0 = 没有 AC 块 / 未初始化
+!  （此时 ac_anchor_pressure 退回旧的“块 1 锚定”规则）。
+!  为什么要全局最小值：跨进程时每个进程只看得见自己的块，若各进程各选各的块，
+!  np=1/2/3 的内部压力水平就互不相同（界面 p 鬼点带一个未知常数）。
+   integer,save:: AC_Anchor_Block=0
 !  1 = 正在 AC 逐块伪时间步循环内（由 lowspeed_ac_solver_one_block 置位）。
 !  update_buffer_onemesh 里的全局 MPI_Barrier 在该标志为 1 时跳过：各进程拥有的
 !  AC 块数可能不等（np=2 时 rank0 有 2 块、rank1 有 1 块），逐块成批推进时同一

@@ -1,7 +1,25 @@
 # Progress — 已完成 / 待办
 
-> 更新：2026-10-18（**新增并行验证框架 `cases/parallel` 并实测全 PASS**；P0 已完成，P1/P2 待做）。
+> 更新：2026-10-18（**P1 收口：闭合域 AC 压力基准统一，见 `activeContext.md` §0q**；
+> 并行验证框架 `cases/parallel` 已全 PASS；P0/P1 已完成，P2 待做）。
 > 更早的开发历史见 `docs/工作日志.md`、`docs/程序能力与算例考核总结.md`、`memory-bank/worklog.md`。
+
+## ✅ 已完成（2026-10-18）：P1 收口 —— 闭合域 AC 压力基准统一（低速 + 多孔）
+
+- [x] `sub_modules.f90` 新增 `AC_Anchor_Block`；`init_ac_parallel_flags` 用一次 `MPI_MIN`
+      取 `LS_Algorithm=3` 低速/多孔块中**全局块号最小**者（无 AC 块用哨兵 `ANCH_NONE`），
+      启动打印 `pressure anchor block=`。
+- [x] 新增 `ac_anchor_pressure`（`sub_lowspeed_ac.f90`）：有压力边界 ⇒ 不去均值；
+      闭合域 ⇒ **只有锚定块**去均值。低速与多孔 AC 都改调它 ⇒ 修掉多孔侧
+      “每个多孔块各减自己均值”造成的界面常数压差（闭合域 + 多孔块才会暴露）。
+- [x] 回归（编译单元级，改前二进制在 `/tmp/p1old`）：`lidcavity_ac_3blk`（闭合）与
+      `beavers_joseph/run_ac`（低速+多孔，有出口）np=1 5 步，5～6 个输出文件 **md5 相同**。
+- [x] 闭合 3 块低速 `np=1 vs np=2` **1e4 步 PASS**（max|Δu|=1.15e-6，压力去常数 3.4e-7）。
+- [x] 集群 `make -j4` EXIT=0；手册 `chap04` 新增“闭合域的压力基准”段 + `93_changelog` **1.6.6**。
+- [ ] 待办：P2（`AC_Max_Iter` 跨进程统一步数语义）；P5 前处理新发现的问题——
+      **闭合 3 个多孔块、np=2（1+2 分布）跑约 22 外步后停滞**（新旧二进制一致 ⇒ 既有问题，
+      与 P1 无关；低速 1+2 分布正常）。
+
 
 ## ✅ 已完成（2026-10-18）：并行验证框架 `cases/parallel`（P3–P6 的回归底座）
 
@@ -98,8 +116,9 @@
       `flow3d.dat`/`field_restart.dat` 与重构前**逐字节相同**；P0 负例（np=2 码 12）仍 EXIT=2。
 - [x] 手册 v1.6：`chap01`/`chap09`/`chap10`/`chap11`/`93_changelog`（1.6）+ `main.tex` 版本号；
       `./build.sh` 0 error；`docs/程序能力与算例考核总结.md` §7 同步。
-- [ ] 待办：P1/P2（AC 的 `p` 跨进程 halo + 伪步统一步数，必须合并做才能 np=1≡np=2）；
-      集群副本同步（现在还要带上顶层 `makefile` 与 `src/modules.dep`）。
+- [ ] 待办：P2（AC 伪步统一步数语义；P1 的 `p` 跨进程 halo + AC 全局判据已于 2026-10-18 收口，
+      见本文件顶部与 `activeContext.md` §0q）；集群副本同步（现在还要带上顶层 `makefile` 与
+      `src/modules.dep`）。
 
 
 ## ✅ 已完成（2026-10-17）：分组提交 + ε 极限澄清 + 文档补全

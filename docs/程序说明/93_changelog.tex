@@ -201,6 +201,20 @@ $\max|\Delta p|=1.3\times10^{-15}$）；\code{n} 变体与参考 RMS$(u)=4.0\tim
 \code{MPI\_Abort} exit$=$3。46blk：m6 np$=$1/2/3/6 互差 RMS$(u)=3.6\times10^{-7}$、
 np$=$6 墙钟 5.81 s（加速比 6.78），仅换块编号（m6a vs m6b）速度差
 RMS$(u)=2.2\times10^{-6}$ 而压力只差一个常数 \\
+2026-10-18 & 1.6.6 & \textbf{闭合域 AC 压力基准统一（低速 $+$ 多孔）}：新增
+    \code{AC\_Anchor\_Block}（\code{LS\_Algorithm=3} 的低速/多孔块中\textbf{全局块号最小}者，
+    \code{init\_ac\_parallel\_flags} 用一次 \code{MPI\_MIN} 定好）与
+    \code{ac\_anchor\_pressure}，低速与多孔 AC 都\textbf{只让锚定块}去块内均值，
+    有压力边界时一律不去均值。此前多孔侧是“每个多孔块各减自己的均值”，
+    会在多孔界面留下常数压差（闭合域 $+$ 多孔块才会暴露，现有算例都有出口）&
+    \code{src/sub\_modules.f90}、\code{src/sub\_multi\_region.f90}、
+    \code{src/sub\_lowspeed\_ac.f90}、\code{src/sub\_porous\_ac.f90} &
+    np$=$1 逐位回归：\code{lidcavity\_ac\_3blk}（闭合 3 块）与
+    \code{beavers\_joseph/run\_ac}（低速$+$多孔，5 步）的 \code{flow3d.dat}、
+    \code{field\_restart.dat}、\code{Residual.dat}、\code{Step\_mess.dat}、
+    \code{Ts\_block\_2.dat} 与改前二进制\textbf{逐字节相同}；闭合 3 多孔块对照：
+    旧版三块均值恒为 $0$，新版仅 1 号块为 $0$；启动行新增
+    \code{pressure anchor block=} \\
 \bottomrule
 \end{longtable}
 

@@ -981,3 +981,44 @@ h 减半收敛性表。
 
 
 
+
+## 2026-10-18 — P1 收口：闭合域 AC 压力基准统一（`AC_Anchor_Block` + `ac_anchor_pressure`）
+
+**问题**：`sub_porous_ac.f90` 闭合域时 `if(.not.have_pbc) call ac_zero_mean_p(...)`
+⇒ **每个多孔块各减自己的均值**；低速侧却是“只让全局 1 号块锚定，其余块保留水平”。
+两者在多孔界面等价于一层常数压差膜（低速侧 2026-10-17 实测 31→131→324→704 后发散的那条机理）。
+现有 66 个 `material.in` 无一含 ≥2 个多孔块、且多孔算例都有出口 ⇒ 一直未暴露，P5 一做就踩。
+
+**改动（4 个源文件）**
+- `src/sub_modules.f90`：新增 `integer,save:: AC_Anchor_Block=0`；
+- `src/sub_multi_region.f90::init_ac_parallel_flags`：在 `AC_PBC_Global`（MPI_MAX）之外统计
+  `LS_Algorithm=3` 低速/多孔块中**全局块号最小**者，本进程无 AC 块时用哨兵 `ANCH_NONE`
+  参与一次 `MPI_MIN`（块数不等也一致），多 mesh 取最小；启动行打印 `pressure anchor block=`；
+- `src/sub_lowspeed_ac.f90`：新增 `ac_anchor_pressure(nMesh,mBlock,have_pbc)`
+  （有压力边界 ⇒ `return`；闭合域 ⇒ 只有锚定块调 `ac_zero_mean_p`；`AC_Anchor_Block=0`
+  ⇒ 退回旧的“块 1 锚定”），`lowspeed_ac_solver_one_block` 改调它；
+- `src/sub_porous_ac.f90`：改用同一条规则。
+
+**验证**
+- 本地 np=1 逐字节回归（改前二进制 = `git archive HEAD` → `/tmp/p1old` 构建）：
+  `lidcavity_ac_3blk` 5 步 `flow3d.dat`/`field_restart.dat`/`Residual.dat`/`Step_mess.dat`
+  md5 全同；`beavers_joseph/run_ac`（低速+多孔）5 步再加 `Ts_block_2.dat` 也全同；
+- 闭合 3 多孔块对照（lid 网格 + `material 3 3 3` + `porous.inp`，200 步）：旧版三块均值恒 0，
+  新版仅块 1 为 0（块 2 均值 −1.68e−3）⇒ 新规则只在“闭合 + 多孔”配置上生效；
+- 闭合 3 块低速 `np=1 vs np=2` **1e4 步** `analyze_para.py`：**PASS**（max|Δu|=1.15e−6、
+  RMS=7.3e−7、压力去常数 3.4e−7；两侧均打印 `anchor block= 1`）；
+- 集群 wuzh02：`make -j4` EXIT=0；`cases/parallel` 全量 `MODE=slurm` 复跑
+  **t01 4.03e−6、t02 np=2/3/4 1.37e−6，PASS=4 FAIL=0**，与改前基线数字一致
+  ⇒ 对既有 AC 算例中性。
+
+**新发现（记给 P5）**：闭合 3 多孔块、np=2（1+2 分布）跑到约 22 个外步后**停滞**，
+新/旧二进制完全一致（都停在 67 行 `Region res`）⇒ 与本次改动无关的既有问题；np=1 正常。
+踩坑两条：`porous.inp` **第一行是条目数**（漏写则参数整体错位，回落 `eps=0.9/dp=1e-3`）；
+在算例目录里直接跑会**重写 `bc3d.inp`**（由 `bc3d_interface.inp` 重新生成，已 `git checkout` 复原）。
+
+**文档**：手册 `chap04` §sec:ac-halo 新增“闭合域的压力基准：全局锚定块”，
+`93_changelog` 追加 1.6.6，`cases/parallel/README.md` 增第 5 条；`./build.sh` 0 error。
+
+**同步**：本地 `push` → 集群 `make -j4` → `pull`（回传 `pverify_p1.log`，本地改名
+`run_verify_p1.log` 以命中 `cases/**/run*.log` 忽略规则）。
+

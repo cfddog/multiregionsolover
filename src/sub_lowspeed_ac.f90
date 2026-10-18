@@ -207,14 +207,16 @@
        B%U(1,i,j,k)  = LS_rho
      enddo; enddo; enddo
 !    闭合域的压力基准（多块 AC，2026-10-17）：
-!    只由全局 1 号块锚定（保持其块内均值为 0），其余块不做去均值，压力水平靠每步
+!    只由全局锚定块 AC_Anchor_Block 锚定（保持其块内均值为 0；块号 = 全局块号最小的
+!    低速/多孔 AC 块，由 init_ac_parallel_flags 用一次 MPI_MIN 定好，通常就是 1 号块），
+!    其余块不做去均值，压力水平靠每步
 !    刷新的 p 鬼点与 1 号块连成一体。注意**不能每个块各减自己的均值**：那样界面两侧
 !    的 p 鬼点与本块内压相差"两块均值之差"这个常数，等效于在界面上加一层压差膜（实测
 !    p 块和 31→131→324→704 后发散）；**也不能完全不锚定**：闭合域 AC 的压力水平是
 !    中性模态，数值上会随每步的界面通量不平衡缓慢漂移。
 !    整个过程不含集合通信（单块时即等于原来的 Total_block=1 行为），np=1/2/3 与进程
 !    块数不等（1+2、1+1+1）都成立。
-     if(.not. have_pbc .and. B%Block_no .eq. 1) call ac_zero_mean_p(nMesh, mBlock)
+     call ac_anchor_pressure(nMesh, mBlock, have_pbc)
      if(iter .eq. 1 .or. mod(iter, AC_Print) .eq. 0) then
        if(my_id .eq. 0) print*, '  AC iter', iter, ' res_q=', rq, ' res_m=', rm
      endif
@@ -342,6 +344,39 @@
      B%p(i,j,k) = B%p(i,j,k) - pmean
    enddo; enddo; enddo
   end subroutine ac_zero_mean_p
+
+!===============================================================================
+! Closed-domain pressure anchoring (shared by the low-speed AND porous AC solvers)
+!
+!   have_pbc = .true.  -> a physical pressure BC fixes the level; do nothing.
+!   have_pbc = .false. -> ONLY the global anchor block (AC_Anchor_Block, computed
+!                         once in init_ac_parallel_flags with one MPI_MIN) removes
+!                         its own mean.  Every other block keeps its level and is
+!                         tied to the anchor through the p ghost layers that are
+!                         refreshed on every pseudo step.
+!   Removing the mean on every block instead would put the difference of the two
+!   block means on the interface as a constant pressure jump; doing nothing lets
+!   the neutral pressure mode drift.  Both failure modes were observed in the
+!   multi-block AC runs (see the comment in lowspeed_ac_solver_one_block).
+!   No collective communication here -> works with unequal block counts per
+!   process (np=2 with a 1+2 split).
+!===============================================================================
+  subroutine ac_anchor_pressure(nMesh, mBlock, have_pbc)
+   use Global_var
+   implicit none
+   integer :: nMesh, mBlock
+   Type (Block_TYPE),pointer:: B
+   logical :: have_pbc
+   if(have_pbc) return
+   B => Mesh(nMesh)%Block(mBlock)
+   if(AC_Anchor_Block .gt. 0) then
+     if(B%Block_no .eq. AC_Anchor_Block) call ac_zero_mean_p(nMesh, mBlock)
+   else
+!    start-up flag not set (driver never called init_ac_parallel_flags):
+!    keep the pre-2026-10-18 rule so nothing changes silently
+     if(B%Block_no .eq. 1) call ac_zero_mean_p(nMesh, mBlock)
+   endif
+  end subroutine ac_anchor_pressure
 
 !===============================================================================
 ! Rusanov flux for the AC system along unit normal (anx,any,anz)

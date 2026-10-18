@@ -153,6 +153,28 @@ AC 的状态是 \code{U(1:5)}（$\rho$, $u,v,w,T$）\textbf{加} \code{B\%p}（�
         多孔驱动此前在 \code{np=1} 时完全不做交换，现已与低速驱动一致。
 \end{itemize}
 
+\paragraph{闭合域的压力基准：全局锚定块（2026-10-18）}
+闭合域（全场没有任何压力边界）里 AC 的压力水平是\textbf{中性模态}：它不改变速度，
+数值上会随每一步的界面通量不平衡缓慢漂移，必须钉住，规则如下：
+\begin{itemize}
+  \item \textbf{有压力边界}（任一低速/多孔 AC 块有出口/\code{BC\_Farfield}，或
+        \code{LS\_Inlet\_Type=3} 的压力入口）时由该边界钉住水平，
+        \textbf{任何块都不去均值}（启动时打印 \code{pressure BC anywhere= T}）。
+  \item \textbf{闭合域}时只由一个\textbf{全局锚定块}去掉自身的块内平均压力：块号取
+        “\code{LS\_Algorithm=3} 的低速/多孔块中\textbf{全局块号最小}者”（通常即 1 号块），
+        跨进程时由 \code{init\_ac\_parallel\_flags} 用一次 \code{MPI\_MIN} 定好，各进程
+        完全一致（启动时打印 \code{pressure anchor block=}）。其余块\textbf{不去均值}，
+        压力水平靠每伪步刷新的 \code{p} 鬼点与锚定块连通
+        $\Rightarrow$ 不需要任何每步集合通信，各进程块数不等（如 2 进程 1$+$2 分布）也成立。
+  \item 为什么不能“每块各减各的均值”：块内均值之差会变成界面上的\textbf{常数压差膜}，
+        等价于在对接面上加源项（低速侧实测压力峰值 31$\to$131$\to$324$\to$704 后发散）；
+        为什么不能完全不锚定：中性模态无约束会漂移。
+  \item 2026-10-18 之前\textbf{多孔 AC} 走的是“\code{if(.not.have\_pbc)} 就每个多孔块各减
+        自己的均值”，与上述规则矛盾；现有算例都有出口（\code{have\_pbc} 为真）故一直未暴露，
+        而“闭合域 $+$ 2 个以上多孔块”或“闭合的低速$+$多孔域”会出错。现已与低速侧统一到
+        同一个 \code{ac\_anchor\_pressure}。
+\end{itemize}
+
 \subsection{缓冲区交换自检（\code{IF\_Debug=3}）}
 \label{sec:bufchk}
 \code{control.ec} 里设 \code{IF\_Debug=3}，程序在 \code{Init\_flow} 之后、时间推进之前调用

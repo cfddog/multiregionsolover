@@ -3524,7 +3524,19 @@
 !    ac_have_pressure_bc() only sees the blocks of the local process, so on
 !    more than one process it cannot decide whether the mesh is pressure-anchored.
 !    The flag is therefore evaluated here over every local block and combined
-!    with one MPI_LOR.
+!    with one global reduction (MPI_MAX on the integer flag = logical OR).
+!
+!  AC_Anchor_Block
+!    Closed domain (no pressure BC anywhere): the AC pressure level is a neutral
+!    mode, one block has to remove its own mean to pin it (ac_anchor_pressure).
+!    The SAME block must do it on every process, otherwise each process anchors
+!    a different level and the interface p ghost carries an unknown constant.
+!    The anchor is therefore the globally smallest block number among the
+!    LS_Algorithm=3 low-speed/porous blocks, obtained with one MPI_MIN.
+!    Both the low-speed and the porous AC solver use it (before 2026-10-18 the
+!    porous solver removed the mean of EVERY porous block, which puts a constant
+!    pressure jump on every porous interface -- wrong for a closed multi-porous
+!    domain; no released case hit it because they all have an outlet).
 !
 !  AC_MPI_Sync=1 (parallel-safe march)
 !    Every AC block refreshes U(1:5) and p ghost layers on every pseudo step and
@@ -3549,10 +3561,13 @@
    TYPE (BC_MSG_TYPE),pointer:: Bc
    integer:: mBlock, ksub, nb
    integer:: n_ac_l, n_ac_g, n_if_l, n_if_g, haspbc_l, haspbc_g, ierr
+   integer:: anch_l, anch_s, anch_g
+   integer,parameter:: ANCH_NONE = 1000000000   ! MPI_MIN 的“本进程没有 AC 块”哨兵
 
    n_ac_l  = 0
    n_if_l  = 0
    haspbc_l= 0
+   anch_l  = 0
    AC_PBC_Global = 0
    if(Num_Mesh < nMesh) return
 
@@ -3561,6 +3576,8 @@
      if(.not. (B%Block_type==BLOCK_LOWSPEED .or. B%Block_type==BLOCK_POROUS)) cycle
      if(LS_Algorithm .ne. 3) cycle
      n_ac_l = n_ac_l + 1
+!    闭合域压力基准的锚定块：全局块号最小的 AC/多孔 AC 块（见 AC_Anchor_Block）
+     if(anch_l .eq. 0 .or. B%Block_no .lt. anch_l) anch_l = B%Block_no
      if(.not. associated(B%bc_msg)) cycle
      do ksub=1, B%subface
        Bc => B%bc_msg(ksub)
@@ -3583,19 +3600,35 @@
    n_ac_g   = n_ac_l
    n_if_g   = n_if_l
    haspbc_g = haspbc_l
+!  锚定块号：本进程没有 AC 块时用哨兵值参与 MPI_MIN，保证各进程得到同一个全局块号
+   if(anch_l .gt. 0) then
+     anch_s = anch_l
+   else
+     anch_s = ANCH_NONE
+   endif
+   anch_g = anch_s
    if(Total_proc > 1) then
      call MPI_Allreduce(n_ac_l,   n_ac_g,   1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
      call MPI_Allreduce(n_if_l,   n_if_g,   1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
      call MPI_Allreduce(haspbc_l, haspbc_g, 1, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, ierr)
+     call MPI_Allreduce(anch_s,   anch_g,   1, MPI_INTEGER, MPI_MIN, MPI_COMM_WORLD, ierr)
    endif
    AC_PBC_Global = haspbc_g
+!  多个 mesh 时取最小值：所有 AC 块共用同一个压力基准块
+   if(anch_g .ge. ANCH_NONE) anch_g = 0
+   if(AC_Anchor_Block .eq. 0) then
+     AC_Anchor_Block = anch_g
+   elseif(anch_g .gt. 0) then
+     AC_Anchor_Block = min(AC_Anchor_Block, anch_g)
+   endif
 
    if(n_ac_g <= 0) return
 
    if(my_id == 0) then
      print*, ' AC parallel march: AC_MPI_Sync=', AC_MPI_Sync, &
              '  AC blocks=', n_ac_g, '  remote AC interface entries=', n_if_g, &
-             '  pressure BC anywhere=', (haspbc_g > 0)
+             '  pressure BC anywhere=', (haspbc_g > 0), &
+             '  pressure anchor block=', AC_Anchor_Block
    endif
 
    if(Total_proc > 1 .and. AC_MPI_Sync == 0 .and. my_id == 0) then
