@@ -929,6 +929,17 @@ h 减半收敛性表。
   `93_changelog.tex` 追加 **1.6.5**；`./build.sh` 后再跑一遍 xelatex，64 页、
   0 error、0 未定义引用，`docs/*.pdf` 同步。
 - **同步**：`sync_cluster.sh push`（全仓，14:56）+ `pull`（15:14，只取 memory-bank/docs/日志/
-  analyze_*）。本轮改动**尚未 git commit**。
+  analyze_*）；提交 `482ee66` 后再次 `push`（15:5x）。
+- **提交与两端复验**：`482ee66`（src 2 个 + 新算例 2 个 + docs 3 份 tex 与 2 份 PDF +
+  记忆库 3 份）。随后：集群 `make clean && make -j4` = **0 error / 2 warning**、
+  产出 `bin/MultiPhysMixSolver`（源文件 md5 两端一致 `84e73434…`/`1f32b650…`）；
+  本地 `make clean && make -j4` = 0 error / 29 warning（gfortran 13 的既有风格告警）；
+  用新编译的本地二进制重跑左手网格 ⇒ exit=3，日志依次为
+  `Check mesh quality ......` → `ERROR: block 2 has a NEGATIVE cell volume` →
+  `ERROR: left-handed block(s) in the input mesh`（**没有** “OK”），
+  `Min Volume=-1.25e-3 at (4,23,1)`；`pdftotext` 校验 PDF 含“索引旋转”与“1.6.5”。
+- 新增 `.gitignore`：`cases/channel_ac_2blk_rot90/.gitignore`、`cases/lidcavity_ac_46blk/.gitignore`
+  （隐藏 `ref_np1/ p_np1/ …`、`prep_cluster.log`、`analyze_*.txt`，与 3blk 算例同约定）。
+
 
 
