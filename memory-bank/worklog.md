@@ -1089,3 +1089,10 @@ np=2 (`Chunk=100`) 全部 18700 且每步一行 `solid sync (parallel)`，无死
 
 **GitHub**：`git push origin main`（`git@github.com:cfddog/multiregionsolover.git`）
 `5c83790..a9abd0a`，P1 `359b084` 与 P3 `a9abd0a` 已上远端；`origin/main` 与本地一致。
+
+**同步（2026-10-18）**：`bash util/sync_cluster.sh push` 完成；md5 抽查
+`util/readflow3d-ver2.4a.f90` `5ebad7a3…`、`ver2.5.f90` `fca9d138…`、
+`docs/control.ec-说明.md` `38eee3ea…`、`memory-bank/activeContext.md` `93b2ec79…`
+→ 本地与集群逐位相同。集群 gfortran 7.3.1 `-fsyntax-only` 两个工具 EXIT=0
+（本次只改 `util/` 与文档，未动 `src/`，主程序无需重编）。
+**提交**：`a9abd0a`（P3）→ `0252f05`（文档/工具同步）→ 本条记录提交。
