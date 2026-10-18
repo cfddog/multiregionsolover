@@ -18,7 +18,15 @@
      call Residual_one_block(nMesh, mBlock, Sfac, Sfac1)
      call Uupdate_one_block(nMesh, mBlock)
    case(BLOCK_SOLID)
-     call solid_solver_one_block(nMesh, mBlock)
+!    P3 (2026-10-18): in PARALLEL runs the solid blocks are solved AFTER the
+!    whole block loop by solid_solve_all_blocks(), which strides every rank
+!    through the SAME number of GS sweeps (global MPI_Allreduce stop test).
+!    Solving them here would let each rank stop on its own local Solid_Tol and
+!    desynchronise the Ts halo exchanges -> MPI hang.  np=1 (or
+!    Solid_Sync_Chunk<=0) keeps the historical in-loop behaviour.
+     if(Total_proc <= 1 .or. Solid_Sync_Chunk <= 0) then
+       call solid_solver_one_block(nMesh, mBlock)
+     endif
    case(BLOCK_LOWSPEED)
      if(LS_Algorithm .eq. 3) then
        call lowspeed_ac_solver_one_block(nMesh, mBlock, Sfac, Sfac1)
@@ -335,7 +343,75 @@
 !  where A_face = Si/Sj/Sk (face area), d_face = distance between cell centers.
 !  Solving for T_i gives a distance-weighted average of neighbors.
    do ii = 1, Solid_Max_Iter
-!    Re-set physical BC ghost cells each iteration
+!    单次 GS 扫掠（重设物理/CHT 鬼点 + FVM 残差统计）。P3(2026-10-18) 起该实现
+!    放在 solid_gs_sweep 中，与 solid_solve_all_blocks 的并行同步推进共用一份。
+     call solid_gs_sweep(nMesh, mBlock, res, imax, jmax, kmax, res_rms)
+
+!    收敛判据（每 100 次扫掠检查一次）
+     conv_ok = (mod(ii,100) == 0 .and. ii >= Solid_Min_Iter .and. res < Solid_Tol)
+
+!    过程监视行：每 RES_PRINT_STEP 次扫掠 1 行（即将退出时跳过，避免与汇总行重复）
+     if(my_id == 0 .and. mod(ii, RES_PRINT_STEP) == 0 .and. .not. conv_ok) then
+       call region_res_stat(nMesh, mBlock, 1, ii, res, imax, jmax, kmax, res_rms, res, 0.d0)
+     endif
+
+!    (per-sweep debug print removed 2026-09-26: superseded by the RES_PRINT_STEP
+!     monitoring line above + the end-of-solve region summary below)
+     if(conv_ok) exit
+   enddo
+
+!  register the GS residual of this block for the staggered outer-loop stop test
+!  (Iflag_Couple_Stop=1).  The driver resets Couple_Res_Solid at the start of
+!  every outer round, so this max() is "worst solid block of this round".
+   Couple_Res_Solid = max(Couple_Res_Solid, res)
+
+   if(my_id == 0) then
+!    结束汇总行：区域 max / 平均 rms / max 位置（-ii: final=总扫掠数）
+     call region_res_stat(nMesh, mBlock, 1, -ii, res, imax, jmax, kmax, res_rms, res, 0.d0)
+   endif
+  end subroutine solid_solver_one_block
+!==============================================================================
+! One Gauss-Seidel sweep of a solid conduction block  (P3, 2026-10-18)
+!
+! Extracted verbatim from the sweep loop of solid_solver_one_block so that the
+! sequential per-block solver (np=1) and the parallel all-block synchronous
+! march (solid_solve_all_blocks, np>1) share ONE implementation.  Keeping a
+! single copy is essential: two copies would silently diverge in physics.
+!
+!   1. re-impose the physical BC ghost cells (wall / symmetry);
+!   2. refresh the Ts halo (periodic / internal / CHT interfaces);
+!   3. re-impose the CHT interface heat flux when the wall-flux split mode is on;
+!   4. one FVM Gauss-Seidel sweep over the interior cells and the region
+!      residual statistics (max|dTs| with its location, plus the mean RMS).
+!
+! In : nMesh, mBlock
+! Out: res = max|dTs| of this sweep, (imax,jmax,kmax) = its location,
+!      res_rms = sqrt(mean(dTs^2)) over the interior cells
+!==============================================================================
+   subroutine solid_gs_sweep(nMesh, mBlock, res, imax, jmax, kmax, res_rms)
+   use Global_Var
+   implicit none
+   integer:: nMesh, mBlock
+   integer:: imax, jmax, kmax
+   real(PRE_EC):: res, res_rms
+   Type (Block_TYPE),pointer:: B
+   integer:: i,j,k, nx,ny,nz, ncell_r
+   real(PRE_EC):: T_old, T_new, dTs_r, rss_r
+   real(PRE_EC):: dx_p, dx_m, dy_p, dy_m, dz_p, dz_m
+   real(PRE_EC):: ax_p, ax_m, ay_p, ay_m, az_p, az_m
+   real(PRE_EC):: coef_diff, coef_tr, T_neighbor_sum
+   logical:: is_unsteady
+   real(PRE_EC),parameter:: EPS_DIST = 1.d-15   ! min distance to avoid div-by-zero
+
+   B=>Mesh(nMesh)%Block(mBlock)
+   nx=B%nx; ny=B%ny; nz=B%nz
+
+   imax = 1; jmax = 1; kmax = 1
+   ncell_r = max((nx-1)*(ny-1)*(nz-1), 1)
+   res_rms = 0.d0
+
+!  Determine if unsteady: RK3 or Dual-time stepping
+   is_unsteady = (Time_Method == Time_RK3 .or. Time_Method == Time_Dual_LU_SGS)
      call set_solid_ghost_BC(nMesh, mBlock)
 !    Exchange Ts buffer for periodic/internal interfaces
      call update_Ts_buffer_onemesh(nMesh)
@@ -480,30 +556,127 @@
        rss_r = rss_r + dTs_r*dTs_r    ! 累加平方和 -> 区域平均 rms
      enddo; enddo; enddo
      res_rms = sqrt(rss_r/dble(ncell_r))
+   end subroutine solid_gs_sweep
 
-!    收敛判据（每 100 次扫掠检查一次）
-     conv_ok = (mod(ii,100) == 0 .and. ii >= Solid_Min_Iter .and. res < Solid_Tol)
+!==============================================================================
+! P3 (2026-10-18): solve EVERY BLOCK_SOLID of mesh nMesh with a sweep count
+! that is IDENTICAL on all blocks and on ALL MPI PROCESSES.
+!
+! Why this is needed
+! ------------------
+! solid_solver_one_block marches its GS sweeps until max|dTs| < Solid_Tol,
+! which is a LOCAL (per block, per process) stop test.  Every sweep calls
+! update_Ts_buffer_onemesh -> Ts_send/Ts_recv, i.e. every sweep issues one
+! halo exchange per coupled interface.  Two processes that own blocks coupled
+! through a solid/solid or solid/fluid interface must therefore execute the
+! SAME number of sweeps; otherwise one rank waits in MPI_Recv for a message
+! the other rank will never post and the job hangs (observed as a solid solve
+! that never returns).  Different block counts / cell counts / material data
+! per rank make the local sweep counts differ in practice.
+!
+! Fix
+! ---
+! The solid solve is marched in chunks of Solid_Sync_Chunk sweeps.  After each
+! chunk the local max|dTs| is reduced with MPI_Allreduce(MPI_MAX); the stop
+! test
+!      res_glob < Solid_Tol  .and.  sweeps >= Solid_Min_Iter   (or
+!      sweeps >= Solid_Max_Iter)
+! then uses the GLOBAL value, so every process takes exactly the same decision
+! and issues exactly the same number of halo exchanges.  A rank that owns no
+! solid block still enters the loop (empty inner loop) and takes part in the
+! Allreduce, so the collective call count matches as well.
+!
+! np=1 or Solid_Sync_Chunk<=0 keeps the historical per-block path (bit
+! reproducible with the pre-2026-10 code); the chunked march is activated only
+! for parallel runs, where the old behaviour could deadlock.
+!
+! Notes
+!   - Solid_Max_Iter is respected up to one chunk: the last chunk may overshoot
+!     it by at most Solid_Sync_Chunk-1 sweeps, on every rank alike.
+!   - The Region res lines keep their np=1 meaning (rank-local block values);
+!     one extra line "solid sync (parallel): sweeps= ... global max|dTs|= ..."
+!     reports the GLOBAL measure that actually drove the stop test.
+!==============================================================================
+   subroutine solid_solve_all_blocks(nMesh)
+   use Global_Var
+   use region_stat_mod
+   implicit none
+   integer:: nMesh
+   integer:: mBlock, kk, kchunk, nchunk, nsw, mb_print, ierr
+   integer:: imax, jmax, kmax
+   real(PRE_EC):: res, res_rms, res_l, res_g
+   Type (Block_TYPE),pointer:: B
 
-!    过程监视行：每 RES_PRINT_STEP 次扫掠 1 行（即将退出时跳过，避免与汇总行重复）
-     if(my_id == 0 .and. mod(ii, RES_PRINT_STEP) == 0 .and. .not. conv_ok) then
-       call region_res_stat(nMesh, mBlock, 1, ii, res, imax, jmax, kmax, res_rms, res, 0.d0)
+!---- historical sequential path (np=1): unchanged, bit-reproducible
+   if(Total_proc <= 1 .or. Solid_Sync_Chunk <= 0) then
+     do mBlock = 1, Mesh(nMesh)%Num_Block
+       B => Mesh(nMesh)%Block(mBlock)
+       if(B%Block_type == BLOCK_SOLID) call solid_solver_one_block(nMesh, mBlock)
+     enddo
+     return
+   endif
+
+   nchunk = max(1, Solid_Sync_Chunk)
+
+!  first LOCAL solid block (used only for the monitoring line), 0 = none here
+   mb_print = 0
+   do mBlock = 1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(B%Block_type == BLOCK_SOLID) then
+       if(mb_print == 0) mb_print = mBlock
      endif
-
-!    (per-sweep debug print removed 2026-09-26: superseded by the RES_PRINT_STEP
-!     monitoring line above + the end-of-solve region summary below)
-     if(conv_ok) exit
    enddo
 
-!  register the GS residual of this block for the staggered outer-loop stop test
-!  (Iflag_Couple_Stop=1).  The driver resets Couple_Res_Solid at the start of
-!  every outer round, so this max() is "worst solid block of this round".
-   Couple_Res_Solid = max(Couple_Res_Solid, res)
+   nsw   = 0
+   res_g = 0.d0
+   res   = 0.d0
+   res_l = 0.d0
+   res_rms = 0.d0
+   imax = 1; jmax = 1; kmax = 1
+
+   do kchunk = 1, (Solid_Max_Iter + nchunk - 1)/nchunk
+     res_l = 0.d0
+     do mBlock = 1, Mesh(nMesh)%Num_Block
+       B => Mesh(nMesh)%Block(mBlock)
+       if(B%Block_type /= BLOCK_SOLID) cycle
+       do kk = 1, nchunk
+         call solid_gs_sweep(nMesh, mBlock, res, imax, jmax, kmax, res_rms)
+       enddo
+       res_l = max(res_l, res)      ! worst local solid block of this chunk
+     enddo
+     nsw = nsw + nchunk
+
+!    global convergence measure: every rank must see the same number
+     call MPI_Allreduce(res_l, res_g, 1, OCFD_DATA_TYPE, MPI_MAX, &
+                        MPI_COMM_WORLD, ierr)
+
+     if(mod(nsw, RES_PRINT_STEP) == 0 .and. my_id == 0 .and. mb_print > 0) then
+       call region_res_stat(nMesh, mb_print, 1, nsw, res_l, imax, jmax, kmax, &
+                            res_rms, res_l, 0.d0)
+     endif
+
+     if(res_g < Solid_Tol .and. nsw >= Solid_Min_Iter) exit
+     if(nsw >= Solid_Max_Iter) exit
+   enddo
+
+!  register the GLOBAL GS residual for the staggered outer-loop stop test
+!  (Iflag_Couple_Stop=1).  The driver resets Couple_Res_Solid every round, so
+!  this max() means "worst solid block of this round".
+   Couple_Res_Solid = max(Couple_Res_Solid, res_g)
 
    if(my_id == 0) then
-!    结束汇总行：区域 max / 平均 rms / max 位置（-ii: final=总扫掠数）
-     call region_res_stat(nMesh, mBlock, 1, -ii, res, imax, jmax, kmax, res_rms, res, 0.d0)
+     if(mb_print > 0) then
+       call region_res_stat(nMesh, mb_print, 1, -nsw, res_l, imax, jmax, kmax, &
+                            res_rms, res_l, 0.d0)
+     endif
+!    always report the GLOBAL convergence measure that drove the stop test
+     print '(A,I8,A,ES12.4,A,L2,A)',' solid sync (parallel): sweeps=', nsw, &
+           '  global max|dTs|=', res_g, '  converged=', &
+           (res_g < Solid_Tol .and. nsw >= Solid_Min_Iter), &
+           '  (identical on every MPI rank)'
    endif
-  end subroutine solid_solver_one_block
+   end subroutine solid_solve_all_blocks
+
 
 !==============================================================================
 ! Solid GS interface heat-flux override (wall-flux CHT split mode).
@@ -1954,20 +2127,34 @@
 !----------------------------------------------------------------------
 ! Output solid-frame temperature field (Ts) for solid and porous blocks
 ! Writes one file per block: Ts_block_NNN.dat (formatted, PLOT3D-like)
+!
+! 2026-10-18 (P3 validation): the file number is the GLOBAL block number
+! (my_blocks(mBlock)), not the local one.  Every rank runs this loop for its
+! own blocks, so naming by the local index made rank 0's blk-1 and rank 1's
+! blk-3 both write "Ts_block_1.dat" (status='replace'): the two ranks raced on
+! the same files and the np>1 result differed from np=1 purely because of the
+! output, not the solver.  The VTK writer (output_vtk) already used the global
+! number for the same reason.
 !----------------------------------------------------------------------
   subroutine output_Ts
    use Global_Var
    implicit none
-   integer:: mBlock, nMesh, i, j, k, nx, ny, nz
+   integer:: mBlock, nMesh, i, j, k, nx, ny, nz, mGlobal
    Type (Block_TYPE),pointer:: B
    character(len=32):: fname
+   logical:: has_partation
 
    nMesh = 1
+!  Global block number of a local block: without partation.dat (np=1) there is
+!  no my_blocks(:) array and local == global.
+   has_partation = (Total_proc > 1)
    do mBlock=1, Mesh(nMesh)%Num_Block
      B => Mesh(nMesh)%Block(mBlock)
      if(B%Block_type /= BLOCK_SOLID .and. B%Block_type /= BLOCK_POROUS) cycle
      nx = B%nx; ny = B%ny; nz = B%nz
-     write(fname, '("Ts_block_",I0,".dat")') mBlock
+     mGlobal = mBlock
+     if(has_partation) mGlobal = my_blocks(mBlock)
+     write(fname, '("Ts_block_",I0,".dat")') mGlobal
      open(201, file=fname, status='replace')
      write(201,*) 'TITLE = "Solid temperature field"'
      write(201,*) 'VARIABLES = "x" "y" "z" "Ts"'
@@ -1980,7 +2167,7 @@
        enddo
      enddo
      close(201)
-     if(my_id == 0) print*, 'Output Ts to ', trim(fname)
+     print*, 'Output Ts to ', trim(fname), '  (rank', my_id, ')'
    enddo
   end subroutine output_Ts
 
@@ -2728,10 +2915,8 @@
         stg_ow_ib=ib; stg_ow_ie=ie; stg_ow_jb=jb; stg_ow_je=je; stg_ow_kb=kb; stg_ow_ke=ke
       endif
 !    interface ghost is current from the last couple of the flow chunk
-     do mBlock = 1, Mesh(nMesh)%Num_Block
-       B => Mesh(nMesh)%Block(mBlock)
-       if(B%Block_type == BLOCK_SOLID) call solid_solver_one_block(nMesh, mBlock)
-     enddo
+!    P3: every rank runs the same sweep count (chunked global march)
+     call solid_solve_all_blocks(nMesh)
 !    refresh ghosts with the updated solid and store the interface T_w
       if(wfmode) then
         stg_ow_block = 0
@@ -3441,17 +3626,25 @@
        Bc2 => B%bc_msg2(ksub)
        if(.not. is_interface_bc(Bc2%bc)) cycle
        nb = Bc2%nb1
-       if(nb <= 0) continue
-       if(B_proc(nb) == my_id) continue      ! same process -> local coupling
+       if(nb <= 0) cycle
+       if(B_proc(nb) == my_id) cycle      ! same process -> local coupling
        t_own = B%Block_type
        t_nb  = Block_Type_List(nb)
 !      ---- pairs that DO have a cross-process path (see header) --------------
-       if(t_own == BLOCK_LOWSPEED .and. t_nb == BLOCK_POROUS)  continue  ! 16
-       if(t_own == BLOCK_POROUS   .and. t_nb == BLOCK_LOWSPEED) continue ! 16
-       if(t_own == BLOCK_SOLID    .and. &
-          (t_nb == BLOCK_FLUID .or. t_nb == BLOCK_LOWSPEED))    continue  ! 11/13
-       if((t_own == BLOCK_FLUID .or. t_own == BLOCK_LOWSPEED) .and. &
-          t_nb == BLOCK_SOLID)                                  continue  ! 11/13
+!      NOTE: `continue` in Fortran is a no-op statement, it does NOT skip the
+!      loop iteration (that is `cycle`).  Every test below used `continue`, so
+!      the whole guard degenerated into "any interface entry with nb1>0 on
+!      np>1 counts as unsupported": a local solid<->solid pair (and every
+!      11/13 CHT pair) aborted the job even when both sides were on one
+!      process.  Fixed 2026-10-18 while validating the parallel solid GS sweep
+!      (cases/solid_4blk could not run at np=2 although both interfaces are
+!      local).
+        if(t_own == BLOCK_LOWSPEED .and. t_nb == BLOCK_POROUS)  cycle  ! 16
+        if(t_own == BLOCK_POROUS   .and. t_nb == BLOCK_LOWSPEED) cycle ! 16
+        if(t_own == BLOCK_SOLID    .and. &
+           (t_nb == BLOCK_FLUID .or. t_nb == BLOCK_LOWSPEED))    cycle  ! 11/13
+        if((t_own == BLOCK_FLUID .or. t_own == BLOCK_LOWSPEED) .and. &
+           t_nb == BLOCK_SOLID)                                  cycle  ! 11/13
 !      ---- unimplemented remote pairs ----------------------------------------
        if((t_own == BLOCK_FLUID .and. t_nb == BLOCK_LOWSPEED) .or. &
           (t_own == BLOCK_LOWSPEED .and. t_nb == BLOCK_FLUID)) then

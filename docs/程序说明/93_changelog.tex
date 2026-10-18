@@ -215,6 +215,42 @@ RMS$(u)=2.2\times10^{-6}$ 而压力只差一个常数 \\
     \code{Ts\_block\_2.dat} 与改前二进制\textbf{逐字节相同}；闭合 3 多孔块对照：
     旧版三块均值恒为 $0$，新版仅 1 号块为 $0$；启动行新增
     \code{pressure anchor block=} \\
+2026-10-18 & 1.6.7 & \textbf{P3：并行固体 GS 推进同步（扫掠数跨进程统一）}：
+    (a) 新增控制参数 \code{Solid\_Sync\_Chunk}（\code{\$solid\_ec}，默认 100）：$>0$ 时
+    np$>$1 每推进该扫掠数做一次 \code{MPI\_Allreduce(MPI\_MAX)} 全局判据，
+    各进程扫掠数/界面 $T_s$ 交换次数\textbf{完全相同}（不再失配挂死）；
+    $\le0$ 退回旧的“各进程各自早退”；(b) 扫掠体抽成 \code{solid\_gs\_sweep}，
+    逐块路径（\code{solid\_solver\_one\_block}）与新增的并行推进
+    \code{solid\_solve\_all\_blocks} 共用同一份实现；(c) 一并修掉四个 np$>$1 既有缺陷：
+    \code{read\_solid\_bc} 用\textbf{全局}块号索引\textbf{局部} \code{Block(:)}
+    （越界、np$>$1 静默破坏网格）、\code{check\_remote\_coupling\_support} 的守护判断
+    全部误用 Fortran 空语句 \code{continue}（应为 \code{cycle}，导致任何界面在 np$>$1
+    都被判“不支持”）、\code{output\_vtk} 的 MPI tag 用局部块号而收/发不一致
+    （np$=$2 在 \code{MPI\_Recv} 里触发 glibc 堆损坏断言）且收发顺序不一致（阻塞发送
+    交叉死锁）、\code{output\_Ts} 用\textbf{局部}块号命名 \code{Ts\_block\_N.dat}
+    （np$>$1 两进程互相覆盖同名文件，看起来像“结果与进程数有关”）&
+    \code{src/sub\_multi\_region.f90}、\code{src/sub\_IO.f90}、
+    \code{src/sub\_read\_parameter.f90}、\code{src/sub\_modules.f90}、
+    \code{src/multiphysmixsolver.f90}、\code{control.ec.template}、
+    \code{docs/程序说明/chap06\_solid.tex}、\code{91\_appendix\_params.tex}、
+    新算例 \code{cases/solid\_4blk/} &
+    新算例 \code{cases/solid\_4blk}（4 个\textbf{互不耦合}固体块，$\text{i}^-$$=$400 K、
+    $\text{i}^+$$=$350 K 等温，精确解为线性剖面；np$=$2 时 blk1/2$\,\to\,$rank 0、
+    blk3/4$\,\to\,$rank 1，4 块 x 分辨率各不相同）2 步：
+    np$=$1 各块扫掠数 18100/5300/18700/5200（差别极大），P3 路径
+    全部推进到 \textbf{18700} 且每步只打印一行
+    \code{solid sync (parallel) ... (identical on every MPI rank)}，无死锁；
+    \code{flow3d.dat}/\code{Residual.dat}/\code{Step\_mess.dat} 与 np$=$1
+    \textbf{逐字节相同}；\code{Ts\_block\_*.dat} 差 $\le3.9\times10^{-7}$ K
+    （blk3 逐字节相同，差异只来自退出时机 $=$ \code{Solid\_Tol} 量级），
+    两者对精确线性解误差 $\le9.0\times10^{-7}$ K；反证：同一二进制用
+    \code{Solid\_Sync\_Chunk=0} 跑 np$=$2，各进程按自己的扫掠数早退
+    （rank0 18100/rank1 18700，相差 600 次扫掠），\code{Ts} 与 np$=$1
+    \textbf{逐字节相同} $\Rightarrow$ 旧路径行为未被改动，且界面若跨进程交换
+    $T_s$ 必然错位挂死。集群 wuzh02 复验（gfortran 7.3.1，\code{make -j4} EXIT=0，
+    np$=$1/2 各一个作业）：四个 \code{max|dT|} 与本地完全一致，
+    \code{flow3d.dat}/\code{Ts\_block\_1.dat} 的 md5 与本地（gfortran 13）
+    \textbf{逐位相同} \\
 \bottomrule
 \end{longtable}
 
@@ -223,6 +259,11 @@ RMS$(u)=2.2\times10^{-6}$ 而压力只差一个常数 \\
   \item 多孔速度入口的“按面法向通量”实现（消除 $\sim$28\% 通量缺口）；
   \item 低速压力求解器改用 BiCGStab/ILU；
   \item 接口 17（固--多孔）/18（多孔--多孔）；码 12/19 的跨进程耦合；
+  \item \textbf{码 14（固--固）局部耦合的界面温度不连续}：2026-10-18 做 P3 验证时实测
+        （两段 $k=16.3$ / $k=200$ 的串联导热板，41$\times$21$\times$3 与 41$\times$21$\times$3），
+        np$=$1 收敛后界面两侧胞心温度仍差 $\sim$38 K（逻辑上应连续）；
+        \code{couple\_solid\_solid\_interfaces} 的镜像量/面距取法待核（与 P3 无关，
+        P3 的验证算例已改为互不耦合的 4 块以避开该问题）；
   \item \code{util/readflow3d-ver2.4a/2.5.f90} 的同类“双 unit”隐患修复；
   \item 三例 \code{cases/fluid\_solid/*/README.md}。
 \end{itemize}

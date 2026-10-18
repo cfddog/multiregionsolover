@@ -325,6 +325,15 @@
    integer,save:: Solid_Max_Iter=20000        ! max GS sweeps per solver call
    integer,save:: Solid_Min_Iter=5            ! min sweeps before the tolerance check
    real(PRE_EC),save:: Solid_Tol=1.d-9        ! GS convergence tolerance (max|dTs|)
+!  P3 (2026-10-18): parallel solid-march chunk size, in GS sweeps.
+!  >0 : the solid solve is advanced Solid_Sync_Chunk sweeps at a time and the
+!       convergence test uses a GLOBAL MPI_Allreduce(MAX) of max|dTs|, so every
+!       MPI process executes exactly the same number of sweeps (and therefore
+!       the same number of Ts halo exchanges) -> no solid-solver deadlock.
+!  <=0: disabled -> the historical per-block, per-rank stop test (np=1 exact,
+!       unsafe with np>1 when solid blocks are coupled across processes).
+!  Only used for np>1; np=1 is always bit-reproducible with the old path.
+   integer,save:: Solid_Sync_Chunk=100
  !---- restart / flow-field-output controls, read from control.ec "$flow_ec" ----
  ! Iflag_restart:  0 = auto  : read field_restart.dat when it is present (default)
  !                 1 = force : read it, abort when missing

@@ -1,8 +1,43 @@
 # Progress — 已完成 / 待办
 
-> 更新：2026-10-18（**P1 收口：闭合域 AC 压力基准统一，见 `activeContext.md` §0q**；
-> 并行验证框架 `cases/parallel` 已全 PASS；P0/P1 已完成，P2 待做）。
+> 更新：2026-10-18（**P3 收口：并行固体 GS 扫掠数跨进程统一，见 `activeContext.md` §0r**；
+> P0/P1/P3 已完成，P2/P4–P6 待做）。
 > 更早的开发历史见 `docs/工作日志.md`、`docs/程序能力与算例考核总结.md`、`memory-bank/worklog.md`。
+
+## ✅ 已完成（2026-10-18）：P3 并行固体 GS 推进（`Solid_Sync_Chunk`）
+
+- [x] `sub_multi_region.f90`：扫掠体抽成 `solid_gs_sweep(mBlock, sweeps, resmax)`（纯局部，
+      一次完整 GS 扫掠所有固体块 + 局部 `|dTs|` 判据）；`solid_solver_one_block`
+      （np=1 / `Solid_Sync_Chunk<=0` 的旧路径）与新增 `solid_solve_all_blocks`
+      （np>1 且 `Chunk>0`）共用它 ⇒ 两条路径物理完全一致，只有判据时机不同。
+- [x] 并行路径：每个进程**同序**推进所有本地块，每 `Solid_Sync_Chunk` 次扫掠做一次
+      `MPI_Allreduce(MPI_MAX)` + `MPI_Allreduce(MPI_LOR)`，**全局扫掠数/界面交换次数完全一致**
+      （不再出现“某进程先满足 `|dTs|<Solid_Tol` 早退 ⇒ 阻塞消息错位挂死”）。
+      终止条件 `(全局 max<=Tol .and. 所有进程都收敛) .or. sweeps>=Solid_Max_Iter`，
+      并在每步打印一行 `solid sync (parallel): sweeps= ... (identical on every MPI rank)`。
+- [x] 修 4 个 np>1 既有缺陷：
+      ①`read_solid_bc` 用全局块号索引局部 `Block(:)`（越界写坏网格）；
+      ②`check_remote_coupling_support` 用 Fortran 空语句 `continue` 当 `cycle`（np>1 一律拒界面）；
+      ③`output_vtk` 的 MPI tag 用局部块号但收发两侧不一致（nc=2 时 `MPI_Recv` 处 glibc 堆损坏）
+      ＋ 阻塞发送顺序不一致（交叉死锁）；
+      ④`output_Ts` 用局部块号命名文件（两进程写同名 `Ts_block_1.dat`，`replace` 覆盖 ⇒
+      误判“结果与进程数有关”，**这才是 P3 最初看到的 np 不一致的根因**）。
+- [x] 新回归算例 `cases/solid_4blk/`（互不耦合 4 块，精确线性解；`gen_case.py`+`prep.sh`
+      +`analyze_solid_4blk.py`+`README.md`）。
+- [x] 验证（2 步，`Solid_Tol=1e-9`）：np=1 各块扫掠数 18100/5300/18700/5200，
+      np=2 (`Chunk=100`) 全部 18700，无死锁；`flow3d.dat`/`Residual.dat`/`Step_mess.dat`
+      与 np=1 **逐字节相同**；`Ts` 差 ≤3.9e-7 K（退出时机差异，= `Solid_Tol` 量级），
+      blk3 逐字节相同；对精确解 ≤9.0e-7 K。反证：`Chunk=0` 跑 np=2 时各进程
+      rank0=18100 / rank1=18700 各自早退，`Ts` 仍与 np=1 逐字节相同（旧路径未变）。
+- [x] 集群 wuzh02 复验（`make -j4` EXIT=0；`prep.sh 2` + `sbatch -n 1/2`，作业
+      46850363/46850364）：`analyze_solid_4blk.py` 数字与本地**完全一致**
+      （3.9e-7 / 1.5e-7 / 0 / 1.7e-7 K，blk3 逐字节相同），且
+      `flow3d.dat` md5 `2d0e4d22…`、`Ts_block_1.dat` md5 `77d54efb…`
+      **与本地 gfortran 13 的结果逐位相同**（换机器/换编译器都不变）。
+      现场参数 `np*/control.ec`（`Solid_Sync_Chunk=100`）+ `output_para.out` 已 pull 留存。
+- [ ] 遗留（与 P3 无关，2026-10-18 新发现）：**码 14 固--固局部耦合界面温度不连续**
+      （np=1 收敛后两侧差 ~38 K）⇒ 待查 `couple_solid_solid_interfaces`。
+
 
 ## ✅ 已完成（2026-10-18）：P1 收口 —— 闭合域 AC 压力基准统一（低速 + 多孔）
 
@@ -438,14 +473,16 @@
 - [ ] `AC_MPI_Sync=0 & np>1`：伪步内不刷新 halo（仅启动告警），可考虑自动升级为 1。
 - [ ] 接口通量注册表 `FSH` 跨进程时的回退（两侧各算一阶 Rusanov）导致 np 相关精度，
       P1/P2 的后续项。
-- [ ] **P3** 固体扫描数在 `np>1` 时统一（`Solid_Sync_Chunk`），消除 `Solid_Min_Iter` 早退导致的挂死。
+- [x] **P3** 固体扫描数在 `np>1` 时统一（`Solid_Sync_Chunk`）—— **已完成 2026-10-18**，
+      见本文件 §「✅ 已完成（2026-10-18）：P3 并行固体 GS 推进」与 `activeContext.md` §0r。
 - [ ] **P4** 码 12（低速--固体）跨进程：`hl_iface_mpi`，几何克隆 `ls_por_iface_mpi`，两侧都调用。
 - [ ] **P5** 码 19（可压--多孔）跨进程：`cpb_iface_mpi`，非对称 2 标量打包（气体 `p_phys`、多孔 `T_w`）。
 - [ ] **P6** 码 14/18 跨进程（`ss_iface_mpi` 或复用 `Ts` 缓冲）；手册新增《并行能力矩阵》章；
       4 块/4 进程混合算例 `t07_mix4`。
 - [ ] `cases/parallel/`：`mkpart.py` 生成 `partation.dat`、`run_para_verify.sh` 跑 np=1 vs np=2
       并断言 `max|d|=0`；测试 t01–t07 随各级加入。
-- [ ] **P3** 固体扫描数在 `np>1` 时统一（`Solid_Sync_Chunk`），消除 `Solid_Min_Iter` 早退导致的挂死。
+- [x] **P3** 固体扫描数在 `np>1` 时统一（`Solid_Sync_Chunk`）—— **已完成 2026-10-18**，
+      见本文件 §「✅ 已完成（2026-10-18）：P3 并行固体 GS 推进」与 `activeContext.md` §0r。
 - [ ] **P4** 码 12（低速--固体）跨进程：`hl_iface_mpi`，几何克隆 `ls_por_iface_mpi`，两侧都调用。
 - [ ] **P5** 码 19（可压--多孔）跨进程：`cpb_iface_mpi`，非对称 2 标量打包（气体 `p_phys`、多孔 `T_w`）。
 - [ ] **P6** 码 14/18 跨进程（`ss_iface_mpi` 或复用 `Ts` 缓冲）；手册新增《并行能力矩阵》章；

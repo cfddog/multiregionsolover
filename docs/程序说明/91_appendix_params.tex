@@ -153,7 +153,7 @@ set\_default\_parameter}）。只要算例里不写，就用默认值；写错�
 \bottomrule
 \end{longtable}
 
-\subsection{\code{\$solid\_ec}（4）、\code{\$porous\_ec}（8）、\code{\$couple\_ec}（13）}
+\subsection{\code{\$solid\_ec}（5）、\code{\$porous\_ec}（8）、\code{\$couple\_ec}（13）}
 \begin{longtable}{p{4.1cm}llp{6.0cm}}
 \caption{固体 / 多孔 / 耦合调度}\\
 \toprule
@@ -164,6 +164,7 @@ set\_default\_parameter}）。只要算例里不写，就用默认值；写错�
 \code{Solid\_Max\_Iter} & 20000 & --- & 固体最大扫掠数 \\
 \code{Solid\_Min\_Iter} & 5 & --- & 判据生效前最少扫掠 \\
 \code{Solid\_Tol} & 1e-9 & K & 固体收敛判据 $\max|\Delta T_s|$ \\
+\code{Solid\_Sync\_Chunk} & 100 & --- & 并行固体推进块长（扫掠数）：$>0$ 时 np$>$1 每块长做一次 \code{MPI\_Allreduce(MAX)} 全局判据，各进程扫掠数相同、界面 $T_s$ 交换配对（避免挂死）；$\le0$ 退回各进程独立早退（旧行为，np$>$1 可能死锁）。np$=$1 恒走旧路径，逐字节不变 \\
 \code{Porous\_T\_ref} & 288.15 & K & 骨架温度初值 \\
 \code{Porous\_alpha\_Ts} & 0.7 & --- & 骨架温度欠松弛 \\
 \code{Porous\_Max\_Iter} & 5000 & --- & 多孔内迭代上限 \\

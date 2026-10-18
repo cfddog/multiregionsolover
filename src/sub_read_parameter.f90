@@ -163,6 +163,10 @@
     Solid_Max_Iter=20000    ! max GS sweeps per solver call
     Solid_Min_Iter=5        ! min sweeps before the tolerance check is allowed
     Solid_Tol=1.d-9         ! GS convergence tolerance on max|dTs|
+!   P3 (2026-10-18): parallel solid march chunk (GS sweeps per MPI-synchronised
+!   round).  >0 = global Allreduce stop test (default 100); <=0 = legacy
+!   per-rank stop test (np=1 unchanged either way).
+    Solid_Sync_Chunk=100
 
 !---- restart file / node-centred flow-field output (namelist "$flow_ec") ------
     Iflag_restart=0         ! 0=auto(read field_restart.dat if present) 1=force -1=off
@@ -257,7 +261,8 @@ end
       AC_Flux, AC_Recon, AC_Limiter, AC_WenoBlend, AC_WallRecon, AC_WallP, &
       AC_MomDiss, AC_MomFrac, AC_MPI_Sync
 
-  namelist /solid_ec/ Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol
+  namelist /solid_ec/ Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol, &
+                      Solid_Sync_Chunk
 
   namelist /porous_ec/ &
       Porous_T_ref, Porous_alpha_Ts, Porous_Max_Iter, Porous_Tol, &
@@ -299,7 +304,7 @@ end
 		Porous_Chunk_Iter, Niter_Couple_Warm, Kstep_Couple_Min, &
 		Twall_Couple_Init, Tol_Couple_Tw, Tol_Couple_p, Tol_Couple_u, Iflag_Couple_WallFlux, &
 		Iflag_Couple_Restart, Iflag_Couple_Stop, &
-		Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol, &
+		Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol, Solid_Sync_Chunk, &
 		Iflag_restart, Kstep_restart, Iflag_flow_node
 
 
@@ -431,6 +436,9 @@ end
 	            " porous_ec=", has_porous, " couple_ec=", has_couple
 	write(99,*) " solid GS controls Solid_GS_Omega/Max_Iter/Min_Iter/Tol=", &
 	            Solid_GS_Omega, Solid_Max_Iter, Solid_Min_Iter, Solid_Tol
+	write(99,*) " solid parallel march: Solid_Sync_Chunk=", Solid_Sync_Chunk, &
+	            " (>0: chunked global MPI stop test, sweeps per round;", &
+	            " only active for np>1, <=0 disables)"
 	write(99,*) " restart: Iflag_restart=", Iflag_restart, " Kstep_restart=", &
 	            Kstep_restart, " Iflag_flow_node=", Iflag_flow_node, &
 	            " (file='", trim(RESTART_FILE), "')"
@@ -598,6 +606,7 @@ end
     Ipara(58)=Iflag_Couple_Restart
     Ipara(59)=Iflag_Couple_Stop
     Ipara(60)=AC_MPI_Sync
+    Ipara(61)=Solid_Sync_Chunk
 
 	 call MPI_bcast(rpara,100,OCFD_DATA_TYPE,0,  MPI_COMM_WORLD,ierr)
 	 call MPI_bcast(Ipara,100,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -734,6 +743,7 @@ end
     Iflag_Couple_Restart=Ipara(58)
     Iflag_Couple_Stop=Ipara(59)
     AC_MPI_Sync=Ipara(60)
+    Solid_Sync_Chunk=Ipara(61)
 
 
     call MPI_bcast(Pre_Step_Mesh,Num_Mesh,MPI_Integer,0,  MPI_COMM_WORLD,ierr)
@@ -910,7 +920,7 @@ end
    use Global_var
    use mod_type_def
    implicit none
-   integer:: m, n, i, j, nf, unit, ios, have_file
+   integer:: m, n, i, j, nf, unit, ios, have_file, mm
    logical:: ex
    integer,allocatable:: nface_global(:)
    integer,allocatable:: face_global(:,:)
@@ -977,11 +987,30 @@ end
    call MPI_Bcast(htc_global, 6*Total_block, OCFD_DATA_TYPE, 0, MPI_COMM_WORLD, i)
    call MPI_Bcast(Tinf_global, 6*Total_block, OCFD_DATA_TYPE, 0, MPI_COMM_WORLD, i)
 
-!  Set per-block data
-   do m = 1, Total_block
+!  Echo the table from the file (rank 0 only) - uses the GLOBAL arrays so the
+!  printout is identical at any np, independent of which block is local.
+   if(my_id .eq. 0) then
+     do m = 1, Total_block
+       nf = nface_global(m)
+       if(nf .le. 0) cycle
+       print*, "  Block", m, " (solid):", nf, " thermal BC faces"
+       do j = 1, nf
+         print*, "    face", face_global(j,m), " Tw=", Tw_global(j,m), " Qw=", Qw_global(j,m)
+       enddo
+     enddo
+   endif
+
+!  Set per-block data.  Mesh(1)%Block is indexed by the LOCAL block number, so
+!  the global block number m must be mapped through my_blocks(:) first.
+!  (Using Mesh(1)%Block(m) with the global m wrote past the end of the local
+!  block array whenever the solid blocks were not all on rank 0 - i.e. it
+!  silently corrupted the mesh for every solid block at np>1; found 2026-10-18
+!  while validating the parallel solid GS sweep.)
+   do mm = 1, Mesh(1)%Num_Block
+     m = my_blocks(mm)
      nf = nface_global(m)
-     if(nf > 0) then
-       B => Mesh(1)%Block(m)
+     if(nf .gt. 0) then
+       B => Mesh(1)%Block(mm)
        B%solid_bc_nface = nf
        allocate(B%solid_bc_face_no(nf))
        allocate(B%solid_bc_Tw(nf))
@@ -995,12 +1024,6 @@ end
          B%solid_bc_htc(j) = htc_global(j,m)
          B%solid_bc_Tinf(j) = Tinf_global(j,m)
        enddo
-       if(my_id .eq. 0) then
-         print*, "  Block", m, " (solid):", nf, " thermal BC faces"
-         do j = 1, nf
-           print*, "    face", B%solid_bc_face_no(j), " Tw=", B%solid_bc_Tw(j), " Qw=", B%solid_bc_Qw(j)
-         enddo
-       endif
      endif
    enddo
 

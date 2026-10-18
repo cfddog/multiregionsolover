@@ -143,6 +143,13 @@ $solid_ec
   Solid_Max_Iter=20000   ! 每次调用最大 GS 扫掠数        (默认: 20000)
   Solid_Min_Iter=5       ! 允许提前退出前的最少扫掠数     (默认: 5)
   Solid_Tol=1.d-9        ! max|dTs| 收敛限              (默认: 1e-9)
+  Solid_Sync_Chunk=100   ! 并行固体推进块长(每次 MPI 同步前的 GS 扫掠数)
+!                         ! >0: np>1 时每 Solid_Sync_Chunk 次扫掠做一次
+!                         !     MPI_Allreduce(MAX) 全局收敛判据, 各进程扫掠数
+!                         !     完全相同 -> 界面 Ts 交换配对, 不会挂死
+!                         ! <=0: 退回旧的"各进程各自按 Solid_Tol 早退"行为
+!                         !     (np=1 恒同; np>1 跨进程耦合固体块可能死锁)
+!                         ! np=1 永远走旧的逐块路径, 结果与旧版逐字节一致
 !  材料 (rho,Cp,k) 见 material.in；热边界 Tw/Qw/htc 见 solid_bc.inp
 $end
 

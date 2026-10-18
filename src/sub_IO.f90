@@ -856,9 +856,14 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
          grid_size = nx*ny*nz*3
          flow_size = 6*(nx+1)*(ny+1)*(nz+1)
          Recv_from_ID = B_proc(m)
-         tag = B_n(m)*2
+!        Tags MUST use the GLOBAL block number m (not B_n(m), the block's
+!        local index inside its owner): the sender tags its messages with the
+!        global index as well.  Mixing the two made np>1 runs match a message
+!        into a buffer of the wrong size/layout, corrupting the heap inside
+!        MPI_Recv (observed as a glibc sysmalloc assertion at np=2).
+         tag = m*2
          call MPI_Recv(G, grid_size, OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, Status, ierr)
-         tag = B_n(m)*2+1
+         tag = m*2+1
          call MPI_Recv(U, flow_size, OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, Status, ierr)
        endif
 
@@ -953,9 +958,10 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
        else
          grid_size = nx*ny*nz*3
          Recv_from_ID = B_proc(m)
-         tag = B_n(m)*4
+!        global block number as tag (see the note in the flow VTK loop above)
+         tag = m*4
          call MPI_Recv(G, grid_size, OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, Status, ierr)
-         tag = B_n(m)*4+1
+         tag = m*4+1
          call MPI_Recv(Ts_buf, (nx-1)*(ny-1)*(nz-1), OCFD_DATA_TYPE, Recv_from_ID, tag, MPI_COMM_WORLD, Status, ierr)
        endif
 
@@ -983,16 +989,18 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
    else
 !    --- Non-master processes: send data for local blocks ---
-     do m=1, MP%Num_Block
-       B=>MP%Block(m)
+!    The master walks the GLOBAL block list twice: pass 1 = grid + flow fields
+!    (all blocks), pass 2 = grid + Ts (solid/porous blocks).  The sends below
+!    are posted in exactly the same global order and with global block tags,
+!    so the blocking MPI_Send/MPI_Recv pairs can never cross (posting in local
+!    order deadlocked as soon as a rank's local order disagreed with the
+!    global one or its Ts message of block i blocked before the flow message
+!    of block i+1 was posted).
+     do m1=1, Total_block
+       if(B_proc(m1) .ne. my_id) cycle
+       mt = B_n(m1)
+       B => MP%Block(mt)
        nx=B%nx; ny=B%ny; nz=B%nz
-       mt = m  ! local block index = B_n(global_block_index)
-
-!      Find global block index for this local block
-       do m1=1, Total_block
-         if(B_proc(m1) .eq. my_id .and. B_n(m1) .eq. m) exit
-       enddo
-       if(m1 .gt. Total_block) cycle
 
 !      Send grid coordinates
        allocate(G(nx,ny,nz,3))
@@ -1002,7 +1010,7 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
          G(i,j,k,3)=B%z(i,j,k)
        enddo; enddo; enddo
        grid_size = nx*ny*nz*3
-       tag = m*2
+       tag = m1*2
        call MPI_Send(G, grid_size, OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
        deallocate(G)
 
@@ -1042,13 +1050,21 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
          enddo; enddo; enddo
        endif
        flow_size = 6*(nx+1)*(ny+1)*(nz+1)
-       tag = m*2+1
+       tag = m1*2+1
        call MPI_Send(U, flow_size, OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
        deallocate(U)
+     enddo
 
-!      Send solid Ts data if this is a solid block (per-block VTK mode only)
-       if(Iflag_vtk_onefile .eq. 0) then
-       if(B%Block_type == BLOCK_SOLID .or. B%Block_type == BLOCK_POROUS) then
+!    Pass 2: solid / porous grid + Ts (per-block VTK mode only)
+     if(Iflag_vtk_onefile .eq. 0) then
+       do m1=1, Total_block
+         if(B_proc(m1) .ne. my_id) cycle
+         if(Block_Type_List(m1) /= BLOCK_SOLID .and. &
+            Block_Type_List(m1) /= BLOCK_POROUS) cycle
+         mt = B_n(m1)
+         B => MP%Block(mt)
+         nx=B%nx; ny=B%ny; nz=B%nz
+         grid_size = nx*ny*nz*3
          allocate(G(nx,ny,nz,3))
          do k=1,nz; do j=1,ny; do i=1,nx
            G(i,j,k,1)=B%x(i,j,k)
@@ -1059,14 +1075,13 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
          do k=1,nz-1; do j=1,ny-1; do i=1,nx-1
            Ts_buf(i,j,k) = B%Ts(i,j,k)
          enddo; enddo; enddo
-         tag = m*4
+         tag = m1*4
          call MPI_Send(G, grid_size, OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
-         tag = m*4+1
+         tag = m1*4+1
          call MPI_Send(Ts_buf, (nx-1)*(ny-1)*(nz-1), OCFD_DATA_TYPE, 0, tag, MPI_COMM_WORLD, ierr)
          deallocate(G, Ts_buf)
-       endif
-       endif
-     enddo
+       enddo
+     endif
    endif
    
    call MPI_Barrier(MPI_COMM_WORLD,ierr)

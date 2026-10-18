@@ -22,6 +22,9 @@ k\sum_{faces}\frac{A_{f}}{d_{f}}\,(T_{nb}-T_{i}) = 0 ,
 \code{Solid\_Max\_Iter} & 20000 & 单次调用最大扫掠数 \\
 \code{Solid\_Min\_Iter} & 5 & 允许判据生效前的最少扫掠数（此后每 100 次检查一次残差）\\
 \code{Solid\_Tol} & 1e-9 & 收敛判据：$\max\lvert\Delta T_s\rvert$（K）\\
+\code{Solid\_Sync\_Chunk} & 100 & \textbf{并行推进块长}（扫掠数）：np$>$1 时每完成该块数做一次
+  \code{MPI\_Allreduce(MAX)} 全局判据，使各进程扫掠数完全相同（见下）；$\le0$ 关闭（旧行为）。
+  np$=$1 不用该项\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -34,6 +37,41 @@ k\sum_{faces}\frac{A_{f}}{d_{f}}\,(T_{nb}-T_{i}) = 0 ,
 \code{rms} $=\sqrt{\sum \Delta T_s^2/N}$（区域内平均水平）、\code{at (i,j,k)} $=$ 最大变化所在胞
 及其胞心物理坐标 $[$\code{m}$]$。扫掠数达到 \code{Solid\_Max\_Iter}$+1$ 说明\textbf{未达容差}
 （需增大上限、调 $\omega$ 或检查边界）。此前的 \code{GS iter} / \code{DBG: Ts(...)} 逐次调试输出已删除。
+
+\subsection{并行推进：跨进程扫掠数统一（\code{Solid\_Sync\_Chunk}）}
+\label{sec:solid_parallel}
+固体 GS 的收敛判据 $\max\lvert\Delta T_s\rvert<$\code{Solid\_Tol} 原本是\emph{每个块、每个进程各自}
+判断的。可是每一次扫掠都会调用 \code{update\_Ts\_buffer\_onemesh}（\code{Ts\_send}/\code{Ts\_recv}
+成对点对点交换），于是 \textbf{两个进程必须执行完全相同的扫掠次数}；否则一方已在
+\code{MPI\_Recv} 等待对方永远不会再发的消息，表现为“固体求解卡死不返回”
+（各进程拥有的块数/网格量/材料参数不同时，局部扫掠数必然不同）。
+
+2026-10-18 起（P3）改为\textbf{分块同步推进}（\code{solid\_solve\_all\_blocks}）：
+\begin{enumerate}
+  \item 先在本地所有 \code{BLOCK\_SOLID} 上各推进 \code{Solid\_Sync\_Chunk} 次扫掠；
+  \item 用一次 \code{MPI\_Allreduce(MPI\_MAX)} 把本地 $\max\lvert\Delta T_s\rvert$ 归约成\textbf{全局值}；
+  \item 停止判据改用全局值：
+        $\big(\text{res}_{glob}<\texttt{Solid\_Tol}\ \wedge\ \text{sweeps}\ge\texttt{Solid\_Min\_Iter}\big)$
+        或 $\text{sweeps}\ge\texttt{Solid\_Max\_Iter}$；
+  \item 由此每个进程的判据、退出时机与界面交换次数\textbf{完全相同}，不会失配。
+\end{enumerate}
+没有固体块的进程同样进入循环（内层空转）并参与 \code{MPI\_Allreduce}，集合通信次数也一致。
+代价是 $N/$\code{Solid\_Sync\_Chunk} 次 \code{MPI\_Allreduce}（默认 20000/100 $=$ 200 次，
+每次仅 1 个 \code{double}，开销可忽略）；\code{Solid\_Max\_Iter} 最多被超出
+\code{Solid\_Sync\_Chunk}$-1$ 次扫掠（各进程一致）。
+
+\begin{itemize}
+  \item np$=$1 或 \code{Solid\_Sync\_Chunk}$\le0$：走\emph{原来的}逐块路径，
+        \code{solid\_solver\_one\_block} 的行为与旧版\textbf{逐字节相同}；
+  \item np$>$1：\code{solver\_one\_block} 内的 \code{BLOCK\_SOLID} 分支只登记、
+        \emph{不}就地求解，改由块循环之后的 \code{solid\_solve\_all\_blocks} 统一推进
+        （分段交错码 11/13 的固体分段同理）；
+  \item 并行收敛信息另打一行（rank 0）：
+\begin{lstlisting}
+ solid sync (parallel): sweeps=    1400  global max|dTs|= 0.91234567E-09  converged= T  (identical on every MPI rank)
+\end{lstlisting}
+        逐块的 \code{Region res [solid GS |dTs|]} 行语义不变（仍是该块/该进程的值）。
+\end{itemize}
 
 \subsection{热边界（\code{solid\_bc.inp}）}
 逐面给定：\textbf{$T_w>0$ 等温壁（K）；$T_w<0$ 给定热流 $Q_w$ [W/m$^2$]}；可选追加
@@ -73,5 +111,6 @@ $k_s$ 为固体 SI 值（\code{material.in} 第 3 列）。方向/指标映射�
 \end{itemize}
 
 \noindent\textbf{依据文件}：\code{src/sub\_multi\_region.f90}（\code{solid\_solver\_one\_block} /
+\code{solid\_gs\_sweep} / \code{solid\_solve\_all\_blocks} /
 \code{compute\_interface\_T} / \code{set\_solid\_ghost\_Bc}）、\code{src/sub\_read\_parameter.f90}（\code{read\_solid\_bc}）。
 %===EOF===

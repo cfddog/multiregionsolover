@@ -149,6 +149,8 @@
            do mBlock=1,Mesh(1)%Num_Block               ! ??????? block, ?????????
              call solver_one_block(1,mBlock,Sfac,Sfac1)
            enddo
+           if(Total_proc > 1 .and. Solid_Sync_Chunk > 0) &
+             call solid_solve_all_blocks(1)   ! P3: same solid sweep count on all ranks
            call couple_fluid_solid_interfaces(1)       ! ????-???��???????
            call couple_solid_solid_interfaces(1)       ! ????-???��??????????
             call couple_lowspeed_porous_interfaces(1)   ! low-speed-porous (16)
@@ -167,6 +169,8 @@
            do mBlock=1,Mesh(1)%Num_Block               ! ??????? block, ?????????
              call solver_one_block(1,mBlock,Sfac,Sfac1)
            enddo
+           if(Total_proc > 1 .and. Solid_Sync_Chunk > 0) &
+             call solid_solve_all_blocks(1)   ! P3: same solid sweep count on all ranks
            call couple_fluid_solid_interfaces(1)       ! ????-???��???????
             call couple_lowspeed_porous_interfaces(1)   ! low-speed-porous (16)
 
@@ -203,6 +207,8 @@
 !          1-proc and N-proc coupling cadence differ.
 !          if(LS_Algorithm .eq. 3) call couple_lowspeed_porous_interfaces(1)
          enddo
+         if(Total_proc > 1 .and. Solid_Sync_Chunk > 0) &
+           call solid_solve_all_blocks(1)   ! P3: same solid sweep count on all ranks
          call couple_fluid_solid_interfaces(1)       ! ????-???��???????
          call couple_solid_solid_interfaces(1)       ! ????-???��??????????
          call couple_lowspeed_porous_interfaces(1)   ! low-speed-porous (16)

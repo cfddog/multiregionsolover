@@ -1022,3 +1022,45 @@ h 减半收敛性表。
 **同步**：本地 `push` → 集群 `make -j4` → `pull`（回传 `pverify_p1.log`，本地改名
 `run_verify_p1.log` 以命中 `cases/**/run*.log` 忽略规则）。
 
+
+---
+
+## 2026-10-18 21:5x — P3 并行固体 GS 推进（`Solid_Sync_Chunk`）
+
+**改动**：`src/sub_multi_region.f90` 把一次 GS 扫掠抽成 `solid_gs_sweep`（纯局部），
+`solid_solver_one_block`（np=1 / `Chunk<=0`）与新增 `solid_solve_all_blocks`（np>1）共用；
+后者每 `Chunk` 次扫掠 `MPI_Allreduce(MAX/LOR)` 全局判据 ⇒ 各进程扫掠数一致；
+`solver_one_block` 在 np>1 且 `Chunk>0` 时**不再**逐块调用（否则会解两遍）。
+`sub_modules.f90`/`sub_read_parameter.f90`/`control.ec.template` 增 `Solid_Sync_Chunk=100`；
+`multiphysmixsolver.f90` 三个时间推进分支（RK3 / Dual_LU_SGS / 默认）各加一次调用。
+
+**顺带修的 4 个 np>1 缺陷**：`read_solid_bc` 全局块号索引局部数组；
+`check_remote_coupling_support` 的 `continue`→`cycle`；`output_vtk` 的 MPI tag
+（局部 vs 全局块号）+ 发送顺序；`output_Ts` 用局部块号命名（两进程覆盖同名文件 ——
+这才是“np 结果不一致”的真凶）。
+
+**新算例** `cases/solid_4blk/`：4 个互不耦合固体块（每块 1-D 导热，精确线性解），
+np=2 时 blk1/2→rank0、blk3/4→rank1；`gen_case.py`+`prep.sh`+`run.slurm`+
+`analyze_solid_4blk.py`+`README.md`。
+
+**本地验证**（2 步，`Solid_Tol=1e-9`）：np=1 扫掠数 18100/5300/18700/5200；
+np=2 (`Chunk=100`) 全部 18700 且每步一行 `solid sync (parallel)`，无死锁；
+`flow3d.dat`/`Residual.dat`/`Step_mess.dat` 与 np=1 逐字节相同；
+`Ts` max|Δ|=3.9e−7 K（blk3 逐字节相同），对精确解 ≤9.0e−7 K；
+`Chunk=0` np=2 时两进程各自早退（18100 vs 18700）但 `Ts` 与 np=1 逐字节相同
+⇒ 旧路径未变。
+
+**编译**：本地 `make -j4` EXIT=0；集群 wuzh02 `make -j4`（gfortran 7.3.1）EXIT=0，
+`md5sum bin/MultiPhysMixSolver = d925e26fbc4ae34e2be584a9dcd1e794`。
+
+**集群复验**：`cases/solid_4blk/prep.sh 2` + `sbatch -n 1/2`（46850363/46850364）
+两个作业约 30 s 完成；`analyze_solid_4blk.py np2 np1` 输出与本地一字不差
+（max|dT| 3.9e−7/1.5e−7/0/1.7e−7 K，blk3 逐字节相同）；`flow3d.dat` md5
+`2d0e4d22…`、`Ts_block_1.dat` md5 `77d54efb…` 与本地（gfortran 13）逐位相同。
+
+**同步**：`util/sync_cluster.sh push` 两次（脚本/权限变更后重推）；收尾 `pull`
+（回传 `np*/Residual.dat`、`control.ec`、`output_para.out`、`run_err.log`；
+`run_out.log` 按规则不回传）。本地提交 `c2d81b6`。
+
+**新发现（记账）**：码 14 固--固**局部**耦合界面温度不连续（np=1 收敛后两侧差 ~38 K）⇒
+待查 `couple_solid_solid_interfaces`；P3 验证算例因此改为互不耦合 4 块。
