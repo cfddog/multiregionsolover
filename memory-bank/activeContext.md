@@ -1,7 +1,7 @@
 # Active Context — 当前任务 / 最近决策 / 下一步
 
-> 更新时间：2026-10-18（**最新 §0n：集群 `wuzh02` 连接打通 + 环境核对**；
-> 上一版 §0m：3 块 AC 修复提交入库 + 冒烟复验）。**HEAD = `d96c61d`**（`main` 领先
+> 更新时间：2026-10-18（**最新 §0o：任务 5 旋转界面 + 任务 8 锚定回归 + 左手块保护**；
+> 上一版 §0n：集群 `wuzh02` 连接打通 + 环境核对）。**HEAD = `d96c61d`**（`main` 领先
 > `origin/main` 15 个提交，尚未 push）
 >（本轮 `29eae92`→`10ee6e2`→`6a804fa`→`5094fd8` 四个提交；随后一个记忆库提交）。
 > 本次全部改动（control.ec 7 组拆分 + 重启/节点输出 + 三算例迁移 + 文档/记忆库）**已提交并推送**；
@@ -22,6 +22,48 @@
 > 2 个 util 工具 + 模板 + 4 份文档 + 记忆库）。
 > **第六轮（2026-09-26）改动尚未提交**：区域残差监视输出（`src/sub_debug.f90`、
 > `sub_multi_region.f90`、`sub_lowspeed(_ac).f90`、`sub_porous(_ac).f90` + 手册 4 处 + 总结文档 + 记忆库）。
+
+## 0o. 2026-10-18：任务 5（i↔j 旋转界面）+ 任务 8（4/6 块锚定回归）+ 左手块保护 ✅
+
+**任务 5：`cases/channel_ac_2blk_rot90`（块 2 转置，界面 = blk-1 `i+` ↔ blk-2 `j-`）**
+- 关键发现：**`gen_case.py` 早期把 `p` 变体写成左手块**（`i→+y`、`j→+x` ⇒
+  `(x_i×x_j)·x_k = -z`，却让 `k→+z`，`L=(2,+1,+3)`）。两块覆盖范围正确、`|V|` 也正常，
+  但体积/面积/`dtime_mesh` 全为负 ⇒ 迭代发散（`u` 到 1e10）。修复：`p` 变体 `k→-z`
+  （`L=(2,+1,-3)`，bc 里把邻居 k 区间反序写：`-2 -1` 而不是 `-1 -2`）；`n` 变体
+  `i→-y`、`k→+z`（`L=(2,-1,+3)`，本来就右手）。
+- 结论（wuzh02，4×10⁴ 步）：`p_np1` 与未旋转参考 `ref_np1`（直接软链
+  `channel_ac_2blk` 的网格/bc）**逐位相同**（RMS(u)=3.0e-16、max|Δp|=1.3e-15）；
+  `n_np1` 与参考差 RMS(u)=4.0e-4，**差值集中在被反转块内部**（x>4 RMS 5.6e-4，
+  x<4 仅 4.4e-5，界面无尖峰）⇒ 同格式在不同索引走向下的舍入/残差地板差，不是映射
+  错误；np=1 vs np=2 两变体各差 2.4e-10；出口列和 = 1.000000。
+- 墙钟：ref 4m19s、p_np1 4m22s、n_np1 6m01s、p_np2 2m51s、n_np2 2m49s。
+
+**新增强制检查（防复发）**：`sub_geometry.f90::check_mesh_quality_onemesh` 逐块求最小
+单元体积，`<0` 先打印块号/最小体积/其 `(i,j,k)`，再汇总
+“left-handed block(s) in the input mesh …” 并 `MPI_Abort(3)`（exit=3），不再进入 `Init`；
+`negative_vol` 时也不再打印 “Check mesh quality OK”（原先会先打 OK 再报错，自相矛盾）。
+实测：本地故意造左手 `p` 网格 ⇒ 启动即 abort（exit=3），报错定位
+`(i,j,k)=(4,23,1)`、`Min Volume=-1.25e-3`。
+
+**任务 8：`cases/lidcavity_ac_46blk` 回归表（README 已补全）**
+- 进程数：m6 np=1/2/3/6 互差 RMS(u)=3.6e-7（np≥2 之间**逐位相同**），m4 np=1/2/4 = 3.1e-7；
+  墙钟 m6 39.4/14.7/10.3/5.81 s（np=6 加速比 6.78），m4 34.8/12.7/9.85 s。
+- 压力锚点（只换块编号）：m2a/m2b 1.28e-6、m4a/m4b 1.92e-6、m6a/m6b 2.23e-6；
+  `max|Δp| == |mean(p−p′)|` ⇒ 只差一个常数；m6a vs m6c 4.7e-9、m6a vs m6d 逐位相同。
+- Ghia(1982)：m2a 0.02058/0.04410、m4a 0.02082/0.04363、m6a 0.02121/0.04311
+  （3 块参考 0.02095/0.04365）。界面跳变 5.9e-3–1.9e-2 = “界面刻意一阶”的预期。
+
+**文档**：`chap04_lowspeed.tex` 新增“索引旋转（i↔j）的块与左右手约定”（含三种映射表、
+`L`/旋向、保护报错原文、实测数据）；`chap10_build_run.tex` 启动流程加“单元体积符号检查”；
+`93_changelog.tex` 追加 **1.6.5**；三个 PDF 重新生成（64 页、0 error、0 未定义引用）。
+
+**集群坑（务必记住）**：`sbatch` 前若 `module load apps/anaconda3/2023.09`（为了 numpy），
+作业继承 anaconda 的 `mpirun`（MPICH 内核），与 hpcx 链接的可执行文件不匹配 ⇒ 5 个作业
+全部在 `MPI_INIT` 之前报 `*** on a NULL communicator` 立刻死掉。**提交作业用干净 shell**
+（`which mpirun` 应为 `/opt/hpc/software/mpi/hpcx/v2.11.0/gcc-7.3.1/bin/mpirun`），
+分析时再单独 `module load`/用 `/public/software/apps/anaconda3/2023.09/bin/python3`。
+另：`make` 时也不能带 anaconda（`mpif90` 会被解析成 anaconda 的包装脚本 ⇒
+`x86_64-conda-linux-gnu-gfortran: command not found`）。
 
 ## 0n. 2026-10-18：集群 `wuzh02` 连接打通 + 环境核对 ✅
 

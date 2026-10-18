@@ -1,0 +1,9 @@
+# 本算例的实测运行目录（prep.sh 生成），只保留输入、脚本与 README
+ref_np1/
+p_np1/
+p_np2/
+n_np1/
+n_np2/
+# 运行/同步产物
+prep_cluster.log
+analyze_*.txt

@@ -1,0 +1,17 @@
+# 本算例的实测运行目录（prep.sh 生成），只保留输入、脚本与 README
+m2a_np1/
+m2b_np1/
+m4a_np1/
+m4a_np2/
+m4a_np4/
+m4b_np1/
+m6a_np1/
+m6a_np2/
+m6a_np3/
+m6a_np6/
+m6b_np1/
+m6c_np1/
+m6d_np1/
+# 运行/同步产物
+prep_cluster.log
+analyze_*.txt

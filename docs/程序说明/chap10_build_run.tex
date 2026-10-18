@@ -35,7 +35,9 @@ mpirun -np 4 ../../bin/MultiPhysMixSolver   # 多进程：需块数 >= 进程数
         \code{bin/} 下同时有兼容软链 \code{opencfd-ec1.16a.out -> MultiPhysMixSolver}，
         旧作业脚本若写 \code{./opencfd-ec1.16a.out}，把该软链拷到算例目录即可；
   \item 启动会依次做：读 \code{control.ec} $\to$ \code{prepare\_bc3d\_input}（校验/生成 \code{bc3d.inp}）
-        $\to$ 网格质量检查 $\to$ \code{Init} $\to$ 读/生成 \code{wall\_dist.dat}
+        $\to$ 网格质量检查（含\textbf{单元体积符号}：任一块出现负体积 = 左手索引三元组，
+        直接打印块号/最小体积位置并 \code{MPI\_Abort}，见第 \ref{sec:ac-mblock} 节）
+        $\to$ \code{Init} $\to$ 读/生成 \code{wall\_dist.dat}
         $\to$ \code{Init\_flow}（有 \code{field\_restart.dat} 则续算）$\to$ 时间推进；
   \item 多进程时会自动生成 \code{partation-auto.dat}、\code{part\_grid.dat}；
         若目录里已有 \code{partation.dat} 则优先使用；

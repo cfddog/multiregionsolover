@@ -411,11 +411,28 @@
    real(PRE_EC):: fl,ft,flmax,ftmax,fl1,fl2,fl3,ft1,ft2,ft3,Af,Aa
    real(PRE_EC):: x1,x2,y1,y2,z1,z2,Vmax,Vmin
    character(len=50):: filename
+   logical:: negative_vol
+   integer:: nbad, ierr
 
    Type (Mesh_TYPE),pointer:: MP
    Type (Block_TYPE),pointer:: B
    
    if(my_id .eq. 0)    print*, "Check mesh quality ......"
+
+!  ---- left-handed block guard -------------------------------------------
+!  A negative cell volume means the local triad (i,j,k) is LEFT-handed,
+!  i.e. (x_i) x (x_j) . (x_k) < 0  (e.g. i -> +y, j -> +x, k -> +z).
+!  All metric terms (Si/Sj/Sk) and the volume then carry the same negative
+!  sign, so the FVM residual / pseudo-time scaling is inverted: the AC march
+!  blows up on the first pseudo step (observed 2026-10-18 on the 'p' variant
+!  of cases/channel_ac_2blk_rot90: res ~ 8e28, u frozen at the initial
+!  value), while the run itself keeps going and silently writes garbage.
+!  Such a mesh is invalid input, so it is stopped here instead of being
+!  marched.  Fix: reverse one index direction of that block (a block is
+!  right-handed iff its two in-plane index vectors are ordered consistently
+!  with the third, e.g. i -> +y, j -> -x, k -> +z).
+   negative_vol = .false.
+   nbad = 0
 
    MP=>Mesh(nMesh)
    do m=1,MP%Num_Block   
@@ -442,6 +459,15 @@
 	   enddo
 	   enddo
 	   enddo
+
+!  ---- negative volume (left-handed triad) -> invalid input --------------
+      if(Vmin .le. 0.d0) then
+        negative_vol = .true.
+        nbad = nbad + 1
+        print*, " ERROR: block", B%block_no, &
+          " has a NEGATIVE cell volume (left-handed i,j,k triad)"
+        print*, "        Min Volume=", Vmin, " at (i,j,k)=", in,jn,kn
+      endif
 
 
 
@@ -554,10 +580,27 @@
        endif
 
 !	  close(103)
-     if(my_id .eq. 0)    print*, "Check mesh quality OK"
+     if(my_id .eq. 0 .and. (.not. negative_vol)) &
+                                   print*, "Check mesh quality OK"
 
     endif
 
+
+   if(negative_vol) then
+      if(my_id .eq. 0) then
+        print*, "=============================================================="
+        print*, " ERROR: left-handed block(s) in the input mesh"
+        print*, "        negative cell volume in", nbad, " of", MP%Num_Block, &
+                " block(s) of this process"
+        print*, "        => (x_i)x(x_j).(x_k) < 0, all metric terms and the"
+        print*, "           volume carry the wrong sign and the residual blows"
+        print*, "           up on the first pseudo step. Please reverse one"
+        print*, "           index direction of the offending block."
+        print*, "=============================================================="
+      endif
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+      call MPI_Abort(MPI_COMM_WORLD, 3, ierr)
+   endif
 
 	end  subroutine check_mesh_quality_onemesh
 

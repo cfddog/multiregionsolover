@@ -410,6 +410,27 @@
       并断言 `max|d|=0`；测试 t01–t07 随各级加入。
 
 
+## 已完成（2026-10-18：任务 5 旋转界面 + 任务 8 锚定回归 + 左手块保护）
+
+- [x] 修 `cases/channel_ac_2blk_rot90/gen_case.py`：`p` 变体 **左手→右手**（块 2 `k→-z`，
+      `L=(2,+1,-3)`；bc 里邻居 k 区间反序 `-2 -1`）；`n` 变体 `L=(2,-1,+3)` 不变。
+- [x] 新增启动保护 `src/sub_geometry.f90::check_mesh_quality_onemesh`：最小单元体积 `<0`
+      ⇒ 打印块号/最小体积/`(i,j,k)` + `MPI_Abort(3)`；`negative_vol` 时不打“OK”。本地
+      故意造左手网格实测 exit=3、`Min Volume=-1.25e-3`。
+- [x] 集群 5 个作业（46827434/36/37/39/40，4×10⁴ 步）全部完成：
+      `p` vs 未旋转参考**逐位相同**（3.0e-16）、`n` vs 参考 4.0e-4（差值在被反转块内部）、
+      np=1 vs np=2 各 2.4e-10；墙钟 4m19/4m22/6m01/2m51/2m49。
+- [x] `cases/channel_ac_2blk_rot90/README.md`（新建）、`cases/lidcavity_ac_46blk/README.md`
+      回归表（进程数/锚点/Ghia/界面跳变）；`analyze_rot90.py` 文档串同步 `L` 约定。
+- [x] 文档：`chap04_lowspeed.tex` 新增“索引旋转（i↔j）的块与左右手约定”、
+      `chap10_build_run.tex` 启动流程加体积符号检查、`93_changelog.tex` **1.6.5**；
+      `./build.sh` + 第 3 遍 = 64 页、0 error、0 未定义引用、3 个 PDF 同步。
+- [x] 集群/本地同步（push 全仓、pull 只取记录）；集群 `make -j4` 通过（gfortran 7.3.1）。
+- [ ] 待提交：本轮改动 **尚未 `git commit`**（`src/sub_geometry.f90`、`cases/*rot90*`、
+      `cases/lidcavity_ac_46blk/README.md`、docs 3 份、memory-bank 3 份）。
+- [ ] 经验入库：`sbatch` 提交前**不要** `module load anaconda`（mpirun 混用 ⇒
+      `NULL communicator`）；`make` 同理。
+
 ## 已完成（2026-10-18：集群部署与 Slurm 复跑）
 
 - [x] 集群副本 `/work/home/lijunyang/sundong/MultiPhysMixSolver/`（rsync 1943 文件 / 50 MB，

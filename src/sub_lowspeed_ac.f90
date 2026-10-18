@@ -987,7 +987,22 @@
    end subroutine ac_ifc_src_cell
 
 !===============================================================================
-! Owner: single valued interface flux -> FSH(owner cell); RAC(owner cell) -= F*A
+! Owner: single valued interface flux -> FSH(owner cell), then RAC(owner cell)
+! -= or += F*A depending on which index side the owner sits on.
+! FSH always stores the flux along +n (face normal from the LOW-index cell to
+! the HIGH-index cell), the same convention as ac_face_flux_rus1_own:
+!     low-index side  : RAC -= FLX*A
+!     high-index side : RAC += FLX*A
+! 2026-10-18 bug fix (found by cases/lidcavity_ac_46blk, numberings b/c): this
+! routine used to always pass (owner, ghost) as (L,R) and always write
+! "-FLX*A".  That is correct only when the owner is the LOW side (its own face
+! is 4/5/6, ghost at the higher index) -- what every ascending block numbering
+! (all older cases) produces.  With a descending numbering the owner is the
+! high side (face 1/2/3, ghost below): the Rusanov upwinding was taken from the
+! wrong cell AND the residual sign was inverted, so the interface became a
+! mass/momentum source (2-block cavity, block 1 = right block: u_max 1.83
+! instead of 0.93, interface max|du| ~ 0.7).  ac_ifc_flux_nb had the matching
+! sign error.
 ! ===============================================================================
    subroutine ac_ifc_flux_own(B, id, iO,jO,kO, iG,jG,kG, dir, beta)
     use Global_var
@@ -998,7 +1013,7 @@
     real(PRE_EC),intent(in):: beta
     real(PRE_EC) :: FLX(4), A, nx1,ny1,nz1
     real(PRE_EC) :: rb
-    integer :: iF,jF,kF
+    integer :: iF,jF,kF, is_high
     iF=max(iO,iG); jF=max(jO,jG); kF=max(kO,kG)          ! face plane index
     if(dir .eq. 1) then
       A=B%Si(iF,jF,kF); nx1=B%ni1(iF,jF,kF); ny1=B%ni2(iF,jF,kF); nz1=B%ni3(iF,jF,kF)
@@ -1007,11 +1022,27 @@
     else
       A=B%Sk(iF,jF,kF); nx1=B%nk1(iF,jF,kF); ny1=B%nk2(iF,jF,kF); nz1=B%nk3(iF,jF,kF)
     endif
-    call ac_flux_rusanov(XW(1,iO,jO,kO),XW(2,iO,jO,kO),XW(3,iO,jO,kO),XW(4,iO,jO,kO), &
-                         XW(1,iG,jG,kG),XW(2,iG,jG,kG),XW(3,iG,jG,kG),XW(4,iG,jG,kG), &
-                         nx1,ny1,nz1, beta, FLX)
-    FSH(1:4,iO,jO,kO,id) = FLX(1:4)
-    RAC(1:4,iO,jO,kO) = RAC(1:4,iO,jO,kO) - FLX(1:4)*A
+    is_high = 1
+    if(dir .eq. 1) then
+      if(iG .gt. iO) is_high = 0
+    else if(dir .eq. 2) then
+      if(jG .gt. jO) is_high = 0
+    else
+      if(kG .gt. kO) is_high = 0
+    endif
+    if(is_high .eq. 1) then      ! owner on the HIGH-index side: L=ghost, R=owner
+      call ac_flux_rusanov(XW(1,iG,jG,kG),XW(2,iG,jG,kG),XW(3,iG,jG,kG),XW(4,iG,jG,kG), &
+                           XW(1,iO,jO,kO),XW(2,iO,jO,kO),XW(3,iO,jO,kO),XW(4,iO,jO,kO), &
+                           nx1,ny1,nz1, beta, FLX)
+      FSH(1:4,iO,jO,kO,id) = FLX(1:4)
+      RAC(1:4,iO,jO,kO) = RAC(1:4,iO,jO,kO) + FLX(1:4)*A
+    else                         ! owner on the LOW-index side: L=owner, R=ghost
+      call ac_flux_rusanov(XW(1,iO,jO,kO),XW(2,iO,jO,kO),XW(3,iO,jO,kO),XW(4,iO,jO,kO), &
+                           XW(1,iG,jG,kG),XW(2,iG,jG,kG),XW(3,iG,jG,kG),XW(4,iG,jG,kG), &
+                           nx1,ny1,nz1, beta, FLX)
+      FSH(1:4,iO,jO,kO,id) = FLX(1:4)
+      RAC(1:4,iO,jO,kO) = RAC(1:4,iO,jO,kO) - FLX(1:4)*A
+    endif
 !IFC DIAG
     if(jO .eq. 1 .and. kO .eq. 1) then
       ac_dbg_own = ac_dbg_own + 1
@@ -1024,8 +1055,11 @@
    end subroutine ac_ifc_flux_own
 
 !===============================================================================
-! Neighbour: NO local flux -- read the single stored owner flux.
-! F points from the owner cell into this cell -> RAC(own cell) += F*A
+! Neighbour: NO local flux -- read the single stored owner flux FSH.  FSH is
+! always oriented along +n (low-index side -> high-index side), so
+!     low-index side  : RAC -= FSH*A
+!     high-index side : RAC += FSH*A
+! 2026-10-18: the sign is no longer hard-wired to '+' (see ac_ifc_flux_own).
 ! ===============================================================================
    subroutine ac_ifc_flux_nb(nMesh, B, id, iO,jO,kO, iG,jG,kG, dir)
     use Global_var
@@ -1034,7 +1068,7 @@
     integer,intent(in):: nMesh, id, iO,jO,kO, iG,jG,kG, dir
     Type (Block_TYPE),pointer:: B
     real(PRE_EC) :: A
-    integer :: i1,j1,k1, iF,jF,kF
+    integer :: i1,j1,k1, iF,jF,kF, is_high
     call ac_ifc_src_cell(nMesh, id, iG,jG,kG, i1,j1,k1)
     iF=max(iO,iG); jF=max(jO,jG); kF=max(kO,kG)
     if(dir .eq. 1) then
@@ -1044,7 +1078,19 @@
     else
       A=B%Sk(iF,jF,kF)
     endif
-    RAC(1:4,iO,jO,kO) = RAC(1:4,iO,jO,kO) + FSH(1:4,i1,j1,k1,id)*A
+    is_high = 1
+    if(dir .eq. 1) then
+      if(iG .gt. iO) is_high = 0
+    else if(dir .eq. 2) then
+      if(jG .gt. jO) is_high = 0
+    else
+      if(kG .gt. kO) is_high = 0
+    endif
+    if(is_high .eq. 1) then
+      RAC(1:4,iO,jO,kO) = RAC(1:4,iO,jO,kO) + FSH(1:4,i1,j1,k1,id)*A
+    else
+      RAC(1:4,iO,jO,kO) = RAC(1:4,iO,jO,kO) - FSH(1:4,i1,j1,k1,id)*A
+    endif
 !IFC DIAG
     if(jO .eq. 1 .and. kO .eq. 1) then
       ac_dbg_nb = ac_dbg_nb + 1

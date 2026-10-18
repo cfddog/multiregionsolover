@@ -893,3 +893,42 @@ h 减半收敛性表。
   并改用 `rsync --update`（本轮踩到一次：`pull` 把未推送的 `constraints.md`/`chap10` 覆盖回旧版后重做）。
 
 
+## 2026-10-18 — 任务 5（i↔j 旋转界面）+ 任务 8（4/6 块锚定回归）+ 左手块（负体积）保护
+
+- **任务 5 的真凶**：`cases/channel_ac_2blk_rot90` 的 `p` 变体（块 2 `i→+y`、`j→+x`）
+  早期让 `k→+z`，于是 `(x_i×x_j)·x_k = -z < 0` —— **左手块**。两块覆盖范围正确、
+  `|V|` 数值也正常（只是负号），但体积/面积/`dtime_mesh` 全为负 ⇒ 第一步就发散
+  （`u` 到 1e10 量级）。修 `gen_case.py`：`p` 变体 `k→-z`（`L=(2,+1,-3)`，bc 的邻居 k
+  区间反写 `-2 -1`），`n` 变体 `i→-y`/`k→+z`（`L=(2,-1,+3)`，本来就右手）。
+- **加了硬性保护**：`sub_geometry.f90::check_mesh_quality_onemesh` 逐块检查最小单元体积，
+  `<0` 先打印块号/最小体积/`(i,j,k)`，再打 “left-handed block(s) in the input mesh …”
+  并 `MPI_Abort(3)`；`negative_vol` 为真时不再打 “Check mesh quality OK”
+  （原先先打 OK 再报错，自相矛盾）。用 `/tmp/lefthand.py` 造左手网格实测：exit=3、
+  `Min Volume=-1.25e-3 at (4,23,1)`，提示语完整。
+- **本地复验（400 步）**：`p_np1` 与 `ref_np1` 逐位相同（RMS(u)=1.2e-16），`n` 差 1e-4；
+  界面 max|Δu| 3.1e-4（0.026% of u_max）。顺带修了本机 run 脚本的路径坑
+  （`mpirun` 用绝对路径 `/home/sundong/Fortran_Project/MultiPhysMixSolver/bin/...`）。
+- **集群（wuzh02，4×10⁴ 步）**：`FRESH=1 ./prep.sh 40000` + 5 个 `sbatch`
+  （46827434/36/37/39/40）全部 done。`p_np1` vs 参考 **3.0e-16（逐位）**；
+  `n_np1` vs 参考 4.0e-4，差值集中在被反转块内部（x>4 RMS 5.6e-4、x<4 4.4e-5、
+  界面无尖峰）；np1 vs np2 两变体各 2.4e-10；出口列和 1.000000。
+  墙钟 4m19 / 4m22 / 6m01 / 2m51 / 2m49（`-N 1`，含 IO）。
+- **两个集群环境坑（本轮踩到）**：
+  (1) `sbatch` 的命令行环境里若 `module load apps/anaconda3/2023.09`（为 numpy），
+  作业继承 anaconda 的 `mpirun`（MPICH 内核）⇒ 5 个作业在 `MPI_INIT` 前全部
+  `*** on a NULL communicator` 秒退（队列 14:59 提交、14:59 全灭）。**提交用干净 shell**，
+  用 `/public/software/apps/anaconda3/2023.09/bin/python3` 或事后单独 load 做分析。
+  (2) `make` 也不能带 anaconda（`mpif90` 变成 anaconda 包装脚本 ⇒
+  `x86_64-conda-linux-gnu-gfortran: command not found`）；干净 shell 下
+  `which mpif90 = /opt/hpc/.../hpcx/v2.11.0/gcc-7.3.1/bin/mpif90`，增量重编通过。
+- **任务 8 整理**：`cases/lidcavity_ac_46blk/README.md` 补全回归表（m6 np=1/2/3/6 互差
+  3.6e-7、np=6 墙钟 5.81 s/加速比 6.78；只换编号 m6a vs m6b 速度差 2.2e-6、压力只差常数；
+  Ghia 对照与界面跳变）。
+- **文档**：`chap04_lowspeed.tex` 新增“索引旋转（i↔j）的块与左右手约定”（映射表 + `L`/旋向 +
+  报错原文 + 实测）；`chap10_build_run.tex` 启动流程加“单元体积符号检查”；
+  `93_changelog.tex` 追加 **1.6.5**；`./build.sh` 后再跑一遍 xelatex，64 页、
+  0 error、0 未定义引用，`docs/*.pdf` 同步。
+- **同步**：`sync_cluster.sh push`（全仓，14:56）+ `pull`（15:14，只取 memory-bank/docs/日志/
+  analyze_*）。本轮改动**尚未 git commit**。
+
+

@@ -184,6 +184,23 @@
     三块方腔 $10^{4}$ 步 np$=$1/2/3 墙钟 27/18/8 s，np$=$2、np$=$3 对 np$=$1 为
     RMS$(u)=5.8\times10^{-7}$、$\max|\Delta u|=1.16\times10^{-6}$；集群 np$=$1 与本地
     \code{q1\_10k} \textbf{逐位相同}（RMS$=0$）\\
+2026-10-18 & 1.6.5 & \textbf{负体积（左手块）启动检查} $+$ \textbf{索引旋转块}算例：
+(a) \code{check\_mesh\_quality\_onemesh} 逐块检查最小单元体积，$<0$ 时打印块号、
+最小体积及其 $(i,j,k)$ 并 \code{MPI\_Abort(3)}（此前悄悄继续、第一步即发散）；
+(b) 新增 \code{cases/channel\_ac\_2blk\_rot90}：转置块（$i\leftrightarrow j$）的
+\code{p}/\code{n} 两种\textbf{右手}映射 $+$ 未旋转参考，附 \code{gen\_case.py}、
+\code{analyze\_rot90.py}、\code{run.slurm}；(c) \code{cases/lidcavity\_ac\_46blk}
+的 4/6 块回归（块编号/压力锚点、进程数、Ghia 对照）整理成表 &
+\code{src/sub\_geometry.f90}、\code{cases/channel\_ac\_2blk\_rot90/*}、
+\code{cases/lidcavity\_ac\_46blk/README.md}、\code{docs/程序说明/chap04\_lowspeed.tex}、
+\code{chap10\_build\_run.tex} & 本地 $+$ wuzh02（$10^{4}$–$4\times10^{4}$ 步）：
+rot90 \code{p} 变体与未旋转参考\textbf{逐位相同}（RMS$(u)=3.0\times10^{-16}$，
+$\max|\Delta p|=1.3\times10^{-15}$）；\code{n} 变体与参考 RMS$(u)=4.0\times10^{-4}$，
+差值集中在被反转块内部（$x>4$ RMS $5.6\times10^{-4}$、$x<4$ 仅 $4.4\times10^{-5}$，
+界面无尖峰）；两变体 np$=$1 与 np$=$2 各互差 $2.4\times10^{-10}$；左手版本启动即
+\code{MPI\_Abort} exit$=$3。46blk：m6 np$=$1/2/3/6 互差 RMS$(u)=3.6\times10^{-7}$、
+np$=$6 墙钟 5.81 s（加速比 6.78），仅换块编号（m6a vs m6b）速度差
+RMS$(u)=2.2\times10^{-6}$ 而压力只差一个常数 \\
 \bottomrule
 \end{longtable}
 
