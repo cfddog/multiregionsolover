@@ -21,6 +21,9 @@ EXCLUDES=(
   --exclude 'Mesh3d.dat' --exclude 'partation.dat' --exclude 'Residual.dat'
   --exclude '*.log' --exclude '*.pw' --exclude '*.plt' --exclude '*.tec'
   --exclude 'np[0-9]*/'
+  # 并行验证框架的运行目录：两侧各自生成，push 绝不能拿本地旧结果覆盖集群的新结果
+  # （2026-10-18 踩过：push 用 -a 保留 mtime，把集群刚算出的 analyze_np*.txt 盖回旧版）
+  --exclude 'runs/'
 )
 
 case "${1:-}" in
