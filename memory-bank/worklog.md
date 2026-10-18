@@ -940,6 +940,10 @@ h 减半收敛性表。
   `Min Volume=-1.25e-3 at (4,23,1)`；`pdftotext` 校验 PDF 含“索引旋转”与“1.6.5”。
 - 新增 `.gitignore`：`cases/channel_ac_2blk_rot90/.gitignore`、`cases/lidcavity_ac_46blk/.gitignore`
   （隐藏 `ref_np1/ p_np1/ …`、`prep_cluster.log`、`analyze_*.txt`，与 3blk 算例同约定）。
+- **GitHub push（15:5x，用户指示）**：`git push origin main` = `ff7066a..635911e`
+  （18 个提交，`origin = git@github.com:cfddog/multiregionsolover.git`），
+  `rev-list --count origin/main..main` 归零；工作树只剩有意未提交的
+  `.vscode/settings.json` 与未跟踪的 `workplan.md`。
 
 
 
