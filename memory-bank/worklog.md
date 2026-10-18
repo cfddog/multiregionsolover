@@ -970,6 +970,10 @@ h 减半收敛性表。
 - **同步**：`push` 2 次（含 `--exclude runs/` 生效后）+ `pull` 1 次（取回 `runs/*/control.ec`、
   `partation.dat`、`output_para.out`、`analyze_np*.txt`；本地旧 `runs/` 已删后重取）。
   记忆库同步更新 `activeContext.md` §0p / `progress.md`。
+- **提交**：`017debd`（`util/mkpart.py` + `util/sync_cluster.sh`）、`143baa4`（`cases/parallel/` 7 个文件
+  912 行 + 记忆库 3 份）。提交后再次 `push`，集群 `SKIP_RUN=1` 复跑 = EXIT=0 / `PASS=4 FAIL=0`
+  （日志 `runs/para_ana4.log` 已 `pull` 回本地）。工作树仅剩有意未提交的 `.vscode/settings.json`
+  与未跟踪的 `workplan.md`。
 
 
 
