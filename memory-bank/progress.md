@@ -1,7 +1,28 @@
 # Progress — 已完成 / 待办
 
-> 更新：2026-10-17（第四～七轮改动已提交；ε 极限的**负结果**已写入手册/README）。**HEAD = `a29a6ee` 之后**（本轮 3 个提交）。
+> 更新：2026-10-18（**新增并行验证框架 `cases/parallel` 并实测全 PASS**；P0 已完成，P1/P2 待做）。
 > 更早的开发历史见 `docs/工作日志.md`、`docs/程序能力与算例考核总结.md`、`memory-bank/worklog.md`。
+
+## ✅ 已完成（2026-10-18）：并行验证框架 `cases/parallel`（P3–P6 的回归底座）
+
+- [x] 新增 `cases/parallel/`：`tests.conf`（测试清单）+ `run_para_verify.sh`（驱动）
+  + `gen_control.py`（由算例 `control.ec` 生成本次控制参数，就地替换 + 缺键按前缀追加，
+  同名 namelist 组冲突时**报错**）+ `analyze_para.py`（断言）+ `run.slurm` + `README.md`。
+- [x] 比较面：`flow3d_node.dat`（d,u,v,w,T,Ts 全局块序，与进程数无关）+ VTK 单元中心压力
+  （**去常数**：封闭域压力水平是 gauge，由全局 1 号块锚定）。
+- [x] 两个基线：`t01_two_ac`（`channel_ac_2blk`，2 块，进口/出口）/ `t02_four_ac`
+  （`lidcavity_ac_46blk` m4a，4 块，全封闭），都强制 `AC_Max_Iter=1`。
+- [x] 集群实测（wuzh02，gfortran 7.3.1，10000 步，**全部 PASS**）：
+  t01 np=2 max|Δu|=4.03e-6 / RMS 2.67e-6 / 压力 2.31e-6；
+  t02 np=2,3,4 max|Δu|=1.37e-6 / RMS 7.47e-7 / 压力 1.22e-6，
+  且 **np=2/3/4 之间逐位相同（max|Δ|=0）**。
+- [x] 关键认识：np=1 是「逐伪步刷鬼点」（块 Gauss-Seidel），np>1 是「每外步刷一次」（Jacobi），
+  **只收敛到同一个解**，瞬态必然不同 ⇒ 判据用收敛后的容差，不用逐位相同；
+  2000 步的差距（t01 4.1e-5、t02 8.5e-4）只配做冒烟。
+- [x] `util/sync_cluster.sh`：push 增加 `--exclude 'runs/'`（本地旧结果不得覆盖集群新结果，
+  当天踩过一次：`rsync -a` 保留 mtime，把集群刚写的 `analyze_np*.txt` 盖回旧版）。
+
+
 
 ## ✅ 已完成（2026-10-18）：集群 `wuzh02` 连接打通
 - [x] 私钥（`/mnt/c/Users/Administrator/.ssh/lijunyang_wuzh02_rsa`，与 Downloads 里
@@ -350,6 +371,10 @@
       需同时给两个 util 脚本加“双读兼容”，单独一次提交。
 
 ## 并行改造待办（P0→P6，均未开始）
+
+> 2026-10-18：`cases/parallel/` 已提供**np 无关性验证框架**（见上方「已完成」与
+> `cases/parallel/README.md`）。P3–P6 每一项落地后，都必须先在本框架里加对应测试
+> （固体块 / 码 12 / 码 19 / 码 14、18）并 PASS，再做算例层验证。
 
 - [x] **P0 跨进程安全网**（2026-10-17 完成）：`check_remote_coupling_support`
       （`src/sub_multi_region.f90` 末尾）在 `Init_flow` 后遍历界面，统计远端且无 MPI 版本的

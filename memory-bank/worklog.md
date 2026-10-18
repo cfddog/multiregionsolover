@@ -944,6 +944,33 @@ h 减半收敛性表。
   （18 个提交，`origin = git@github.com:cfddog/multiregionsolover.git`），
   `rev-list --count origin/main..main` 归零；工作树只剩有意未提交的
   `.vscode/settings.json` 与未跟踪的 `workplan.md`。
+## 2026-10-18 — 并行验证框架 `cases/parallel`（np 无关性回归底座）
+- **新增** `cases/parallel/`：`tests.conf`（t01_two_ac=`channel_ac_2blk` np=1,2；
+  t02_four_ac=`lidcavity_ac_46blk` m4a np=1,2,3,4）+ `run_para_verify.sh`（建目录/软链/
+  `gen_control.py` 生成 control.ec/`util/mkpart.py` 建 partation.dat/跑/断言，`MODE=slurm`
+  走 `sbatch --wait`，`SKIP_RUN=1` 只比对，`STEPS=` 覆盖步数）+ `analyze_para.py`
+  （`flow3d_node.dat` 逐点 d,u,v,w,T,Ts + VTK 单元中心压力去常数）+ `run.slurm` +
+  `.gitignore` + `README.md`（判据/结果/给 P3–P6 加测试/已知限制）。
+- **判据**：速度 max 1e-5 / RMS 5e-6 / d 1e-5 / 压力去常数 rel 5e-6 / T rel 1e-6；
+  `--tol-*` 均可命令行覆盖。默认 10000 步。
+- **集群实测（wuzh02，mpif90=gfortran 7.3.1，`AC_MPI_Sync=1`，全部 PASS）**：
+  t01 np=2 max|Δu|=4.03e-6 RMS 2.67e-6 压力 2.31e-6（常数偏移 9.72e-6）；
+  t02 np=2/3/4 max|Δu|=1.37e-6 RMS 7.47e-7 压力 1.22e-6，**np>1 之间逐位相同**。
+  机时：t01 75 s/43 s；t02 42/43/43/10 s（np=4 一个块一进程）。
+- **认识**：np=1 伪步内刷鬼点（Gauss-Seidel）vs np>1 每外步刷一次（Jacobi）⇒ 瞬态轨迹不同、
+  只收敛到同一解；2000 步差 4.1e-5（t01）/8.5e-4（t02）只能冒烟。t01 若沿用算例自带
+  `AC_Max_Iter=20`，np=2 差 6.6e-3（框架确实能抓真 bug）。
+- **修坑**：集群 `LANG=C` ⇒ 中文输出 `UnicodeEncodeError`，三脚本 `sys.stdout.reconfigure`
+  + 驱动 `PYTHONIOENCODING=utf-8`；`while read` 的 stdin 被子进程吃掉 ⇒ 改 `mapfile`；
+  wuzh02 多登录节点 `/tmp` 不共享 ⇒ 日志写 `cases/parallel/runs/`；
+  `sync_cluster.sh push` 曾用本地旧 `runs/` 覆盖集群新 `analyze_np*.txt`（`rsync -a` 保 mtime）
+  ⇒ push 增 `--exclude 'runs/'`（本次改动 `util/sync_cluster.sh`）。
+- **复验**：本地 `bash -n` + `py_compile` 通过；本地 300 步冒烟（`WORK=/tmp/para_local`
+  `TOL*=1`）PASS=4 全通过、退出码 0；集群 `SKIP_RUN=1` 复跑 4 个比对全 PASS。
+- **同步**：`push` 2 次（含 `--exclude runs/` 生效后）+ `pull` 1 次（取回 `runs/*/control.ec`、
+  `partation.dat`、`output_para.out`、`analyze_np*.txt`；本地旧 `runs/` 已删后重取）。
+  记忆库同步更新 `activeContext.md` §0p / `progress.md`。
+
 
 
 

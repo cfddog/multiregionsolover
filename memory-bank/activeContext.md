@@ -1,7 +1,8 @@
 # Active Context — 当前任务 / 最近决策 / 下一步
 
-> 更新时间：2026-10-18（**最新 §0o：任务 5 旋转界面 + 任务 8 锚定回归 + 左手块保护**；
-> 上一版 §0n：集群 `wuzh02` 连接打通 + 环境核对）。**HEAD = `d96c61d`**（`main` 领先
+> 更新时间：2026-10-18（**最新 §0p：并行验证框架 `cases/parallel` 实测全 PASS**；
+> 上一版 §0o：任务 5 旋转界面 + 任务 8 锚定回归 + 左手块保护）。
+> **HEAD = `d96c61d`**（`main` 领先
 > `origin/main` 15 个提交，尚未 push）
 >（本轮 `29eae92`→`10ee6e2`→`6a804fa`→`5094fd8` 四个提交；随后一个记忆库提交）。
 > 本次全部改动（control.ec 7 组拆分 + 重启/节点输出 + 三算例迁移 + 文档/记忆库）**已提交并推送**；
@@ -22,6 +23,49 @@
 > 2 个 util 工具 + 模板 + 4 份文档 + 记忆库）。
 > **第六轮（2026-09-26）改动尚未提交**：区域残差监视输出（`src/sub_debug.f90`、
 > `sub_multi_region.f90`、`sub_lowspeed(_ac).f90`、`sub_porous(_ac).f90` + 手册 4 处 + 总结文档 + 记忆库）。
+
+## 0p. 2026-10-18：并行验证框架 `cases/parallel`（P3–P6 的回归底座）✅
+
+**做了什么**：新增 `cases/parallel/`，把「np=1 与 np>1 是否同一个解」变成一条命令。
+
+- `run_para_verify.sh`：对 `tests.conf` 的每个测试，为 np=1..k 各建一个运行目录（网格/边界/
+  物性软链，**不动算例目录**），用 `gen_control.py` 生成 `control.ec`、`util/mkpart.py` 生成
+  `partation.dat`，跑完调 `analyze_para.py` 断言；`MODE=slurm` 时每个目录 `sbatch --wait`。
+- `gen_control.py`：base 里已有的键**就地替换**，缺的键按前缀追加到
+  `$flow_ec/$ac_ec/$lowspeed_ec/$solid_ec/$porous_ec/$couple_ec`；base 已有同名组时**报错**
+  （Fortran 只读第一个同名 namelist 组，静默忽略第二个）。
+- `analyze_para.py`：`flow3d_node.dat` 逐点（d,u,v,w,T,Ts）+ VTK 单元中心压力（去常数）。
+- 默认阈值 1e-5（速度 max）/5e-6（RMS）/5e-6（压力 rel）/1e-6（T rel）。
+
+**基线结果**（wuzh02，gfortran 7.3.1，10000 步，`AC_MPI_Sync=1` + `AC_Max_Iter=1`）：
+
+| 测试 | np | max\|Δu\| | RMS | 压力 rel | 结论 |
+|---|---|---|---|---|---|
+| `t01_two_ac`（channel_ac_2blk） | 2 | 4.03e-6 | 2.67e-6 | 2.31e-6 | PASS |
+| `t02_four_ac`（46blk m4a） | 2/3/4 | 1.37e-6 | 7.47e-7 | 1.22e-6 | PASS |
+
+**关键认识**（以后别再当 bug 追）：
+1. np=1 在伪时间步内刷鬼点（块 Gauss-Seidel），np>1 只能每个外步刷一次（Jacobi），
+   **两者只收敛到同一个解**；瞬态差 2000 步时 4.1e-5/8.5e-4，1e4 步降到 1e-6 量级。
+2. np>1 之间（np=2/3/4）**逐位相同**（max|Δ|=0）⇒ 跨进程交换本身没有不确定性。
+3. `channel_ac_2blk` 自带的 `control.ec` 是 `AC_Max_Iter=20` 的**单进程**配方，在 np=2 下差
+   6.6e-3；框架必须在 `tests.conf` 里覆盖成 1。这也是「框架能抓到真问题」的证据。
+
+**踩过的坑**：
+- 集群 `LANG=C` ⇒ python3 stdout 是 ascii，脚本里的中文提示抛 `UnicodeEncodeError`，
+  4 个比对全被判 FAIL。三个脚本都已加 `sys.stdout.reconfigure(encoding="utf-8")`，
+  驱动再 `export PYTHONIOENCODING=utf-8`。
+- 驱动里 `while read` 从 `tests.conf` 读配置，子进程（`mpirun`）会继承该 stdin 把剩余配置
+  行吃掉（t01 跑完 t02 直接消失）。改成 `mapfile` 先读进内存 + 子进程 `< /dev/null`。
+- wuzh02 有**多个登录节点**（login03/login05/…），`/tmp` 不共享；日志必须写在
+  `cases/parallel/`（共享盘）里才能跨 ssh 轮询。
+- `sync_cluster.sh push` 会用本地旧 `runs/` 覆盖集群结果（`rsync -a` 保留 mtime）⇒ push
+  增加 `--exclude 'runs/'`。
+
+**下一步**：P3（固体块）落地后，在 `tests.conf` 加 `t03_*`；`flow3d_node.dat` 增加固体位移/
+应力字段时，同步扩展 `analyze_para.py` 的 `VARNAMES` 与断言（脚本按 NVAR=6 校验长度，
+字段数变了会报错而不是静默错位）。
+
 
 ## 0o. 2026-10-18：任务 5（i↔j 旋转界面）+ 任务 8（4/6 块锚定回归）+ 左手块保护 ✅
 
