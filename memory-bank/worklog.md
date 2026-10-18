@@ -974,6 +974,9 @@ h 减半收敛性表。
   912 行 + 记忆库 3 份）。提交后再次 `push`，集群 `SKIP_RUN=1` 复跑 = EXIT=0 / `PASS=4 FAIL=0`
   （日志 `runs/para_ana4.log` 已 `pull` 回本地）。工作树仅剩有意未提交的 `.vscode/settings.json`
   与未跟踪的 `workplan.md`。
+- **GitHub push（用户指示）**：`git push origin main` = `b14103a..c27889c`（3 个提交），
+  之后 `rev-list --count origin/main..main` = 0 / `main..origin/main` = 0（`origin` =
+  `git@github.com:cfddog/multiregionsolover.git`）。
 
 
 
