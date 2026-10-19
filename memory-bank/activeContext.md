@@ -5,7 +5,8 @@
 > 手册 1.6.8。上一节：2026-10-18 P3 收口 ＋ 文档一致性核查（§0r）；
 > §0q：P1 收口 + 并行验证框架 `cases/parallel` 实测全 PASS；
 > §0o：任务 5 旋转界面 + 任务 8 锚定回归 + 左手块保护）。
-> **HEAD = `a9abd0a`**（P1 + P3 两个提交，已 push 到 wuzh02 与 GitHub `origin/main`）。
+> **HEAD = `68c0e7d`**（码 14 修复一次性提交，已 push GitHub `origin/main` 并同步集群；
+> 前两个提交 `a9abd0a`(P3) / `cacf24e`(文档) 亦在远端）。
 > 并行改造：P0 ✅ / P1 ✅ / P3 ✅；**P2、P4–P6 待做**（见 `progress.md`）。
 > 仅 `.vscode/settings.json`、`workplan.md`、`cases/parallel/pverify_p1.log` 有意未提交。
 > 上一版（2026-09-18，fluid_solid 三算例）已归档为 `memory-bank/archive_activeContext_2026-09-18.md`。

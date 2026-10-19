@@ -1130,3 +1130,24 @@ CRLF 保留，不合约定直接 `coupling descriptor error` 中止）；`util/f
 **同步（2026-10-19）**：`bash util/sync_cluster.sh push`（本批改动）完成；集群 `make -j4` 通过；
 `pull` 取回 `cases/solid_2blk_chain/{control.ec,output_para.out}` 等现场文件。
 
+---
+
+## 2026-10-19 — 提交并推送码 14 修复 + 三方同步（本地 / wuzh02 / GitHub）
+
+**提交**：`68c0e7d`（37 files, +1467/−239）——`src/{sub_convert_inp,sub_IO,sub_multi_region,
+sub_update_buffer_mpi}.f90`、`util/fix_iface_sign.py`、`cases/solid_2blk_chain/`（算例 + 现场参数
+`cluster_run_20261019/`）、5 个算例接口文件/生成器、手册 chap02 + changelog 1.6.8 与两份 PDF、
+记忆库；`.gitignore` 新增 `cases/**/np[0-9]*/`（prep.sh 生成的运行目录不入库）。
+按既有约定，`.vscode/settings.json`、`workplan.md`、`cases/parallel/pverify_p1.log` 仍有意不提交。
+
+**验证**：本地 `make -j4` **EXIT=0**；集群 wuzh02 `make -j4` **EXIT=0**（`Nothing to be done`，
+说明远端二进制就是这批源码编译的）；核心文件 md5 两侧逐位相同 ——
+`sub_convert_inp.f90 e84ceabc…`、`sub_IO.f90 bd6e3bb8…`、`sub_multi_region.f90 c612b0de…`、
+`sub_update_buffer_mpi.f90 2edc6ba4…`、`util/fix_iface_sign.py a4eaf8a7…`。
+
+**GitHub**：`git push origin main` ⇒ `cacf24e..68c0e7d`，`## main...origin/main` 无差异。
+
+**同步**：`bash util/sync_cluster.sh push` 完成（`rsync -az --delete`，排除 `.git/build/bin`、
+大产物与 `np*/`）；随后 `pull` 取回 memory-bank/docs/日志，结果工作区无新增差异
+（`--update` 保留本地较新文件）。本条记录随后一并提交并再次同步。
+

@@ -23,6 +23,8 @@
       结果存 `cases/solid_2blk_chain/analyze_np1.txt`。
 - [x] 文档：`chap02_inputs.tex` 两小节重写（正负号规则 + 实例 + 工具用法）、`93_changelog.tex` 1.6.8，
       `./build.sh` 0 error。
+- [x] 提交并推送：`68c0e7d`（37 files, +1467/−239）→ GitHub `origin/main`；本地/集群 `make -j4` 均 EXIT=0，
+      核心源文件 md5 两侧逐位相同；`sync_cluster.sh push/pull` 完成。`.gitignore` 新增 `cases/**/np[0-9]*/`。
 - [ ] 待办：`high_low_fluid`/`high_low_fluid_800K`/`interface19_phaseA` 的码 15 仅类型面清理（待确认）；
 - [ ] 待办：重生成并回归 `solid_4blk`、`fluid_solid`、`beavers_joseph`、`lidcavity_ac_3blk`、
       `channel_ac_2blk`、`bl_cht`（确认 `bc3d_interface.inc` 的 `L` 未变、结果不变）；
