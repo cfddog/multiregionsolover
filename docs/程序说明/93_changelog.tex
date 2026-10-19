@@ -253,6 +253,27 @@ RMS$(u)=2.2\times10^{-6}$ 而压力只差一个常数 \\
     np$=$1/2 各一个作业）：四个 \code{max|dT|} 与本地完全一致，
     \code{flow3d.dat}/\code{Ts\_block\_1.dat} 的 md5 与本地（gfortran 13）
     \textbf{逐位相同} \\
+2026-10-19 & 1.6.8 & \textbf{修好码 14（固--固）界面温度不连续}：根因是对接面的“对接方向”
+    没按约定标负（两条切向范围都取正），旧的 \code{Convert\_bc} 只能按“节点范围大小”猜对应关系，
+    在 $41\times21\times3$ 的薄块上猜成 $k$-$k$，界面量交换整错位。新 \code{Convert\_bc} 严格解析：
+    \textbf{一对等值 $=$ 面法向}、\textbf{一对全负 $=$ 对接方向}、\textbf{一对全正 $=$ 另一条切向边}，
+    \code{face} 由等值方向 $+$ 低/高侧得出，\code{L1..L3} 按类别配对（负$\leftrightarrow$负、
+    正$\leftrightarrow$正、法向$\leftrightarrow$法向）并用 $|j_{bst}|\to|j_{bed}|$ 定同序/逆序；
+    两个面不在同一侧时法向反向（\code{L} 再取反）。不符约定即报
+    \code{coupling descriptor error} 中止，不再静默猜。同时明确文件分工：
+    \code{bc3d.inp} \textbf{只给面类型}（同类对写 14 = 固体--固体，\textbf{无配对行、范围无正负号}），
+    块间连接（邻块号、邻面、$L$ 表）\textbf{只有} \code{bc3d\_interface.inp} 一个来源；
+    新增整库校验/修复工具，5 个算例生成器改为输出取负的对接方向 &
+    \code{src/sub\_convert\_inp.f90}、\code{util/fix\_iface\_sign.py}（新）、
+    \code{cases/solid\_2blk\_chain/gen\_case.py}、\code{cases/\{beavers\_joseph,porous\_fluid\_phaseB,%
+    cylinder\_re40\_200,bl\_cht\}/gen\_case.py}、\code{docs/程序说明/chap02\_inputs.tex} &
+    \code{cases/solid\_2blk\_chain}（两块 $41\times21\times3$ 串联导热板，$k=16.3$/$200$，
+    左 400 K / 右 350 K）：\code{bc3d.inp} 两对接面写 14、无符号，
+    \code{bc3d\_interface.inc} 得 \code{L1 L2 L3 = 1 2 3}（$i\leftrightarrow i$ 为法向、
+    $j\leftrightarrow j$、$k\leftrightarrow k$ 同序）；集群 wuzh02 \code{sbatch} np$=$1 跑 2000 步
+    （墙钟 1 m 03 s，固体 GS 收敛 $|\delta T_s|\le1.4\times10^{-12}$），
+    \code{analyze\_solid\_2blk\_chain.py}：两块胞心温度对精确解误差 $\le3.7\times10^{-9}$ K，
+    界面两侧胞心跳变 $0.625000$ K $=$ 解析值（修复前该处差 $\sim38$ K）\\
 \bottomrule
 \end{longtable}
 
@@ -261,11 +282,10 @@ RMS$(u)=2.2\times10^{-6}$ 而压力只差一个常数 \\
   \item 多孔速度入口的“按面法向通量”实现（消除 $\sim$28\% 通量缺口）；
   \item 低速压力求解器改用 BiCGStab/ILU；
   \item 接口 17（固--多孔）/18（多孔--多孔）；码 12/19 的跨进程耦合；
-  \item \textbf{码 14（固--固）局部耦合的界面温度不连续}：2026-10-18 做 P3 验证时实测
-        （两段 $k=16.3$ / $k=200$ 的串联导热板，41$\times$21$\times$3 与 41$\times$21$\times$3），
-        np$=$1 收敛后界面两侧胞心温度仍差 $\sim$38 K（逻辑上应连续）；
-        \code{couple\_solid\_solid\_interfaces} 的镜像量/面距取法待核（与 P3 无关，
-        P3 的验证算例已改为互不耦合的 4 块以避开该问题）；
+  \item \textbf{码 14（固--固）界面温度不连续}：\textbf{1.6.8 已修}——对接面
+        “对接方向”未标负使指标对应退化成 $k$-$k$；\code{cases/solid\_2blk\_chain} 现在
+        对精确解误差 $\le3.7\times10^{-9}$ K。仍待补：码 14 的\textbf{跨进程}耦合
+        （当前 np$>$1 由 \code{check\_remote\_coupling\_support} 直接中止）；
   \item \code{util/readflow3d-ver2.4a/2.5.f90} 的同类“双 unit”隐患修复；
   \item 三例 \code{cases/fluid\_solid/*/README.md}。
 \end{itemize}

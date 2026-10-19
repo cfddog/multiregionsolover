@@ -1096,3 +1096,37 @@ np=2 (`Chunk=100`) 全部 18700 且每步一行 `solid sync (parallel)`，无死
 → 本地与集群逐位相同。集群 gfortran 7.3.1 `-fsyntax-only` 两个工具 EXIT=0
 （本次只改 `util/` 与文档，未动 `src/`，主程序无需重编）。
 **提交**：`a9abd0a`（P3）→ `0252f05`（文档/工具同步）→ 本条记录提交。
+
+---
+
+## 2026-10-19 — 码 14（固--固）耦合修好：对接描述符符号约定 + `bc3d.inp` 只给类型
+
+**症状**：`cases/solid_2blk_chain` np=1 收敛后界面两侧胞心温度差 ~38 K（应连续，解析跳变 0.625 K）。
+
+**根因**：`bc3d*.inp` 对接面的两条切向范围都写成正（`1 21  1 3`），旧 `Convert_bc` 只能按
+节点范围大小猜 i/j/k 对应关系，在本算例（两切向 21 / 3 节点）猜成 **k↔k**（应为 i↔i 法向 +
+j↔j + k↔k），界面量（Ts/面距/镜像）整错位；且 `bc3d.inp` 与 `bc3d_interface.inp` 都写配对行，
+两份描述一旦不一致无法判定谁对。
+
+**约定（用户确认）**：`bc3d.inp` 只给**面类型** —— 同类块对接写 14，**无配对行、无正负号**
+（`41 41 1 21 1 3 14`），只有通用码 `-1` 才必须跟配对行；块间连接（邻块号/邻面/L 表）
+**只有** `bc3d_interface.inp` 一个来源，其对接面三对范围必须「恰好一对待值=法向、
+恰好一对全负=对接方向、恰好一对全正=另一条切向边」⇒ 负↔负、正↔正、法向↔法向，同序/逆序由
+`|j_bst|→|j_bed|` 定。运行时 `align_interface_to_bc_msg` 用 `bc3d.inp` 的码覆盖类型、保留配对信息。
+
+**改动**：`src/sub_convert_inp.f90`（`Convert_bc` 重写 + `classify_pair` + `Convert_bc_badpair`，
+CRLF 保留，不合约定直接 `coupling descriptor error` 中止）；`util/fix_iface_sign.py`（新，
+`--check/--fix`，`format_like` 保列宽，未改行逐字节不变，另查“仅类型面不得带符号”）；
+`cases/solid_2blk_chain/gen_case.py`（`with_link` 开关）+ 4 个算例生成器改为输出取负的对接方向；
+`cases/solid_2blk_chain/{bc3d.inp,run.slurm}`；`docs/程序说明/{chap02_inputs,93_changelog}.tex`（1.6.8）。
+
+**验证**（集群 wuzh02，gfortran 7.3.1）：`make -j4` EXIT=0；`prep.sh 2000` + `sbatch -n 1`
+作业 46903753（1 m 03 s，固体 GS max|dTs| 1.4e−12）；`bc3d.inc` 两对接面 `14` + 配对栏全 0；
+`bc3d_interface.inc` = `41 41 1 21 1 3 -1 4 2` + `1 1 1 21 1 3 2 1 1 | 1 2 3` ⇒ **L = 1 2 3**；
+`analyze_solid_2blk_chain.py`（numpy 只在本地有，scp 两份 `Ts_block_*.dat` 到 `/tmp/s2run` 后跑）
+**PASS**：max 误差 3.7e−9 K、界面跳变 0.625000 K = 解析；输出存 `analyze_np1.txt`。
+手册 `./build.sh` 0 error。
+
+**同步（2026-10-19）**：`bash util/sync_cluster.sh push`（本批改动）完成；集群 `make -j4` 通过；
+`pull` 取回 `cases/solid_2blk_chain/{control.ec,output_para.out}` 等现场文件。
+

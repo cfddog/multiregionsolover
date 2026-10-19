@@ -34,11 +34,12 @@
    TYPE (BC_MSG_TYPE),pointer:: Bc,Bc1
      
    Interface   
-     subroutine Convert_bc(Bc,kb,ke,kb1,ke1)
+     subroutine Convert_bc(Bc,kb,ke,kb1,ke1,has_link)
        use Type_Def1
        implicit none
        TYPE (BC_MSG_TYPE),pointer:: Bc
 	   integer,dimension(3):: kb,ke,kb1,ke1
+       logical,optional,intent(in):: has_link
 	 end subroutine
     end Interface
    
@@ -138,124 +139,224 @@
 
 !   将Gridgen格式 转换为 OpenCFD-EC 的边界连接格式
 !     计算面号、 连接次序 (L1,L2,L3)等
-      subroutine Convert_bc(Bc,kb,ke,kb1,ke1)
+      subroutine Convert_bc(Bc,kb,ke,kb1,ke1,has_link)
        use Type_Def1
        implicit none
        TYPE (BC_MSG_TYPE),pointer:: Bc
-	   integer,dimension(3):: kb,ke,kb1,ke1,s,p,LP
+       integer,dimension(3):: kb,ke,kb1,ke1,s,p,LP
        integer:: k,j,k1
+       logical,optional,intent(in):: has_link
+       logical:: link
+       logical:: used(3)
+       integer:: nc
+       integer,external::classify_pair
 
-	   if(Bc%bc .ge. 0) then
-	     Bc%ib1=0; Bc%ie1=0; Bc%jb1=0; Bc%je1=0; Bc%kb1=0; Bc%ke1=0; Bc%nb1=0
+!     Index-pair classification (see classify_pair):
+!        0 : kb == ke         -> collapsed pair = the face NORMAL direction
+!       -1 : both bounds < 0  -> the marked COUPLING direction (对接)
+!       +1 : both bounds > 0  -> the other tangential direction
+!        9 : mixed signs      -> invalid
+!
+!     Convention for a connection face (bc < 0), on the local line AND on the
+!     neighbour (continuation) line:
+!       * exactly one collapsed pair  (the face normal, e.g. j=jbst)
+!       * exactly one fully negative pair (the coupling edge)
+!       * exactly one fully positive pair (the other tangential edge)
+!     The i/j/k correspondence is then unique and is read as
+!         negative <-> negative, positive <-> positive, normal <-> normal
+!     with the sense inside one direction taken from |kb|->|ke| (start to
+!     start).  Example (M6-wing, blk-1 tip face k=33 <-> blk-4 k=33):
+!            1    25    -1   -49    33    33    -1
+!           25     1    -1   -49    33    33     4
+!     i: 1..25 (positive), j: 1..49 written negative = coupling edge,
+!     k = 33 collapsed = normal; the neighbour runs i from 25 to 1, i.e. the
+!     i direction is reversed.
+!     A face written with two positive tangential ranges (e.g. 1 3 and 1 21)
+!     is not acceptable: the correspondence degenerates and both tangential
+!     indices were silently mapped onto the same neighbour direction
+!     (a 2-D case ended up with a "k-k" link).
+
+       link = (Bc%bc .lt. 0)
+       if(present(has_link)) link = has_link
+
+       if(.not. link) then
+         Bc%ib1=0; Bc%ie1=0; Bc%jb1=0; Bc%je1=0; Bc%kb1=0; Bc%ke1=0; Bc%nb1=0
          Bc%L1=0; Bc%L2=0; Bc%L3=0; Bc%face1=0; Bc%f_no1=0
        endif
-     
 
-!   判断该面的类型 (i-, i+, j-,j+, k-,k+)     
        do k=1,3
-  	     if(kb(k) .eq. ke(k) ) then 
-	       s(k)=0                           ! 连接维
-	     else if (kb(k) .gt. 0) then 
-	       s(k)=1                           ! 正
-	     else
-	       s(k)=-1                          ! 负
-	     endif
+         s(k) = classify_pair(kb(k),ke(k))
        enddo
 
-!    边界子面的大小     
-	 Bc%ib=min(abs(kb(1)),abs(ke(1))) ;  Bc%ie=max(abs(kb(1)),abs(ke(1)))
-     Bc%jb=min(abs(kb(2)),abs(ke(2))) ;  Bc%je=max(abs(kb(2)),abs(ke(2)))
-     Bc%kb=min(abs(kb(3)),abs(ke(3))) ;  Bc%ke=max(abs(kb(3)),abs(ke(3))) 
+!     boundary sub-face size (node ranges, positive and ascending)
+       Bc%ib=min(abs(kb(1)),abs(ke(1))) ;  Bc%ie=max(abs(kb(1)),abs(ke(1)))
+       Bc%jb=min(abs(kb(2)),abs(ke(2))) ;  Bc%je=max(abs(kb(2)),abs(ke(2)))
+       Bc%kb=min(abs(kb(3)),abs(ke(3))) ;  Bc%ke=max(abs(kb(3)),abs(ke(3)))
 
-
-!   判断该面的类型 (i-, i+, j-,j+, k-,k+)     
-      if(s(1) .eq. 0) then
-	     if (Bc%ib .eq. 1) then
-	      Bc%face=1               ! i-
-	     else
-	      Bc%face=4               ! i+
-	    endif
-      else if(s(2) .eq. 0) then
-	    if(Bc%jb .eq. 1) then
-	      Bc%face=2                 ! j-
-	    else
-	      Bc%face=5                 ! j+
-	    endif
-      else
- 	   if(Bc%kb  .eq. 1) then
-	    Bc%face=3                 ! k-
-	   else
-	    Bc%face=6                 ! k+
-	   endif
-     endif 
+!     face type (i-,i+,j-,j+,k-,k+) from the collapsed direction
+       nc = count(s == 0)
+       if(nc .ne. 1 .or. any(s == 9)) then
+         call Convert_bc_badpair('local',Bc%bc,kb,ke)
+         stop
+       endif
+       if(s(1) .eq. 0) then
+         if (Bc%ib .eq. 1) then
+           Bc%face=1               ! i-
+         else
+           Bc%face=4               ! i+
+         endif
+       else if(s(2) .eq. 0) then
+         if(Bc%jb .eq. 1) then
+           Bc%face=2               ! j-
+         else
+           Bc%face=5               ! j+
+         endif
+       else
+         if(Bc%kb .eq. 1) then
+           Bc%face=3               ! k-
+         else
+           Bc%face=6               ! k+
+         endif
+       endif
 
 !---------------------------------------------------------------------------
 !------内边界的情况，建立连接描述
-  if( Bc%bc .lt. 0) then            ! 内边界
-!      计算连接顺序描述符L1,L2,L3
-!      计算各维之间的连接关系      
-     do k=1,3  
-	   if(kb1(k) .eq. ke1(k) ) then 
-	       p(k)=0                      ! 
-       else if (kb1(k) .gt. 0) then
-	       p(k)=1                      ! .inp 文件的 正数
-       else
-	       p(k)=-1
+       if( link ) then            ! 内边界
+         do k=1,3
+           p(k) = classify_pair(kb1(k),ke1(k))
+         enddo
+
+!        corresponding sub-face size (neighbour node ranges)
+         Bc%ib1=min(abs(kb1(1)),abs(ke1(1))) ; Bc%ie1=max(abs(kb1(1)),abs(ke1(1)))
+         Bc%jb1=min(abs(kb1(2)),abs(ke1(2))) ; Bc%je1=max(abs(kb1(2)),abs(ke1(2)))
+         Bc%kb1=min(abs(kb1(3)),abs(ke1(3))) ; Bc%ke1=max(abs(kb1(3)),abs(ke1(3)))
+
+!        same convention required on the neighbour line
+         nc = count(p == 0)
+         if(nc .ne. 1 .or. any(p == 9)) then
+           call Convert_bc_badpair('neighbour',Bc%bc,kb1,ke1)
+           stop
+         endif
+
+!        neighbour face type (i-,i+,j-,j+,k-,k+)
+         if(p(1) .eq. 0) then
+           if (Bc%ib1 .eq. 1) then
+             Bc%face1=1              ! i-
+           else
+             Bc%face1=4              ! i+
+           endif
+         else if(p(2) .eq. 0) then
+           if(Bc%jb1 .eq. 1) then
+             Bc%face1=2              ! j-
+           else
+             Bc%face1=5              ! j+
+           endif
+         else
+           if(Bc%kb1 .eq. 1) then
+             Bc%face1=3              ! k-
+           else
+             Bc%face1=6              ! k+
+           endif
+         endif
+
+!        Connection-pair descriptor L1,L2,L3: negative<->negative,
+!        positive<->positive, collapsed<->collapsed.  With the convention above
+!        each class occurs exactly once per side, so the matching is unique.
+         Lp(:) = 0
+         used(:) = .false.
+         do k=1,3
+           do j=1,3
+             if(.not. used(j) .and. s(k) .eq. p(j)) then
+               Lp(k)=j
+               used(j)=.true.
+               exit
+             endif
+           enddo
+         enddo
+
+!        every local direction must have found its partner ...
+         if(any(Lp == 0)) then
+           print*, ' ERROR in Convert_bc: cannot build the connection'
+           print*, '   bc=',Bc%bc,' face=',Bc%face,' face1=',Bc%face1
+           print*, '   kb,ke    =',kb,ke
+           print*, '   kb1,ke1  =',kb1,ke1
+           print*, '   the two sides disagree on the negative/positive marking'
+           print*, '   of the coupling edges (see the bc3d input format)'
+           stop
+         endif
+!        ... and the mapped node extents must agree (conformal interface)
+         do k=1,3
+           if(abs(ke(k))-abs(kb(k)) .ne. abs(ke1(Lp(k)))-abs(kb1(Lp(k)))) then
+             print*, ' ERROR in Convert_bc: non-conformal connection'
+             print*, '   local dim',k,' extent',abs(ke(k))-abs(kb(k)), &
+                     ' neighbour dim',Lp(k),' extent', &
+                     abs(ke1(Lp(k)))-abs(kb1(Lp(k)))
+             print*, '   kb,ke   =',kb,ke
+             print*, '   kb1,ke1 =',kb1,ke1
+             stop
+           endif
+         enddo
+
+!        connection order (positive: increasing together; negative: reversed).
+!        The sign of a range is only a class marker, so compare magnitudes.
+         do k=1,3
+           k1=Lp(k)
+           if(s(k) .ne. 0) then
+             if( (abs(ke(k))-abs(kb(k)))*(abs(ke1(k1))-abs(kb1(k1))) .lt. 0 ) &
+               Lp(k)=-Lp(k)                        ! 逆序连接
+           else
+!            normal direction: two faces on the same side (both low or both
+!            high) are traversed in opposite order
+             if( (Bc%face-1)/3 .eq. (Bc%face1-1)/3 ) Lp(k)=-Lp(k)
+           endif
+         enddo
+
+         Bc%L1=Lp(1); Bc%L2=Lp(2); Bc%L3=Lp(3)   ! 连接次序描述符
        endif
-     enddo
- 	   
+   end
 
-!    对应连接子面的大小     
-	 Bc%ib1=min(abs(kb1(1)),abs(ke1(1))) ;  Bc%ie1=max(abs(kb1(1)),abs(ke1(1)))
-     Bc%jb1=min(abs(kb1(2)),abs(ke1(2))) ;  Bc%je1=max(abs(kb1(2)),abs(ke1(2)))
-     Bc%kb1=min(abs(kb1(3)),abs(ke1(3))) ;  Bc%ke1=max(abs(kb1(3)),abs(ke1(3))) 
-    
- 	  
-!   判断该面连接面的类型 (i-, i+, j-,j+, k-,k+)     
-      if(p(1) .eq. 0) then
-	     if (Bc%ib1 .eq. 1) then
-	      Bc%face1=1               ! i-
-	     else
-	      Bc%face1=4               ! i+
-	    endif
-      else if(p(2) .eq. 0) then
-	    if(Bc%jb1 .eq. 1) then
-	      Bc%face1=2                 ! j-
-	    else
-	      Bc%face1=5                 ! j+
-	    endif
-      else
- 	   if(Bc%kb1 .eq. 1) then
-	    Bc%face1=3
-	   else
-	    Bc%face1=6
-	   endif
-     endif  
+!----------------------------------------------------------------------
+!   0 : collapsed pair (the face normal direction)
+!  -1 : both bounds negative (the marked coupling direction)
+!  +1 : both bounds positive (the other tangential direction)
+!   9 : mixed signs -> invalid
+!----------------------------------------------------------------------
+   integer function classify_pair(a,b)
+     implicit none
+     integer,intent(in):: a,b
+     if(a .eq. b) then
+       classify_pair = 0
+     else if(a .lt. 0 .and. b .lt. 0) then
+       classify_pair = -1
+     else if(a .gt. 0 .and. b .gt. 0) then
+       classify_pair = 1
+     else
+       classify_pair = 9
+     endif
+   end
 
-!  计算“连接对” 描述符  bc%L1, bc%L2, bc%L3 
- 	   do k=1,3
-	     do j=1,3
-	       if(s(k) .eq. p(j)) Lp(k)=j          ! .inp文件的连接格式： 正对正、 负对负、 0对0； 
-	     enddo
-	   enddo    
-	   
-!    计算连接次序 （正为顺序；负为拟序）	  
-	  do k=1,3
-	   if(s(k) .ne. 0) then
-	     k1=Lp(k)
-	     if( (ke(k)-kb(k))*(ke1(k1)-kb1(k1)) .lt. 0) Lp(k)=-Lp(k)      ! 逆序连接
-	   else
-         k1=Lp(k)
-!		 if( (mod(Bc%face,2)-mod(Bc%face1,2))==0) Lp(k)=-Lp(k)         ! 逆序连接 （单面） ! Bug 2012-7-13
-! 正-正连接 Lp为负 (例， i+ 面连接到 j+面， 则为逆序连接)
-		 if( (Bc%face-1)/3 .eq. (Bc%face1-1)/3 ) Lp(k)=-Lp(k)        ! (Bc%face=1,2,3为 +面，4,5,6为-面)  ! 逆序连接 （单面）
-
-	   endif
-	 enddo 
-     
-	 Bc%L1=Lp(1); Bc%L2=Lp(2); Bc%L3=Lp(3)   ! 连接次序描述符 （详见《理论手册》）
-   endif
-  end
+!----------------------------------------------------------------------
+!   Report a face whose index ranges violate the (i,j,k) convention.
+!   who = 'local' / 'neighbour'.
+!----------------------------------------------------------------------
+   subroutine Convert_bc_badpair(who,bcno,kb,ke)
+     implicit none
+     character(len=*),intent(in):: who
+     integer,intent(in):: bcno
+     integer,intent(in):: kb(3),ke(3)
+     print*, ' ERROR in Convert_bc: bad face index ranges'
+     print*, '   ',trim(who),' line: bc=',bcno
+     print*, '   (ib,ie)=',kb(1),ke(1),' (jb,je)=',kb(2),ke(2), &
+             ' (kb,ke)=',kb(3),ke(3)
+     print*, '   A face needs exactly ONE collapsed pair (st=ed -> the face'
+     print*, '   normal) and no pair with mixed signs.  A connection face'
+     print*, '   (type<0) additionally needs exactly ONE fully negative pair'
+     print*, '   (the coupling edge) and ONE fully positive pair, e.g.'
+     print*, '          1    25    -1   -49    33    33    -1'
+     print*, '         25     1    -1   -49    33    33     4'
+     print*, '   (j negative = coupling edge, k=33 = normal, i reversed).'
+     print*, '   Fix bc3d.inp and bc3d_interface.inp together.'
+   end
 
 !----------------------------------------------------------------------
 ! Same as convert_inp_inc but reads from bc3d_interface.inp and writes to bc3d_interface.inc
@@ -270,11 +371,12 @@
    Type (Block_TYPE1),pointer:: B,B1
    TYPE (BC_MSG_TYPE),pointer:: Bc,Bc1
    Interface
-     subroutine Convert_bc(Bc,kb,ke,kb1,ke1)
+     subroutine Convert_bc(Bc,kb,ke,kb1,ke1,has_link)
        use Type_Def1
        implicit none
        TYPE (BC_MSG_TYPE),pointer:: Bc
        integer,dimension(3):: kb,ke,kb1,ke1
+       logical,optional,intent(in):: has_link
      end subroutine
     end Interface
    print*, "Convert bc3d_interface.inp to bc3d_interface.inc ..."
@@ -297,7 +399,10 @@
       else
         kb1(:)=0; ke1(:)=0; Bc%nb1=0
       endif
-      call Convert_bc(Bc,kb,ke,kb1,ke1)
+!     2026-10-19: explicit interface codes (11..19) may carry the pairing
+!     line here as well -- keep nb1/face1/L1..L3 in that case too
+      call Convert_bc(Bc,kb,ke,kb1,ke1, &
+                      is_interface_bc(Bc%bc) .and. Bc%nb1 .gt. 0)
     enddo
    enddo
    close(88)

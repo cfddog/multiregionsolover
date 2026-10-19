@@ -104,10 +104,12 @@ def gen_bc(path, nx, nyf, nyp, nz, bc_if):
             (1, nx, 1, nyf, nz, nz, 3),         # k+  symmetry
         ]
         for ib, ie, jb, je, kb, ke, bc in faces:
+            if bc == bc_if:                    # interface: k is the coupling edge
+                kb, ke = -kb, -ke              # -> written negative (see README)
             f.write('%4d %4d %4d %4d %4d %4d %4d\n' % (ib, ie, jb, je, kb, ke, bc))
             if bc == bc_if:
                 # neighbour = block 2, its j+ face: i 1..nx, j=nyp..nyp, k 1..nz
-                f.write('%4d %4d %4d %4d %4d %4d %4d\n' % (1, nx, nyp, nyp, 1, nz, 2))
+                f.write('%4d %4d %4d %4d %4d %4d %4d\n' % (1, nx, nyp, nyp, -1, -nz, 2))
         # ------------- block 2 : porous bed ------------------------------
         f.write('%d %d %d\n' % (nx, nyp, nz))
         f.write('blk-2\n')
@@ -121,10 +123,12 @@ def gen_bc(path, nx, nyf, nyp, nz, bc_if):
             (1, nx, 1, nyp, nz, nz, 3),         # k+  symmetry
         ]
         for ib, ie, jb, je, kb, ke, bc in faces:
+            if bc == bc_if:                    # interface: k is the coupling edge
+                kb, ke = -kb, -ke              # -> written negative (see README)
             f.write('%4d %4d %4d %4d %4d %4d %4d\n' % (ib, ie, jb, je, kb, ke, bc))
             if bc == bc_if:
                 # neighbour = block 1, its j- face: i 1..nx, j=1..1, k 1..nz
-                f.write('%4d %4d %4d %4d %4d %4d %4d\n' % (1, nx, 1, 1, 1, nz, 1))
+                f.write('%4d %4d %4d %4d %4d %4d %4d\n' % (1, nx, 1, 1, -1, -nz, 1))
 
 
 def gen_material(path):

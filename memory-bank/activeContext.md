@@ -1,6 +1,8 @@
 # Active Context — 当前任务 / 最近决策 / 下一步
 
-> 更新时间：2026-10-18（**最新：P3 收口 ＋ 文档一致性核查（§0r）**；
+> 更新时间：2026-10-19（**最新：§0s 码 14（固--固）耦合修好** —— 对接描述符符号约定
+> ＋`bc3d.inp` 只给面类型；`solid_2blk_chain` 对精确解 3.7e−9 K、界面跳变 0.625 K = 解析；
+> 手册 1.6.8。上一节：2026-10-18 P3 收口 ＋ 文档一致性核查（§0r）；
 > §0q：P1 收口 + 并行验证框架 `cases/parallel` 实测全 PASS；
 > §0o：任务 5 旋转界面 + 任务 8 锚定回归 + 左手块保护）。
 > **HEAD = `a9abd0a`**（P1 + P3 两个提交，已 push 到 wuzh02 与 GitHub `origin/main`）。
@@ -22,6 +24,69 @@
 > 2 个 util 工具 + 模板 + 4 份文档 + 记忆库）。
 > **第六轮（2026-09-26）改动尚未提交**：区域残差监视输出（`src/sub_debug.f90`、
 > `sub_multi_region.f90`、`sub_lowspeed(_ac).f90`、`sub_porous(_ac).f90` + 手册 4 处 + 总结文档 + 记忆库）。
+
+## 0s. 2026-10-19：码 14（固--固）耦合修好 —— 对接描述符符号约定 ＋ `bc3d.inp` 只给类型 ✅
+
+**症状**：`cases/solid_2blk_chain`（两块 $41\times21\times3$ 串联导热板，$k=16.3$/$200$）
+np=1 收敛后界面两侧胞心温度差 $\sim38$ K（物理上应连续，正确值 = 解析跳变 0.625 K）。
+
+**根因**（两层）：
+1. `bc3d*.inp` 的对接面把**两条切向范围都写成正**（`1 21  1 3`），
+   `Convert_bc` 只能靠“节点范围大小/顺序”猜 $i/j/k$ 对应关系；本算例两切向共 21 与 3 个节点，
+   猜成了 **$k\leftrightarrow k$**（应为 $i\leftrightarrow i$ 法向 + $j\leftrightarrow j$ + $k\leftrightarrow k$），
+   界面量（$T_s$/面距/镜像）整错位。
+2. `bc3d.inp` 里也写了配对行（含 `L` 式描述），与“`bc3d_interface.inp` 是块间连接唯一来源”
+   的文件分工冲突，两份描述一旦不一致就无法判断谁对。
+
+**约定（已固化为代码 + 文档 + 校验工具）**：
+- `bc3d.inp`：只给**面类型**。同类块对接写显式码（14 = 固体--固体），
+  **不写配对行、范围不带正负号**（`41 41 1 21 1 3 14`）；
+  只有用通用码 `-1` 时才必须跟配对行。
+- `bc3d_interface.inp`：**唯一**给出邻块号/邻面范围/`L` 表的地方。对接面（`bc<0`，或 `11..19`）
+  后面紧跟配对行；**两个面的三对范围各自**必须满足
+  「恰好一对等值 = 面法向；恰好一对全负 = 对接方向；恰好一对全正 = 另一条切向边」。
+  对应关系由此唯一：负↔负、正↔正、法向↔法向；同序/逆序由 $|j_{bst}|\to|j_{bed}|$ 判定。
+- 运行时 `align_interface_to_bc_msg` 用 `bc3d.inp` 的码覆盖类型、保留接口文件的配对信息。
+
+**代码**（`src/sub_convert_inp.f90`，CRLF 保留）：
+- `Convert_bc` 重写：`classify_pair` 分类三对范围（collapsed/neg/pos/mixed），
+  由等值方向 + 低/高侧定 `face`，按类别配对得 `Lp`，再用 `abs(ke)-abs(kb)` 与
+  「两面是否同侧」决定是否取反；不符合约定 → `Convert_bc_badpair` 报
+  `coupling descriptor error` 并中止（不再静默猜）。
+
+**工具**：`util/fix_iface_sign.py`（新）
+- `--check` / `--fix 'cases/*/bc3d*.inp'`；`--fix` 在两侧同时把同一方向标负（默认 $k$，其次 $j$、$i$），
+  `format_like` 按原 token 右边界重建列宽 ⇒ 未改动的行**逐字节不变**；
+- 另外检查 `bc3d.inp` 的**仅类型**接口面（11--19）不得带正负号。
+- 现状：`cases/{high_low_fluid,high_low_fluid_800K,interface19_phaseA}/bc3d.inp` 报 4 条
+  “type-only face coded 15 carries signs”（历史遗留，功能无影响——`Convert_bc` 用 `abs`；
+  **待用户确认后统一清理**）。
+
+**算例**：`cases/solid_2blk_chain/gen_case.py` 的 `faces()` 加 `with_link` 开关：
+`bc3d.inp` 只写 `14`（无配对行、无符号），`bc3d_interface.inp` 保留 `-1` + 配对行并把 $k$ 标负；
+另 4 个算例生成器（`beavers_joseph`、`porous_fluid_phaseB`、`cylinder_re40_200`、`bl_cht`）
+改为输出**取负**的对接方向。新增 `cases/solid_2blk_chain/run.slurm`（只能 np1）。
+
+**验证（集群 wuzh02，gfortran 7.3.1，`make -j4` EXIT=0）**：
+- `prep.sh 2000` + `sbatch -n 1`，作业 46903753，墙钟 1 m 03 s，固体 GS
+  `|dTs|` max 1.4e−12 / rms 2.1e−13；
+- `bc3d.inc`：两对接面 `... 14 4 2` / `... 14 1 1`，配对栏**全 0**（符合“只给类型”）；
+  `bc3d_interface.inc`：`41 41 1 21 1 3 -1 4 2` + `1 1 1 21 1 3 2 1 1 | 1 2 3`
+  ⇒ **`L1 L2 L3 = 1 2 3`**（$i\leftrightarrow i$ 法向、$j\leftrightarrow j$、$k\leftrightarrow k$ 同序，正确）；
+- `analyze_solid_2blk_chain.py`（结果已存 `cases/solid_2blk_chain/analyze_np1.txt`）：
+  两块胞心温度对精确解 max 误差 **3.7e−9 K**，界面两侧胞心跳变 **0.625000 K = 解析值**
+  （修复前 $\sim38$ K）⇒ **PASS**。
+- 文档：`chap02_inputs.tex` 重写 `bc3d.inp` / `bc3d_interface.inp` 两小节（含正负号规则与例），
+  `93_changelog.tex` 增 **1.6.8**，`./build.sh` 0 error。
+
+**下一步**：
+1. 用户确认后，把 `--fix` 应用到 `high_low_fluid` / `high_low_fluid_800K` / `interface19_phaseA`
+   （把 code 15 的仅类型面改成纯正范围），再跑这三例冒烟确认逐位不变；
+2. 回归 `solid_4blk`、`fluid_solid`、`beavers_joseph`、`lidcavity_ac_3blk`、`channel_ac_2blk`、
+   `bl_cht`（生成器已改，需重生成 `.inp` 并确认 `bc3d_interface.inc` 的 `L` 未变）；
+3. 码 14 的**跨进程**耦合（np>1 目前直接中止）；
+4. 回到路线图：P2 `AC_Max_Iter`、P5 闭合多孔块。
+
 
 ## 0r. 2026-10-18：P3 并行固体 GS 推进（`Solid_Sync_Chunk`）✅
 

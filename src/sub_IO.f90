@@ -1712,9 +1712,11 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
       do k=1, nsub
         B%bc_msg2(k)%bc = B%bc_msg(k)%bc
 !       Wall-placeholder pairing faces (physical code 2 with a real interface
-!       connection in bc3d_interface) are promoted to the canonical cross-class
-!       interface code so every is_interface_bc consumer (boundary ghost fill,
-!       solid ghost, LS/AC, couples, staggered drivers) treats them as interfaces.
+!       connection in bc3d_interface) are promoted so every is_interface_bc
+!       consumer (boundary ghost fill, solid ghost, LS/AC, couples, staggered
+!       drivers) treats them as interfaces:
+!         - same-class pair           -> BC_Inner (-1)   [buffer exchange]
+!         - cross-class pair          -> canonical 11..19
 !       Grids already typing the face as an interface in bc3d.inp are untouched.
         Bc2 => B%bc_msg2(k)
         if(Bc2%nb1 > 0 .and. Bc2%face1 > 0 .and. .not. is_interface_bc(Bc2%bc)) then
@@ -1725,18 +1727,24 @@ call MPI_bcast(Mesh(1)%tt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
             endif
           enddo
           if(nbty >= 0) then
-            if((B%Block_type == BLOCK_FLUID   .and. nbty == BLOCK_SOLID) .or. &
-               (B%Block_type == BLOCK_SOLID   .and. nbty == BLOCK_FLUID)) Bc2%bc = BC_Interface_FluidSolid
-            if((B%Block_type == BLOCK_LOWSPEED .and. nbty == BLOCK_SOLID) .or. &
-               (B%Block_type == BLOCK_SOLID   .and. nbty == BLOCK_LOWSPEED)) Bc2%bc = BC_Interface_LowSolid
-            if((B%Block_type == BLOCK_FLUID   .and. nbty == BLOCK_LOWSPEED) .or. &
-               (B%Block_type == BLOCK_LOWSPEED .and. nbty == BLOCK_FLUID)) Bc2%bc = BC_Interface_FluidLow
-            if((B%Block_type == BLOCK_FLUID   .and. nbty == BLOCK_POROUS) .or. &
-               (B%Block_type == BLOCK_POROUS  .and. nbty == BLOCK_FLUID)) Bc2%bc = BC_Interface_FluidPorous
-            if((B%Block_type == BLOCK_LOWSPEED .and. nbty == BLOCK_POROUS) .or. &
-               (B%Block_type == BLOCK_POROUS  .and. nbty == BLOCK_LOWSPEED)) Bc2%bc = BC_Interface_LowPorous
-            if((B%Block_type == BLOCK_SOLID   .and. nbty == BLOCK_POROUS) .or. &
-               (B%Block_type == BLOCK_POROUS  .and. nbty == BLOCK_SOLID)) Bc2%bc = BC_Interface_SolidPorous
+            if(B%Block_type == nbty) then
+!             solid-solid / porous-porous / fluid-fluid / low-low: the generic
+!             internal link, same code gen_bc3d writes for same-class faces.
+              Bc2%bc = BC_Inner
+            else
+              if((B%Block_type == BLOCK_FLUID   .and. nbty == BLOCK_SOLID) .or. &
+                 (B%Block_type == BLOCK_SOLID   .and. nbty == BLOCK_FLUID)) Bc2%bc = BC_Interface_FluidSolid
+              if((B%Block_type == BLOCK_LOWSPEED .and. nbty == BLOCK_SOLID) .or. &
+                 (B%Block_type == BLOCK_SOLID   .and. nbty == BLOCK_LOWSPEED)) Bc2%bc = BC_Interface_LowSolid
+              if((B%Block_type == BLOCK_FLUID   .and. nbty == BLOCK_LOWSPEED) .or. &
+                 (B%Block_type == BLOCK_LOWSPEED .and. nbty == BLOCK_FLUID)) Bc2%bc = BC_Interface_FluidLow
+              if((B%Block_type == BLOCK_FLUID   .and. nbty == BLOCK_POROUS) .or. &
+                 (B%Block_type == BLOCK_POROUS  .and. nbty == BLOCK_FLUID)) Bc2%bc = BC_Interface_FluidPorous
+              if((B%Block_type == BLOCK_LOWSPEED .and. nbty == BLOCK_POROUS) .or. &
+                 (B%Block_type == BLOCK_POROUS  .and. nbty == BLOCK_LOWSPEED)) Bc2%bc = BC_Interface_LowPorous
+              if((B%Block_type == BLOCK_SOLID   .and. nbty == BLOCK_POROUS) .or. &
+                 (B%Block_type == BLOCK_POROUS  .and. nbty == BLOCK_SOLID)) Bc2%bc = BC_Interface_SolidPorous
+            endif
           endif
         endif
       enddo

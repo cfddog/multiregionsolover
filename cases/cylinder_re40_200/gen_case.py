@@ -28,13 +28,13 @@ lines=['! cylinder two-block polar O-grid','     2',
        '%6d%6d%6d'%(nx,ny,nz),'blk-1','7',
        F(1,nx,1,ny,1,1,3), F(1,nx,1,ny,nz,nz,3), F(1,1,1,ny,1,nz,2),
        F(nx,nx,1,h+1,1,nz,22), F(nx,nx,h+1,ny,1,nz,21),
-       F(1,nx,1,1,1,nz,-1), F(1,nx,ny,ny,1,nz,2),
-       F(1,nx,ny,ny,1,nz,-1), F(1,nx,1,1,1,nz,2),
+       F(1,nx,1,1,-1,-nz,-1), F(1,nx,ny,ny,-1,-nz,2),
+       F(1,nx,ny,ny,-1,-nz,-1), F(1,nx,1,1,-1,-nz,2),
        '%6d%6d%6d'%(nx,ny,nz),'blk-2','7',
        F(1,nx,1,ny,1,1,3), F(1,nx,1,ny,nz,nz,3), F(1,1,1,ny,1,nz,2),
        F(nx,nx,1,h+1,1,nz,21), F(nx,nx,h+1,ny,1,nz,22),
-       F(1,nx,1,1,1,nz,-1), F(1,nx,ny,ny,1,nz,1),
-       F(1,nx,ny,ny,1,nz,-1), F(1,nx,1,1,1,nz,1)]
+       F(1,nx,1,1,-1,-nz,-1), F(1,nx,ny,ny,-1,-nz,1),
+       F(1,nx,ny,ny,-1,-nz,-1), F(1,nx,1,1,-1,-nz,1)]
 open('bc3d.inp','w').write('\n'.join(lines)+'\n')
 open('material.in','w').write('2\n2 2\n0.0 0.0 0.0\n0.0 0.0 0.0\n')
 print('2-block cylinder %dx%dx%d x2, R_in=%.2f R_out=%.1f'%(nx,ny,nz,R_in,R_out))

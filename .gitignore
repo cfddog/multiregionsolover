@@ -74,6 +74,8 @@ cases/**/partation-auto.dat
 cases/**/mesh-quality.dat
 cases/**/bc3d_interface.inc
 cases/**/iface_*.dat
+# 算例运行目录（prep.sh 生成的 np1/ np2/ ...；由 prep.sh 现场重建，不入库）
+cases/**/np[0-9]*/
 
 # 第三方样例代码（MATLAB），非本程序构建所需
 /sample_code/

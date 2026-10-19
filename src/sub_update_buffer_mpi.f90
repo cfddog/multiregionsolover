@@ -708,6 +708,9 @@ subroutine Umessage_recv_mpi(nMesh) ! 使用MPI发送全部信息
      integer:: nMesh,ierr
      call Ts_send_mpi(nMesh)
      call Ts_recv_mpi(nMesh)
+!    solid<->solid interface: convert the mirrored neighbour cell value into
+!    the flux-consistent ghost value (see solid_iface_flux_ghost)
+     call solid_iface_flux_ghost(nMesh)
 !    no MPI_Barrier here: called inside the per-block solid GS (some ranks only)
    end subroutine update_Ts_buffer_onemesh
 

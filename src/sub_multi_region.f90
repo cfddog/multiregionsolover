@@ -1835,9 +1835,23 @@
   end subroutine wall_bound_with_Tw
 
 !----------------------------------------------------------------------
-! Solid-solid interface coupling
-! For each bc=12 interface, directly copy Ts from the source block's
-! interior to the destination block's ghost cells.
+! Solid-solid interface coupling (interface code 14)
+!
+! Fills the LAP ghost layers of every SOLID block whose neighbour is a SOLID
+! block on the SAME process, using the connection descriptor (nb1 / face1 /
+! L1..L3) stored in bc_msg2.  This is the local twin of the same-process
+! branch of Ts_send_mpi; remote pairs are handled by Ts_send/recv_mpi and are
+! skipped here.
+!
+! 2026-10-19: the previous implementation ignored L1..L3 and used
+!     i1 = ib + n - 1        (INTERIOR cells of this block)
+!     i2 = ib + LAP + n - 1  (cells LAP away from the neighbour's face)
+! so it overwrote interior temperatures instead of the ghost layers and left
+! a large spurious jump across solid-solid interfaces.  The indexing below is
+! the one already validated on the MPI path:
+!   source = LAP interior cells next to this face,
+!   target = LAP ghost cells of the neighbour (ghost = mirror of the source),
+! with the L-descriptor mapping of the tangential indices.
 !----------------------------------------------------------------------
   subroutine couple_solid_solid_interfaces(nMesh)
    use Global_Var
@@ -1845,75 +1859,65 @@
    integer:: nMesh
    Type (Block_TYPE),pointer:: B, Bn
    TYPE (BC_MSG_TYPE),pointer:: Bc2
-   integer:: mBlock, ksub, nb, mb, face_s, n
-   integer:: ib,ie,jb,je,kb,ke, i1,j1,k1, i2,j2,k2
-   integer:: i,j,k
+   integer:: mBlock, ksub, nb, mb
+   integer:: kb(3), ke(3), kb1(3), ke1(3), ks(3), ka(3), P(3)
+   integer:: i,j,k,i1,j1,k1,L1,L2,L3
 
    do mBlock=1, Mesh(nMesh)%Num_Block
      B => Mesh(nMesh)%Block(mBlock)
      if(.not. associated(B%bc_msg2)) cycle
+     if(B%Block_type /= BLOCK_SOLID) cycle
 
      do ksub=1, B%subface
        Bc2 => B%bc_msg2(ksub)
-!      Skip physical boundaries (bc >= 0); only process interface connections (bc < 0)
        if(.not. is_interface_bc(Bc2%bc)) cycle
-       nb = Bc2%nb1             ! Neighbor block number (global)
-       if(nb <= 0) cycle
-       if(B_proc(nb) .ne. my_id) cycle   ! neighbour on another process
+       nb = Bc2%nb1
+       if(nb <= 0) cycle                      ! no neighbour descriptor
+       if(nb > size(Block_Type_List)) cycle
+       if(Block_Type_List(nb) /= BLOCK_SOLID) cycle
+       if(B_proc(nb) /= my_id) cycle           ! remote: Ts_send/recv_mpi
+
        mb = B_n(nb)
        Bn => Mesh(nMesh)%Block(mb)
 
-!      Determine if this is a solid-solid interface
-       if(.not. (B%Block_type == BLOCK_SOLID .and. Bn%Block_type == BLOCK_SOLID)) cycle
+!      source: LAP interior cells of B next to the interface face
+       kb(1)=Bc2%ib; ke(1)=Bc2%ie-1
+       kb(2)=Bc2%jb; ke(2)=Bc2%je-1
+       kb(3)=Bc2%kb; ke(3)=Bc2%ke-1
+       k = mod(Bc2%face-1,3)+1
+       if(Bc2%face > 3) kb(k) = kb(k) - LAP
+       ke(k) = kb(k) + LAP - 1
 
-!      Copy Ts from neighbor's interior to this block's ghost cells
-       face_s = Bc2%face
-       ib=Bc2%ib; ie=Bc2%ie; jb=Bc2%jb; je=Bc2%je; kb=Bc2%kb; ke=Bc2%ke
+!      target: LAP ghost cells of the neighbour
+       kb1(1)=Bc2%ib1; ke1(1)=Bc2%ie1-1
+       kb1(2)=Bc2%jb1; ke1(2)=Bc2%je1-1
+       kb1(3)=Bc2%kb1; ke1(3)=Bc2%ke1-1
+       k = mod(Bc2%face1-1,3)+1
+       if(Bc2%face1 <= 3) kb1(k) = kb1(k) - LAP
+       ke1(k) = kb1(k) + LAP - 1
 
-       select case(face_s)
-       case(1)
-         do n=1, LAP
-           i1 = ib + n - 1; i2 = ib + LAP + n - 1
-           do k=kb,ke; do j=jb,je
-             B%Ts(i1,j,k) = Bn%Ts(i2,j,k)
-           enddo; enddo
+       L1 = abs(Bc2%L1); P(1) = sign(1,Bc2%L1)
+       L2 = abs(Bc2%L2); P(2) = sign(1,Bc2%L2)
+       L3 = abs(Bc2%L3); P(3) = sign(1,Bc2%L3)
+       do k=1,3
+         if(P(k) > 0) then
+           ks(k) = kb(k)
+         else
+           ks(k) = ke(k)
+         endif
+       enddo
+
+       do k=kb1(3),ke1(3)
+         do j=kb1(2),ke1(2)
+           do i=kb1(1),ke1(1)
+             ka(1)=i-kb1(1); ka(2)=j-kb1(2); ka(3)=k-kb1(3)
+             i1 = ks(1) + ka(L1)*P(1)
+             j1 = ks(2) + ka(L2)*P(2)
+             k1 = ks(3) + ka(L3)*P(3)
+             Bn%Ts(i,j,k) = B%Ts(i1,j1,k1)
+           enddo
          enddo
-       case(4)
-         do n=1, LAP
-           i1 = ie - n + 1; i2 = ie - LAP - n + 1
-           do k=kb,ke; do j=jb,je
-             B%Ts(i1,j,k) = Bn%Ts(i2,j,k)
-           enddo; enddo
-         enddo
-       case(2)
-         do n=1, LAP
-           j1 = jb + n - 1; j2 = jb + LAP + n - 1
-           do k=kb,ke; do i=ib,ie
-             B%Ts(i,j1,k) = Bn%Ts(i,j2,k)
-           enddo; enddo
-         enddo
-       case(5)
-         do n=1, LAP
-           j1 = je - n + 1; j2 = je - LAP - n + 1
-           do k=kb,ke; do i=ib,ie
-             B%Ts(i,j1,k) = Bn%Ts(i,j2,k)
-           enddo; enddo
-         enddo
-       case(3)
-         do n=1, LAP
-           k1 = kb + n - 1; k2 = kb + LAP + n - 1
-           do j=jb,je; do i=ib,ie
-             B%Ts(i,j,k1) = Bn%Ts(i,j,k2)
-           enddo; enddo
-         enddo
-       case(6)
-         do n=1, LAP
-           k1 = ke - n + 1; k2 = ke - LAP - n + 1
-           do j=jb,je; do i=ib,ie
-             B%Ts(i,j,k1) = Bn%Ts(i,j,k2)
-           enddo; enddo
-         enddo
-       end select
+       enddo
      enddo
    enddo
   end subroutine couple_solid_solid_interfaces
@@ -1954,6 +1958,91 @@
 ! (possibly rotated / reversed) face pairs are handled through the connection
 ! descriptors L1,L2,L3; remote neighbours are exchanged with MPI.
 !----------------------------------------------------------------------
+!----------------------------------------------------------------------
+! Flux-consistent solid<->solid interface ghost  (2026-10-19)
+!
+! The Ts halo exchange leaves the neighbour CELL-CENTRE temperature in the
+! interface ghost.  The Gauss-Seidel sweep then evaluates the interface flux
+! with its OWN conductivity,
+!     q = k_own*(T_ghost - T_own)/d_g ,
+! so both sides impose the same temperature drop PER CELL instead of the same
+! heat flux.  The total drop is then shared by the number of cells instead of
+! the thermal resistance and the interface temperature is off by tens of
+! kelvin -- the reported ~38 K "jump" of the k=16.3 / k=200 series slab.
+!
+! For the supported conformal, index-aligned 1:1 face the correct FVM flux is
+!     q = (T_nb - T_own) / (d_PN/(2 k_own) + d_PN/(2 k_nb))
+! with d_PN the centre-to-centre distance.  A mirrored ghost sits at d_g =
+! d_PN/2 + d_PN/2 from the own centre, so replacing the ghost value by
+!     T_ghost := T_own + r*(T_nb - T_own),   r = 2 k_nb/(k_own + k_nb)
+! makes the sweep see exactly q.  The expression is symmetric in the two
+! sides, so flux continuity holds exactly; k_own = k_nb gives r = 1, i.e. the
+! plain mirror copy.  Only the first ghost layer is touched (the GS stencil
+! reaches one cell).
+!
+! Called at the end of update_Ts_buffer_onemesh, i.e. after EVERY halo fill,
+! so the scaling is applied exactly once to the freshly received raw value.
+!----------------------------------------------------------------------
+  subroutine solid_iface_flux_ghost(nMesh)
+   use Global_Var
+   implicit none
+   integer:: nMesh
+   Type (Block_TYPE),pointer:: B
+   TYPE (BC_MSG_TYPE),pointer:: Bc2
+   integer:: mBlock, ksub, nb, nd
+   integer:: i,j,k, klo(3), khi(3), ic(3), gc(3)
+   real(PRE_EC):: kown, knb, r, Town
+
+   do mBlock = 1, Mesh(nMesh)%Num_Block
+     B => Mesh(nMesh)%Block(mBlock)
+     if(.not. associated(B%bc_msg2)) cycle
+     if(B%Block_type /= BLOCK_SOLID) cycle
+
+     do ksub = 1, B%subface
+       Bc2 => B%bc_msg2(ksub)
+       if(.not. is_interface_bc(Bc2%bc)) cycle
+       nb = Bc2%nb1
+       if(nb <= 0) cycle
+       if(nb > size(Block_Type_List)) cycle
+       if(Block_Type_List(nb) /= BLOCK_SOLID) cycle
+
+       kown = B%solid_k
+       knb  = solid_k_list(nb)
+       if(kown <= 0.d0 .or. knb <= 0.d0) cycle
+       if(abs(kown-knb) <= 1.d-14*max(kown,knb)) cycle   ! mirror copy is exact
+       r = 2.d0*knb/(kown + knb)
+
+!      face cell range; the normal direction is one cell thick
+       klo(1)=Bc2%ib; khi(1)=Bc2%ie-1
+       klo(2)=Bc2%jb; khi(2)=Bc2%je-1
+       klo(3)=Bc2%kb; khi(3)=Bc2%ke-1
+       nd = mod(Bc2%face-1,3)+1
+       if(Bc2%face <= 3) then
+         khi(nd) = klo(nd)          ! first interior cell of the block
+       else
+         klo(nd) = khi(nd)          ! last  interior cell of the block
+         khi(nd) = klo(nd)
+       endif
+
+       do k = klo(3), khi(3)
+         do j = klo(2), khi(2)
+           do i = klo(1), khi(1)
+             ic(1)=i; ic(2)=j; ic(3)=k
+             gc(:) = ic(:)
+             if(Bc2%face <= 3) then
+               gc(nd) = ic(nd) - 1     ! first ghost layer
+             else
+               gc(nd) = ic(nd) + 1
+             endif
+             Town = B%Ts(ic(1),ic(2),ic(3))
+             B%Ts(gc(1),gc(2),gc(3)) = Town + r*(B%Ts(gc(1),gc(2),gc(3)) - Town)
+           enddo
+         enddo
+       enddo
+     enddo
+   enddo
+  end subroutine solid_iface_flux_ghost
+
   subroutine couple_lowspeed_porous_interfaces(nMesh)
    use Global_Var
    use const_var

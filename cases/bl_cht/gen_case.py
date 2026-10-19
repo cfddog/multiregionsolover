@@ -109,8 +109,8 @@ lines = ["", "     2"]
 lines += [f"{nx1:8d}{ny1:8d}{nz1:8d}", "blk-1", "7"]
 lines += [F(1,1,1,ny1,1,2,5),
           F(nx1,nx1,1,ny1,1,2,6),
-          F(1,nx2,1,1,1,2,-1),         # interface j- over plate
-          F(1,nx2,ny2,ny2,1,2,2),      # pairing line: solid j+ range, block 2
+          F(1,nx2,1,1,-1,-2,-1),       # interface j- over plate (k = coupling edge)
+          F(1,nx2,ny2,ny2,-1,-2,2),    # pairing line: solid j+ range, block 2
           F(nx2+1,nx1,1,1,1,2,3),
           F(1,nx1,ny1,ny1,1,2,3),
           F(1,nx1,1,ny1,1,1,3),
@@ -119,8 +119,8 @@ lines += [f"{nx2:8d}{ny2:8d}{nz2:8d}", "blk-2", "6"]
 lines += [F(1,1,1,ny2,1,2,2),
           F(nx2,nx2,1,ny2,1,2,2),
           F(1,nx2,1,1,1,2,2),
-          F(1,nx2,ny2,ny2,1,2,-1),     # interface j+
-          F(1,nx2,1,1,1,2,1),          # pairing line: fluid j- range, block 1
+          F(1,nx2,ny2,ny2,-1,-2,-1),   # interface j+ (k = coupling edge)
+          F(1,nx2,1,1,-1,-2,1),        # pairing line: fluid j- range, block 1
           F(1,nx2,1,ny2,1,1,2),
           F(1,nx2,1,ny2,2,2,2)]
 open("bc3d_interface.inp", "w").write("\n".join(lines) + "\n")

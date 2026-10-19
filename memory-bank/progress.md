@@ -1,8 +1,33 @@
 # Progress — 已完成 / 待办
 
-> 更新：2026-10-18（**P3 收口：并行固体 GS 扫掠数跨进程统一，见 `activeContext.md` §0r**；
-> P0/P1/P3 已完成，P2/P4–P6 待做）。
+> 更新：2026-10-19（**码 14（固--固）耦合修好，见 `activeContext.md` §0s**；
+> 上一轮：2026-10-18 P3 收口；P0/P1/P3 已完成，P2/P4–P6 待做）。
 > 更早的开发历史见 `docs/工作日志.md`、`docs/程序能力与算例考核总结.md`、`memory-bank/worklog.md`。
+
+## ✅ 已完成（2026-10-19）：码 14（固--固）耦合 —— 对接描述符符号约定
+
+- [x] 定位根因：`bc3d*.inp` 对接面两条切向范围**都取正** ⇒ `Convert_bc` 只能猜对应关系，
+      `solid_2blk_chain`（两切向 21 / 3 节点）猜成 `k↔k`，界面量整错位，界面两侧差 ~38 K。
+- [x] 约定固化：`bc3d.inp` **只给面类型**（同类对写 14，无配对行、无正负号；只有 `-1` 才带配对行）；
+      `bc3d_interface.inp` 是块间连接**唯一**来源，对接面三对范围必须
+      「一对待值=法向 / 一对全负=对接方向 / 一对全正=另一条切向边」。
+- [x] `src/sub_convert_inp.f90`：`Convert_bc` 重写（`classify_pair` + `Convert_bc_badpair`），
+      按类别配对得 `L1..L3` 并按 `abs(ke)-abs(kb)` 与同侧关系决定是否取反；不合约定直接中止。
+- [x] `util/fix_iface_sign.py`（新，`--check`/`--fix`，列宽保持）；复核 `cases/*/bc3d*.inp`：
+      本算例 changed=0/bad=0，另 3 例报「type-only 面（码 15）带符号」（无功能影响，待清理）。
+- [x] 生成器：`solid_2blk_chain`（`with_link` 开关）+ `beavers_joseph`、`porous_fluid_phaseB`、
+      `cylinder_re40_200`、`bl_cht`（对接方向取负）；`cases/solid_2blk_chain/run.slurm`（只能 np1）。
+- [x] 集群 wuzh02 验证：`make -j4` EXIT=0；`prep.sh 2000` + `sbatch -n 1`（作业 46903753，1 m 03 s），
+      `bc3d.inc` 两对接面为 `14` 且配对栏全 0，`bc3d_interface.inc` 得 `L = 1 2 3`；
+      `analyze_solid_2blk_chain.py`：**PASS**（max 误差 3.7e−9 K，界面跳变 0.625000 K = 解析），
+      结果存 `cases/solid_2blk_chain/analyze_np1.txt`。
+- [x] 文档：`chap02_inputs.tex` 两小节重写（正负号规则 + 实例 + 工具用法）、`93_changelog.tex` 1.6.8，
+      `./build.sh` 0 error。
+- [ ] 待办：`high_low_fluid`/`high_low_fluid_800K`/`interface19_phaseA` 的码 15 仅类型面清理（待确认）；
+- [ ] 待办：重生成并回归 `solid_4blk`、`fluid_solid`、`beavers_joseph`、`lidcavity_ac_3blk`、
+      `channel_ac_2blk`、`bl_cht`（确认 `bc3d_interface.inc` 的 `L` 未变、结果不变）；
+- [ ] 待办：码 14 的跨进程耦合（当前 np>1 直接中止）。
+
 
 ## ✅ 已完成（2026-10-18）：P3 并行固体 GS 推进（`Solid_Sync_Chunk`）
 

@@ -84,8 +84,8 @@ def gen_bc(path, nx, nyc, nyp, nz):
         f.write('6\n')
         f.write(face(1, 1, 1, nyc, 1, nz, 5))          # i-  supersonic inlet
         f.write(face(nx, nx, 1, nyc, 1, nz, 6))        # i+  outlet
-        f.write(face(1, nx, 1, 1, 1, nz, BC_IF))       # j-  interface (porous)
-        f.write(face(1, nx, nyp, nyp, 1, nz, 2))      # partner: block2 j+ face
+        f.write(face(1, nx, 1, 1, -1, -nz, BC_IF))     # j-  interface (porous), k marked
+        f.write(face(1, nx, nyp, nyp, -1, -nz, 2))     # partner: block2 j+ face
         f.write(face(1, nx, nyc, nyc, 1, nz, 3))       # j+  top symmetry
         f.write(face(1, nx, 1, nyc, 1, 1, 3))          # k-  symmetry
         f.write(face(1, nx, 1, nyc, nz, nz, 3))        # k+  symmetry
@@ -96,8 +96,8 @@ def gen_bc(path, nx, nyc, nyp, nz):
         f.write(face(1, 1, 1, nyp, 1, nz, 2))          # i-  wall
         f.write(face(nx, nx, 1, nyp, 1, nz, 2))        # i+  wall
         f.write(face(1, nx, 1, 1, 1, nz, 5))           # j-  coolant inlet
-        f.write(face(1, nx, nyp, nyp, 1, nz, BC_IF))   # j+  interface (fluid)
-        f.write(face(1, nx, 1, 1, 1, nz, 1))           # partner: block1 j- face
+        f.write(face(1, nx, nyp, nyp, -1, -nz, BC_IF))  # j+  interface (fluid), k marked
+        f.write(face(1, nx, 1, 1, -1, -nz, 1))          # partner: block1 j- face
         f.write(face(1, nx, 1, nyp, 1, 1, 3))          # k-  symmetry
         f.write(face(1, nx, 1, nyp, nz, nz, 3))        # k+  symmetry
 
